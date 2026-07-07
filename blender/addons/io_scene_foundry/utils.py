@@ -5792,7 +5792,7 @@ class DepsgraphRead:
         self.local_views = exit_local_view(bpy.context)
         bpy.context.view_layer.update()
         
-        for ob in self.context.view_layer.objects:
+        for ob in bpy.context.view_layer.objects:
             hidden, viewport_hidden = ob.hide_get(), ob.hide_viewport
             if hidden or viewport_hidden:
                 self.hidden_objects[ob] = hidden, viewport_hidden
