@@ -459,8 +459,162 @@ class BitmapTag(Tag):
 
         return faces[face].GetPixel(u, v)
 
+    @staticmethod
+    def _equirectangular_face_type(height: int, width: int):
+        if width % 8 != 0:
+            raise ValueError("equirectangular cubemap width must be a multiple of 8")
+
+        front, right, back, left, up, down = range(6)
+        quarter_width = width // 4
+        eighth_width = width // 8
+        third_height = height // 3
+        face_type = np.empty((height, width), dtype=np.int32)
+
+        face_type[:, :eighth_width] = back
+        face_type[:, eighth_width:eighth_width + quarter_width] = left
+        face_type[:, eighth_width + quarter_width:eighth_width + 2 * quarter_width] = front
+        face_type[:, eighth_width + 2 * quarter_width:eighth_width + 3 * quarter_width] = right
+        face_type[:, eighth_width + 3 * quarter_width:] = back
+
+        indices = np.linspace(-np.pi, np.pi, quarter_width, dtype=np.float32) / 4
+        edge_rows = np.round(height / 2 - np.arctan(np.cos(indices)) * height / np.pi).astype(np.int32)
+        row_indices = np.arange(third_height, dtype=np.int32)[:, None]
+        top_mask = row_indices < edge_rows[None]
+        bottom_mask = np.flip(top_mask, 0)
+
+        face_type[:third_height, :eighth_width][top_mask[:, eighth_width:]] = up
+        face_type[-third_height:, :eighth_width][bottom_mask[:, eighth_width:]] = down
+
+        for index in range(3):
+            start = eighth_width + index * quarter_width
+            stop = start + quarter_width
+            face_type[:third_height, start:stop][top_mask] = up
+            face_type[-third_height:, start:stop][bottom_mask] = down
+
+        remainder = width - stop
+        face_type[:third_height, stop:][top_mask[:, :remainder]] = up
+        face_type[-third_height:, stop:][bottom_mask[:, :remainder]] = down
+        return face_type
+
+    @staticmethod
+    def _cubemap_equirectangular_coordinates(face_size: int, height: int, width: int):
+        up, down = 4, 5
+        u = np.linspace(-np.pi, np.pi, num=width, dtype=np.float32)
+        v = np.linspace(np.pi / 2, -np.pi / 2, num=height, dtype=np.float32)
+        u, v = np.meshgrid(u, v)
+
+        face_type = BitmapTag._equirectangular_face_type(height, width)
+        coor_x = np.empty((height, width), dtype=np.float32)
+        coor_y = np.empty((height, width), dtype=np.float32)
+        half_size = face_size / 2
+
+        mask = face_type < up
+        angles = u[mask] - (np.pi / 2 * face_type[mask])
+        coor_x[mask] = half_size * np.tan(angles)
+        coor_y[mask] = -half_size * np.tan(v[mask]) / np.cos(angles)
+
+        mask = face_type == up
+        distance = half_size * np.tan(np.pi / 2 - v[mask])
+        coor_x[mask] = distance * np.sin(u[mask])
+        coor_y[mask] = distance * np.cos(u[mask])
+
+        mask = face_type == down
+        distance = half_size * np.tan(np.pi / 2 - np.abs(v[mask]))
+        coor_x[mask] = distance * np.sin(u[mask])
+        coor_y[mask] = -distance * np.cos(u[mask])
+
+        coor_x += half_size
+        coor_y += half_size
+        coor_x.clip(0, face_size, out=coor_x)
+        coor_y.clip(0, face_size, out=coor_y)
+        return face_type, coor_x, coor_y
+
+    @staticmethod
+    def _pad_cubemap_faces(cube_faces):
+        front, right, back, left, up, down = range(6)
+        padded = np.pad(cube_faces, ((0, 0), (1, 1), (1, 1), (0, 0)), mode="edge")
+
+        padded[front, 0, 1:-1] = cube_faces[up, -1, :]
+        padded[front, -1, 1:-1] = cube_faces[down, 0, :]
+        padded[right, 0, 1:-1] = cube_faces[up, ::-1, -1]
+        padded[right, -1, 1:-1] = cube_faces[down, :, -1]
+        padded[back, 0, 1:-1] = cube_faces[up, 0, ::-1]
+        padded[back, -1, 1:-1] = cube_faces[down, -1, ::-1]
+        padded[left, 0, 1:-1] = cube_faces[up, :, 0]
+        padded[left, -1, 1:-1] = cube_faces[down, ::-1, 0]
+        padded[up, 0, 1:-1] = cube_faces[back, 0, ::-1]
+        padded[up, -1, 1:-1] = cube_faces[front, 0, :]
+        padded[down, 0, 1:-1] = cube_faces[front, -1, :]
+        padded[down, -1, 1:-1] = cube_faces[back, -1, ::-1]
+
+        padded[front, 1:-1, 0] = cube_faces[left, :, -1]
+        padded[front, 1:-1, -1] = cube_faces[right, :, 0]
+        padded[right, 1:-1, 0] = cube_faces[front, :, -1]
+        padded[right, 1:-1, -1] = cube_faces[back, :, 0]
+        padded[back, 1:-1, 0] = cube_faces[right, :, -1]
+        padded[back, 1:-1, -1] = cube_faces[left, :, 0]
+        padded[left, 1:-1, 0] = cube_faces[back, :, -1]
+        padded[left, 1:-1, -1] = cube_faces[front, :, 0]
+        padded[up, 1:-1, 0] = cube_faces[left, 0, :]
+        padded[up, 1:-1, -1] = cube_faces[right, 0, ::-1]
+        padded[down, 1:-1, 0] = cube_faces[left, -1, ::-1]
+        padded[down, 1:-1, -1] = cube_faces[right, -1, :]
+
+        return padded
+
+    @staticmethod
+    def _sample_cubemap_faces(cube_faces, face_type, coor_x, coor_y, mode: str):
+        mode = mode.lower()
+        if mode not in {"nearest", "linear", "bilinear"}:
+            raise ValueError(f'unsupported cubemap interpolation mode "{mode}"')
+
+        padded = BitmapTag._pad_cubemap_faces(cube_faces)
+        coor_x = coor_x + 1
+        coor_y = coor_y + 1
+
+        if mode == "nearest":
+            x = np.rint(coor_x).astype(np.int32)
+            y = np.rint(coor_y).astype(np.int32)
+            x.clip(0, padded.shape[2] - 1, out=x)
+            y.clip(0, padded.shape[1] - 1, out=y)
+            return padded[face_type, y, x]
+
+        x0 = np.floor(coor_x).astype(np.int32)
+        y0 = np.floor(coor_y).astype(np.int32)
+        x1 = x0 + 1
+        y1 = y0 + 1
+        x0.clip(0, padded.shape[2] - 1, out=x0)
+        x1.clip(0, padded.shape[2] - 1, out=x1)
+        y0.clip(0, padded.shape[1] - 1, out=y0)
+        y1.clip(0, padded.shape[1] - 1, out=y1)
+
+        x_weight = (coor_x - x0)[..., None]
+        y_weight = (coor_y - y0)[..., None]
+        top_left = padded[face_type, y0, x0].astype(np.float32)
+        top_right = padded[face_type, y0, x1].astype(np.float32)
+        bottom_left = padded[face_type, y1, x0].astype(np.float32)
+        bottom_right = padded[face_type, y1, x1].astype(np.float32)
+
+        top = top_left * (1 - x_weight) + top_right * x_weight
+        bottom = bottom_left * (1 - x_weight) + bottom_right * x_weight
+        sampled = top * (1 - y_weight) + bottom * y_weight
+
+        if np.issubdtype(cube_faces.dtype, np.integer):
+            sampled = np.clip(sampled + 0.5, 0, np.iinfo(cube_faces.dtype).max)
+            return sampled.astype(cube_faces.dtype)
+
+        return sampled.astype(cube_faces.dtype, copy=False)
+
+    @staticmethod
+    def _cubemap_faces_to_equirectangular(faces: dict, height: int, width: int, mode: str):
+        cube_faces = np.stack([faces[name] for name in "FRBLUD"], axis=0)
+        if cube_faces.shape[1] != cube_faces.shape[2]:
+            raise ValueError("cubemap faces must be square")
+
+        face_type, coor_x, coor_y = BitmapTag._cubemap_equirectangular_coordinates(cube_faces.shape[1], height, width)
+        return BitmapTag._sample_cubemap_faces(cube_faces, face_type, coor_x, coor_y, mode)
+
     def cubemap_to_equirectangular(self, bitmap, mode: str = "bilinear"):
-        import py360convert
         from System.Drawing import Bitmap # type: ignore
         from System import Array, Byte # type: ignore
         from System.Runtime.InteropServices import Marshal # type: ignore
@@ -510,13 +664,7 @@ class BitmapTag(Tag):
         out_h = f * 2
         out_w = f * 4
 
-        equi = py360convert.c2e(
-            faces,
-            h=out_h,
-            w=out_w,
-            mode=mode,
-            cube_format="dict"
-        )
+        equi = self._cubemap_faces_to_equirectangular(faces, out_h, out_w, mode)
 
         equi_bgr = equi[..., ::-1].copy(order='C')
         out_bmp  = Bitmap(out_w, out_h,
