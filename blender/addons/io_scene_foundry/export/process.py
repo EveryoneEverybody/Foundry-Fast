@@ -287,6 +287,7 @@ class ExportScene:
         self.warnings = []
         self.exported_animations = []
         self.lights = {}
+        self.airprobes = {}
         self.temp_objects = set()
         self.temp_meshes = set()
         self.sky_lights = []
@@ -1395,6 +1396,10 @@ class ExportScene:
                     if self.corinth:
                         props["bungie_marker_always_run_scripts"] = int(nwo.marker_always_run_scripts)
             
+            elif marker_type == "_connected_geometry_marker_type_airprobe" and not self.corinth:
+                self.airprobes[ob] = ob.name
+                return
+                
             elif marker_type == "_connected_geometry_marker_type_envfx":
                 props["bungie_marker_looping_effect"] = nwo.marker_looping_effect
                 
