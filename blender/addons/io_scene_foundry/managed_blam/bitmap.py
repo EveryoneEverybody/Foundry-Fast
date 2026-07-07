@@ -3,6 +3,7 @@
 from math import sqrt
 import math
 import os
+import struct
 import sys
 import traceback
 from pathlib import Path
@@ -21,6 +22,40 @@ NORMAL_DEBUG_GAMMA_LOOKUP = tuple(
     for i in range(256)
 )
 NORMAL_DEBUG_GAMMA_LOOKUP_NP = np.array(NORMAL_DEBUG_GAMMA_LOOKUP, dtype=np.uint8)
+
+BITMAP_FORMAT_A8 = 0
+BITMAP_FORMAT_Y8 = 1
+BITMAP_FORMAT_AY8 = 2
+BITMAP_FORMAT_A8Y8 = 3
+BITMAP_FORMAT_R5G6B5 = 6
+BITMAP_FORMAT_A1R5G5B5 = 8
+BITMAP_FORMAT_A4R4G4B4 = 9
+BITMAP_FORMAT_X8R8G8B8 = 10
+BITMAP_FORMAT_A8R8G8B8 = 11
+
+UNCOMPRESSED_BITMAP_FORMAT_NAMES = {
+    BITMAP_FORMAT_A8: "A8",
+    BITMAP_FORMAT_Y8: "Y8",
+    BITMAP_FORMAT_AY8: "AY8",
+    BITMAP_FORMAT_A8Y8: "A8Y8",
+    BITMAP_FORMAT_R5G6B5: "R5G6B5",
+    BITMAP_FORMAT_A1R5G5B5: "A1R5G5B5",
+    BITMAP_FORMAT_A4R4G4B4: "A4R4G4B4",
+    BITMAP_FORMAT_X8R8G8B8: "X8R8G8B8",
+    BITMAP_FORMAT_A8R8G8B8: "A8R8G8B8",
+}
+
+UNCOMPRESSED_BITMAP_BYTES_PER_PIXEL = {
+    BITMAP_FORMAT_A8: 1,
+    BITMAP_FORMAT_Y8: 1,
+    BITMAP_FORMAT_AY8: 1,
+    BITMAP_FORMAT_A8Y8: 2,
+    BITMAP_FORMAT_R5G6B5: 2,
+    BITMAP_FORMAT_A1R5G5B5: 2,
+    BITMAP_FORMAT_A4R4G4B4: 2,
+    BITMAP_FORMAT_X8R8G8B8: 4,
+    BITMAP_FORMAT_A8R8G8B8: 4,
+}
 
 def clear_path_cache():
     global path_cache
@@ -447,15 +482,29 @@ class BitmapTag(Tag):
         img_rgba = np_buf.reshape((h, w, 4))
         img_rgb  = img_rgba[..., [2, 1, 0]]
 
-        f = h // 3                                             # face_size
-        faces = {
-            "U": img_rgb[0:f,           0:f       ],           # +Y
-            "D": img_rgb[2*f:3*f,       0:f       ],           # −Y
-            "F": img_rgb[f:2*f,         0:f       ],           # +Z
-            "R": img_rgb[f:2*f,         f:2*f     ],           # +X
-            "B": img_rgb[f:2*f,   2*f:3*f       ],             # −Z
-            "L": img_rgb[f:2*f,   3*f:4*f       ]              # −X
-        }
+        def face(x: int, y: int, size: int):
+            return img_rgb[y * size:(y + 1) * size, x * size:(x + 1) * size]
+
+        if w % 4 == 0 and h % 3 == 0 and w // 4 == h // 3:
+            f = w // 4
+            faces = {
+                "U": face(0, 0, f),
+                "D": face(0, 2, f),
+                "F": face(0, 1, f),
+                "R": face(1, 1, f),
+                "B": face(2, 1, f),
+                "L": face(3, 1, f),
+            }
+        elif h == w * 6:
+            f = w
+            order = ("R", "L", "U", "D", "F", "B")
+            faces = {name: img_rgb[index * f:(index + 1) * f, 0:f] for index, name in enumerate(order)}
+        elif w == h * 6:
+            f = h
+            order = ("R", "L", "U", "D", "F", "B")
+            faces = {name: img_rgb[0:f, index * f:(index + 1) * f] for index, name in enumerate(order)}
+        else:
+            raise ValueError(f"unsupported cubemap bitmap layout {w}x{h}")
 
 
         out_h = f * 2
@@ -494,7 +543,204 @@ class BitmapTag(Tag):
         equirect = self.cubemap_to_equirectangular(bitmap)
         return equirect, str(Path(self.data_dir, f"{self.tag_path.RelativePath}{suffix}_equirectangular").with_suffix('.tiff'))
     
+    @staticmethod
+    def _dotnet_bytes_to_bytes(data) -> bytes:
+        if data is None:
+            return b""
+        if isinstance(data, bytes):
+            return data
+        if isinstance(data, bytearray):
+            return bytes(data)
+        try:
+            return bytes(data)
+        except TypeError:
+            return bytes(bytearray(data))
+
+    @staticmethod
+    def _select_int(element, field_path: str, default=0) -> int:
+        try:
+            field = element.SelectField(field_path)
+        except Exception:
+            return default
+        for attr in ("Data", "Value"):
+            if hasattr(field, attr):
+                try:
+                    return int(getattr(field, attr))
+                except Exception:
+                    pass
+        try:
+            return int(field.GetStringData())
+        except Exception:
+            return default
+
+    @staticmethod
+    def _expand_bits(values, bits: int):
+        maximum = (1 << bits) - 1
+        return ((values.astype(np.uint16) * 255 + maximum // 2) // maximum).astype(np.uint8)
+
+    @classmethod
+    def _decode_uncompressed_bitmap_rgba(cls, width: int, height: int, bitmap_format: int, data: bytes) -> bytes | None:
+        bytes_per_pixel = UNCOMPRESSED_BITMAP_BYTES_PER_PIXEL.get(bitmap_format)
+        if bytes_per_pixel is None:
+            return None
+
+        expected_size = width * height * bytes_per_pixel
+        if width <= 0 or height <= 0 or len(data) < expected_size:
+            return None
+
+        data = data[:expected_size]
+        rgba = np.empty((height, width, 4), dtype=np.uint8)
+
+        match bitmap_format:
+            case 0:  # A8
+                alpha = np.frombuffer(data, dtype=np.uint8).reshape(height, width)
+                rgba[..., 0] = 0
+                rgba[..., 1] = 0
+                rgba[..., 2] = 0
+                rgba[..., 3] = alpha
+            case 1:  # Y8
+                luminance = np.frombuffer(data, dtype=np.uint8).reshape(height, width)
+                rgba[..., 0] = luminance
+                rgba[..., 1] = luminance
+                rgba[..., 2] = luminance
+                rgba[..., 3] = 255
+            case 2:  # AY8
+                value = np.frombuffer(data, dtype=np.uint8).reshape(height, width)
+                rgba[..., 0] = value
+                rgba[..., 1] = value
+                rgba[..., 2] = value
+                rgba[..., 3] = value
+            case 3:  # A8Y8; source bytes are alpha, luminance.
+                ay = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 2)
+                rgba[..., 0] = ay[..., 1]
+                rgba[..., 1] = ay[..., 1]
+                rgba[..., 2] = ay[..., 1]
+                rgba[..., 3] = ay[..., 0]
+            case 6:  # R5G6B5
+                values = np.frombuffer(data, dtype="<u2").reshape(height, width)
+                rgba[..., 0] = cls._expand_bits((values >> 11) & 0x1F, 5)
+                rgba[..., 1] = cls._expand_bits((values >> 5) & 0x3F, 6)
+                rgba[..., 2] = cls._expand_bits(values & 0x1F, 5)
+                rgba[..., 3] = 255
+            case 8:  # A1R5G5B5
+                values = np.frombuffer(data, dtype="<u2").reshape(height, width)
+                rgba[..., 0] = cls._expand_bits((values >> 10) & 0x1F, 5)
+                rgba[..., 1] = cls._expand_bits((values >> 5) & 0x1F, 5)
+                rgba[..., 2] = cls._expand_bits(values & 0x1F, 5)
+                rgba[..., 3] = np.where((values & 0x8000) != 0, 255, 0).astype(np.uint8)
+            case 9:  # A4R4G4B4
+                values = np.frombuffer(data, dtype="<u2").reshape(height, width)
+                rgba[..., 0] = cls._expand_bits((values >> 8) & 0x0F, 4)
+                rgba[..., 1] = cls._expand_bits((values >> 4) & 0x0F, 4)
+                rgba[..., 2] = cls._expand_bits(values & 0x0F, 4)
+                rgba[..., 3] = cls._expand_bits((values >> 12) & 0x0F, 4)
+            case 10 | 11:  # X8R8G8B8 / A8R8G8B8; source bytes are BGRA.
+                bgra = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 4)
+                rgba[..., 0] = bgra[..., 2]
+                rgba[..., 1] = bgra[..., 1]
+                rgba[..., 2] = bgra[..., 0]
+                rgba[..., 3] = bgra[..., 3] if bitmap_format == BITMAP_FORMAT_A8R8G8B8 else 255
+            case _:
+                return None
+
+        return rgba.tobytes()
+
+    @staticmethod
+    def _tiff_entry(tag: int, field_type: int, count: int, value: int):
+        if field_type == 3 and count == 1:
+            value_data = struct.pack("<H", value) + b"\x00\x00"
+        elif field_type == 4 and count == 1:
+            value_data = struct.pack("<I", value)
+        else:
+            value_data = struct.pack("<I", value)
+        return struct.pack("<HHI", tag, field_type, count) + value_data
+
+    @classmethod
+    def _write_rgba_tiff(cls, path: str, width: int, height: int, rgba: bytes):
+        entries = 11
+        ifd_offset = 8
+        ifd_size = 2 + entries * 12 + 4
+        bits_per_sample = struct.pack("<HHHH", 8, 8, 8, 8)
+        extra_samples = struct.pack("<H", 2)
+        bits_offset = ifd_offset + ifd_size
+        extra_offset = bits_offset + len(bits_per_sample)
+        pixel_offset = extra_offset + len(extra_samples)
+
+        ifd = bytearray()
+        ifd += struct.pack("<H", entries)
+        ifd += cls._tiff_entry(256, 4, 1, width)              # ImageWidth
+        ifd += cls._tiff_entry(257, 4, 1, height)             # ImageLength
+        ifd += cls._tiff_entry(258, 3, 4, bits_offset)        # BitsPerSample
+        ifd += cls._tiff_entry(259, 3, 1, 1)                  # Compression: none
+        ifd += cls._tiff_entry(262, 3, 1, 2)                  # PhotometricInterpretation: RGB
+        ifd += cls._tiff_entry(273, 4, 1, pixel_offset)       # StripOffsets
+        ifd += cls._tiff_entry(277, 3, 1, 4)                  # SamplesPerPixel
+        ifd += cls._tiff_entry(278, 4, 1, height)             # RowsPerStrip
+        ifd += cls._tiff_entry(279, 4, 1, len(rgba))          # StripByteCounts
+        ifd += cls._tiff_entry(284, 3, 1, 1)                  # PlanarConfiguration: chunky
+        ifd += cls._tiff_entry(338, 3, 1, 2)  # ExtraSamples: unassociated alpha
+        ifd += struct.pack("<I", 0)
+
+        with open(path, "wb") as handle:
+            handle.write(b"II")
+            handle.write(struct.pack("<H", 42))
+            handle.write(struct.pack("<I", ifd_offset))
+            handle.write(ifd)
+            handle.write(bits_per_sample)
+            handle.write(extra_samples)
+            handle.write(rgba)
+
+    def _raw_tiff_save_path(self, suffix: str):
+        if suffix:
+            return str(Path(self.data_dir, self.tag_path.RelativePath, f"{self.tag_path.ShortName}{suffix}").with_suffix('.tiff'))
+        return str(Path(self.data_dir, self.tag_path.RelativePath).with_suffix('.tiff'))
+
+    def _save_single_raw_tiff(self, frame_index: int, suffix: str) -> str | None:
+        if self.is_cubemap:
+            return None
+
+        bitmap_elements = self.block_bitmaps.Elements
+        if frame_index < 0 or frame_index >= bitmap_elements.Count:
+            return None
+
+        bitmap_element = bitmap_elements[frame_index]
+        width = self._select_int(bitmap_element, "ShortInteger:width")
+        height = self._select_int(bitmap_element, "ShortInteger:height")
+        bitmap_type = self._select_int(bitmap_element, "CharEnum:type")
+        bitmap_format = self._select_int(bitmap_element, "ShortEnum:format", -1)
+        pixels_offset = self._select_int(bitmap_element, "LongInteger:pixels offset", -1)
+        pixels_size = self._select_int(bitmap_element, "LongInteger:pixels size", -1)
+
+        if bitmap_type != 0 or bitmap_format not in UNCOMPRESSED_BITMAP_FORMAT_NAMES:
+            return None
+        if pixels_offset < 0 or pixels_size <= 0:
+            return None
+
+        processed_data_field = self.tag.SelectField("Data:processed pixel data")
+        processed_data = self._dotnet_bytes_to_bytes(processed_data_field.GetData())
+        end = pixels_offset + pixels_size
+        if end > len(processed_data):
+            return None
+
+        rgba = self._decode_uncompressed_bitmap_rgba(width, height, bitmap_format, processed_data[pixels_offset:end])
+        if rgba is None:
+            return None
+
+        save_path = self._raw_tiff_save_path(suffix)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        self._write_rgba_tiff(save_path, width, height, rgba)
+        return save_path
+
     def _save_single(self, blue_channel_fix: bool, format: str, frame_index: int, suffix: str):
+        if format == 'tiff':
+            try:
+                raw_tiff_path = self._save_single_raw_tiff(frame_index, suffix)
+            except Exception as exc:
+                utils.print_warning(f"Failed raw bitmap tiff export for {self.tag_path.RelativePath}: {exc}")
+                raw_tiff_path = None
+            if raw_tiff_path:
+                return raw_tiff_path
+
         game_bitmap = self._GameBitmap(frame_index=frame_index)
         bitmap = game_bitmap.GetBitmap()
         game_bitmap.Dispose()
@@ -589,8 +835,8 @@ class BitmapTag(Tag):
                             bitmap.Save(save_path, ImageFormat.Tiff)
                     try:
                         bitmap, tiff_path = self._convert_cubemap(bitmap, suffix)
-                    except:
-                        utils.print_warning(f"Failed to convert cubemap tiff: {save_path}")
+                    except Exception as exc:
+                        utils.print_warning(f"Failed to convert cubemap tiff: {save_path}: {exc}")
                         
                     save_path = tiff_path
 
