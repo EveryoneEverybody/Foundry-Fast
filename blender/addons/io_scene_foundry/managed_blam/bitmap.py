@@ -220,6 +220,62 @@ class BitmapInfo:
         
 used_plate_paths = []
 
+BITMAP_SEQUENCE_EXTENSIONS = {".tif", ".tiff", ".tga"}
+
+def _frame_suffix_number(path: Path) -> int | None:
+    _, separator, suffix = path.stem.rpartition("_")
+    if separator and suffix.isdigit():
+        return int(suffix)
+    return None
+
+def _frame_sort_key(path: Path):
+    frame_number = _frame_suffix_number(path)
+    return (frame_number is None, frame_number if frame_number is not None else 0, path.name.lower())
+
+def _sequence_files_in_directory(directory: Path) -> list[Path]:
+    if not directory.exists() or not directory.is_dir():
+        return []
+    return sorted(
+        (
+            path for path in directory.iterdir()
+            if path.is_file() and path.suffix.lower() in BITMAP_SEQUENCE_EXTENSIONS
+        ),
+        key=_frame_sort_key,
+    )
+
+def _numbered_sibling_sequence_paths(image_path: Path) -> list[Path]:
+    frame_number = _frame_suffix_number(image_path)
+    if frame_number is None or not image_path.parent.exists():
+        return []
+
+    prefix = image_path.stem.rpartition("_")[0]
+    sequence_paths = []
+    for candidate in image_path.parent.iterdir():
+        if not candidate.is_file() or candidate.suffix.lower() not in BITMAP_SEQUENCE_EXTENSIONS:
+            continue
+        candidate_prefix, separator, suffix = candidate.stem.rpartition("_")
+        if separator and candidate_prefix == prefix and suffix.isdigit():
+            sequence_paths.append(candidate)
+
+    return sorted(sequence_paths, key=_frame_sort_key)
+
+def _bitmap_sequence_paths(image_path: str | Path) -> list[Path]:
+    path = Path(image_path)
+    if path.exists() and path.is_dir():
+        return _sequence_files_in_directory(path)
+
+    numbered_sequence = _numbered_sibling_sequence_paths(path)
+    if len(numbered_sequence) > 1:
+        return numbered_sequence
+
+    # Tool plates and existing cached plate exports sit beside the source TIFF/TGA path.
+    plate_dir = path.with_suffix("")
+    plate_sequence = _sequence_files_in_directory(plate_dir)
+    if len(plate_sequence) > 1:
+        return plate_sequence
+
+    return numbered_sequence
+
 class BitmapExtractionError(RuntimeError):
     pass
     
@@ -311,20 +367,18 @@ def bitmap_to_image(path: str | Path, always_extract_bitmaps=False) -> BitmapInf
     if not info.image_path:
         return info
     
-    # Check if this image is a plate
-    plate_dir = Path(info.image_path).with_suffix("")
-    if plate_dir.exists() and plate_dir.is_dir():
-        tifs = list(plate_dir.iterdir())
-        if len(tifs) > info.sequence_length:
-            info.sequence_length = len(tifs)
-            for tif in tifs:
-                if tif in used_plate_paths:
-                    continue
-                used_plate_paths.append(tif)
-                info.image_path = str(tif)
-                break
-            else:
-                info.image_path = str(tifs[0])
+    image_path = Path(info.image_path)
+    sequence_paths = _bitmap_sequence_paths(image_path)
+    if sequence_paths and (len(sequence_paths) > info.sequence_length or image_path.is_dir()):
+        info.sequence_length = max(info.sequence_length, len(sequence_paths))
+        for sequence_path in sequence_paths:
+            if sequence_path in used_plate_paths:
+                continue
+            used_plate_paths.append(sequence_path)
+            info.image_path = str(sequence_path)
+            break
+        else:
+            info.image_path = str(sequence_paths[0])
             
     image = bpy.data.images.load(filepath=info.image_path, check_existing=True)
     image.nwo.filepath = utils.relative_path(info.image_path)
