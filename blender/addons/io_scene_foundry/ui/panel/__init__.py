@@ -3308,10 +3308,19 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
             row.operator("nwo.proxy_instance_edit", text="Edit Proxy Cookie Cutter", icon_value=get_icon_id("cookie_cutter")).proxy = cookie_cutter.name
             row.operator("nwo.proxy_instance_delete", text="", icon="X").proxy = cookie_cutter.name
 
-        if not (collision and all_physics_slots_used and (self.h4 or cookie_cutter)):
-            row = box.row()
+        can_add_proxy = not (collision and all_physics_slots_used and (self.h4 or cookie_cutter))
+        has_physics = any(physics)
+        if can_add_proxy or has_physics:
+            row = box.row(align=True)
             row.scale_y = 1.3
-            row.operator("nwo.proxy_instance_new", text="New Instance Proxy", icon="ADD")
+            if can_add_proxy:
+                row.operator("nwo.proxy_instance_new", text="New Instance Proxy", icon="ADD")
+            if has_physics:
+                row.operator(
+                    "nwo.proxy_instance_physics_clear",
+                    text="" if can_add_proxy else "Clear Physics Proxies",
+                    icon="TRASH",
+                )
     
     def draw_material_properties(self):
         box = self.box

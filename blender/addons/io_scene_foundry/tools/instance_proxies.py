@@ -8,6 +8,89 @@ from ..tools.property_apply import apply_props_material
 
 from ..utils import deselect_all_objects, get_scene_props, is_corinth, set_active_object, set_object_mode, unlink
 
+
+def _close_manifold_holes(bm):
+    """Return a hole-capped copy when it forms a valid solid, otherwise return bm."""
+    boundary_edges = [edge for edge in bm.edges if len(edge.link_faces) == 1]
+    if not boundary_edges or any(len(edge.link_faces) > 2 for edge in bm.edges):
+        return bm
+
+    repaired = bm.copy()
+    bounds = [vert.co for vert in repaired.verts]
+    diagonal = (max(bounds, key=lambda co: co.x).x - min(bounds, key=lambda co: co.x).x) ** 2
+    diagonal += (max(bounds, key=lambda co: co.y).y - min(bounds, key=lambda co: co.y).y) ** 2
+    diagonal += (max(bounds, key=lambda co: co.z).z - min(bounds, key=lambda co: co.z).z) ** 2
+    merge_distance = max(diagonal ** 0.5 * 1e-7, 1e-9)
+    bmesh.ops.remove_doubles(repaired, verts=repaired.verts, dist=merge_distance)
+    repaired_boundary = [edge for edge in repaired.edges if len(edge.link_faces) == 1]
+    bmesh.ops.holes_fill(repaired, edges=repaired_boundary, sides=0)
+    bmesh.ops.recalc_face_normals(repaired, faces=repaired.faces[:])
+
+    is_manifold = all(len(edge.link_faces) == 2 for edge in repaired.edges)
+    has_volume = is_manifold and abs(repaired.calc_volume(signed=True)) > 1e-8
+    if not has_volume:
+        repaired.free()
+        return bm
+
+    bm.free()
+    return repaired
+
+
+def run_coacd(context, active_ob, log_level="warn"):
+    """Decompose an object's evaluated mesh and return (parts, elapsed_seconds)."""
+    from time import perf_counter
+
+    import coacd
+    import numpy as np
+
+    eval_ob = active_ob.evaluated_get(context.evaluated_depsgraph_get())
+    mesh = eval_ob.to_mesh()
+    try:
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(mesh)
+            bm = _close_manifold_holes(bm)
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+            bm.to_mesh(mesh)
+        finally:
+            bm.free()
+
+        vertices = np.empty((len(mesh.vertices), 3), dtype=np.float32)
+        mesh.vertices.foreach_get('co', vertices.ravel())
+
+        mesh.calc_loop_triangles()
+        faces = np.empty((len(mesh.loop_triangles), 3), dtype=np.int32)
+        mesh.loop_triangles.foreach_get('vertices', faces.ravel())
+    finally:
+        eval_ob.to_mesh_clear()
+
+    scene_nwo = context.scene.nwo
+    merge = scene_nwo.coacd_merge
+    kwargs = {
+        "threshold": scene_nwo.coacd_threshold,
+        # CoACD only applies the hull limit during its expensive merge pass.
+        "max_convex_hull": scene_nwo.coacd_max_hulls if merge else -1,
+        "preprocess_mode": scene_nwo.coacd_preprocess_mode,
+        "preprocess_resolution": scene_nwo.coacd_preprocess_resolution,
+        "resolution": scene_nwo.coacd_sample_resolution,
+        "mcts_nodes": scene_nwo.coacd_mcts_nodes,
+        "mcts_iterations": scene_nwo.coacd_mcts_iterations,
+        "mcts_max_depth": scene_nwo.coacd_mcts_max_depth,
+        "pca": scene_nwo.coacd_pca,
+        "merge": merge,
+        "seed": scene_nwo.coacd_seed,
+    }
+
+    if scene_nwo.coacd_decimate:
+        kwargs["max_ch_vertex"] = scene_nwo.coacd_max_vertices
+        kwargs["decimate"] = True
+
+    coacd.set_log_level(log_level)
+    start = perf_counter()
+    parts = coacd.run_coacd(coacd.Mesh(vertices, faces), **kwargs)
+    return parts, perf_counter() - start
+
+
 class NWO_ProxyInstanceEdit(bpy.types.Operator):
     bl_idname = "nwo.proxy_instance_edit"
     bl_description = "Switches to Proxy instance edit mode"
@@ -170,9 +253,6 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
     )
 
     def proxy_source_items(self, context):
-        import os
-        from ..utils import get_prefs
-        
         items = [
             ("bounding_box", "Bounding Box", "Generates a bounding box based on this instance"),
             ("copy", "Copy", "Copies this instance and removes any render only faces"),
@@ -186,7 +266,7 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
                 proxy_type = pt_items[0][0]
                 
         if proxy_type == "physics":
-            items.append(("coacd", "CoACD", "Generates optimized game-ready convex hulls using CoACD"))
+            items.append(("coacd", "Decomposition", "Generates optimized game-ready convex hulls using CoACD"))
             
         return items
 
@@ -227,6 +307,7 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
         bmesh.ops.contextual_create(bm, geom=top_face, mat_nr=0, use_smooth=False)
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
         bm.to_mesh(me)
+        bm.free()
 
         return ob
 
@@ -278,9 +359,101 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
             f.smooth = False
 
         bm.to_mesh(me)
+        bm.free()
         ob = bpy.data.objects.new(self.proxy_name, me)
         
         return ob
+
+    def build_coacd(self, context):
+        from time import perf_counter
+
+        active_ob = self.parent
+        original_selected = context.selected_objects.copy()
+        created_meshes = []
+        created_proxies = []
+        assignments = []
+
+        try:
+            parts, decomposition_time = run_coacd(context, active_ob)
+
+            if not parts:
+                self.report({'ERROR'}, "CoACD generated no mesh hulls.")
+                return {'CANCELLED'}
+
+            original_name = active_ob.name
+            armature_parent = active_ob.parent
+            parent_nwo = active_ob.data.nwo
+            available_slots = [
+                f"proxy_physics{i}"
+                for i in range(200)
+                if getattr(parent_nwo, f"proxy_physics{i}", None) is None
+            ]
+            if len(parts) > len(available_slots):
+                self.report(
+                    {'ERROR'},
+                    f"CoACD generated {len(parts)} hulls, but only {len(available_slots)} physics proxy slots are free."
+                )
+                return {'CANCELLED'}
+
+            proxy_start = perf_counter()
+            for idx, (p_verts, p_faces) in enumerate(parts):
+                proxy_name = f"$physics_hull_{original_name}_{idx:02d}"
+                me = bpy.data.meshes.new(proxy_name)
+                created_meshes.append(me)
+                me.from_pydata(p_verts.tolist(), [], p_faces.tolist())
+                me.update()
+
+                proxy_ob = bpy.data.objects.new(proxy_name, me)
+                created_proxies.append(proxy_ob)
+                proxy_ob.nwo.proxy_type = "physics"
+                me.nwo.mesh_type = '_connected_geometry_mesh_type_physics'
+                proxy_ob.matrix_world = active_ob.matrix_world.copy()
+
+                if armature_parent and armature_parent.type == 'ARMATURE':
+                    matrix_world = proxy_ob.matrix_world.copy()
+                    proxy_ob.parent = armature_parent
+                    proxy_ob.matrix_world = matrix_world
+
+                slot = available_slots[idx]
+                setattr(parent_nwo, slot, proxy_ob)
+                assignments.append((slot, proxy_ob))
+
+            proxy_time = perf_counter() - proxy_start
+            self.report(
+                {'INFO'},
+                f"Generated {len(created_proxies)} Havok hulls in "
+                f"{decomposition_time + proxy_time:.2f}s "
+                f"(CoACD {decomposition_time:.2f}s, proxies {proxy_time:.2f}s)."
+            )
+
+        except ImportError:
+            self.report({'ERROR'}, "CoACD module not found. Please rebuild the extension with build_extension.py")
+            return {'CANCELLED'}
+        except Exception as e:
+            parent_nwo = active_ob.data.nwo
+            for slot, proxy_ob in reversed(assignments):
+                if getattr(parent_nwo, slot, None) == proxy_ob:
+                    setattr(parent_nwo, slot, None)
+            for proxy_ob in reversed(created_proxies):
+                bpy.data.objects.remove(proxy_ob, do_unlink=True)
+            for proxy_mesh in reversed(created_meshes):
+                if proxy_mesh.users == 0:
+                    bpy.data.meshes.remove(proxy_mesh)
+            self.report({'ERROR'}, f"Error during CoACD physics generation: {str(e)}")
+            return {'CANCELLED'}
+
+        finally:
+            for ob in original_selected:
+                try:
+                    ob.select_set(True)
+                except:
+                    pass
+            try:
+                context.view_layer.objects.active = active_ob
+            except:
+                pass
+
+        return {'FINISHED'}
 
     def execute(self, context):
         self.parent = context.object
@@ -292,7 +465,7 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
             if proxy_type != "physics":
                 self.report({'WARNING'}, "CoACD only generates Physics proxies.")
                 return {'CANCELLED'}
-            return bpy.ops.nwo.generate_coacd_physics()
+            return self.build_coacd(context)
 
         # self.scene_coll = context.scene.collection.objects
         self.proxy_name = f"{self.parent.name}_proxy_{proxy_type}"
@@ -355,7 +528,10 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
             scene = context.scene
             
             layout.prop(scene.nwo, "coacd_threshold")
-            layout.prop(scene.nwo, "coacd_max_hulls")
+            layout.prop(scene.nwo, "coacd_merge")
+            row = layout.row()
+            row.enabled = scene.nwo.coacd_merge
+            row.prop(scene.nwo, "coacd_max_hulls")
             
             layout.prop(scene.nwo, "coacd_decimate")
             if scene.nwo.coacd_decimate:
@@ -383,7 +559,6 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
                 adv_box.prop(scene.nwo, "coacd_mcts_iterations")
                 adv_box.prop(scene.nwo, "coacd_mcts_max_depth")
                 adv_box.prop(scene.nwo, "coacd_pca")
-                adv_box.prop(scene.nwo, "coacd_merge")
                 adv_box.prop(scene.nwo, "coacd_seed")
                 
         if self.proxy_source != "coacd":
@@ -427,7 +602,63 @@ class NWO_ProxyInstanceDelete(bpy.types.Operator):
                     setattr(nwo, f"proxy_physics{i}", None)
         
         return {'FINISHED'}
-    
+
+
+class NWO_ProxyInstancePhysicsClear(bpy.types.Operator):
+    bl_idname = "nwo.proxy_instance_physics_clear"
+    bl_label = "Clear Physics Proxies"
+    bl_description = "Clear every physics proxy from this instance"
+    bl_options = {'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.object
+        if ob is None or ob.type != 'MESH' or ob.data is None:
+            return False
+        nwo = ob.data.nwo
+        return any(getattr(nwo, f"proxy_physics{i}", None) is not None for i in range(200))
+
+    def execute(self, context):
+        nwo = context.object.data.nwo
+        proxies = set()
+        cleared = 0
+        for i in range(200):
+            slot = f"proxy_physics{i}"
+            proxy_ob = getattr(nwo, slot, None)
+            if proxy_ob is None:
+                continue
+            proxies.add(proxy_ob)
+            setattr(nwo, slot, None)
+            cleared += 1
+
+        for proxy_ob in proxies:
+            if proxy_ob.users != 0:
+                continue
+            proxy_mesh = proxy_ob.data if proxy_ob.type == 'MESH' else None
+            bpy.data.objects.remove(proxy_ob)
+            if proxy_mesh is not None and proxy_mesh.users == 0:
+                bpy.data.meshes.remove(proxy_mesh)
+
+        self.report({'INFO'}, f"Cleared {cleared} physics {'proxy' if cleared == 1 else 'proxies'}.")
+        return {'FINISHED'}
+
+    def invoke(self, context, _event):
+        return context.window_manager.invoke_props_dialog(self, width=360)
+
+    def draw(self, context):
+        nwo = context.object.data.nwo
+        count = sum(
+            getattr(nwo, f"proxy_physics{i}", None) is not None
+            for i in range(200)
+        )
+        layout = self.layout
+        layout.label(
+            text=f"Clear all {count} physics {'proxy' if count == 1 else 'proxies'}?",
+            icon='ERROR',
+        )
+        layout.label(text="This removes them from the active instance.")
+
+
 class NWO_ProxyInstanceCancel(bpy.types.Operator):
     bl_idname = "nwo.proxy_instance_cancel"
     bl_description = "Cancels Proxy Instance Edit"
@@ -438,164 +669,5 @@ class NWO_ProxyInstanceCancel(bpy.types.Operator):
 
     def execute(self, context):
         get_scene_props().instance_proxy_running = False
-        return {'FINISHED'}
-
-class NWO_GenerateCoacdPhysics(bpy.types.Operator):
-    bl_idname = "nwo.generate_coacd_physics"
-    bl_label = "Generate Havok Hulls"
-    bl_description = "Generates optimized game-ready convex hulls using CoACD"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return context.active_object is not None and context.active_object.type == 'MESH'
-
-    def execute(self, context):
-        import os
-        import bmesh
-        import numpy as np
-
-        try:
-            import coacd
-        except ImportError:
-            self.report({'ERROR'}, "CoACD module not found. Please rebuild the extension with build_extension.py")
-            return {'CANCELLED'}
-
-        active_ob = context.active_object
-        if not active_ob or active_ob.type != 'MESH':
-            self.report({'ERROR'}, "No active mesh object selected.")
-            return {'CANCELLED'}
-
-        scene = context.scene
-        original_selected = context.selected_objects.copy()
-
-        try:
-            # Extract mesh data for CoACD
-            depsgraph = context.evaluated_depsgraph_get()
-            eval_ob = active_ob.evaluated_get(depsgraph)
-            mesh = eval_ob.to_mesh()
-            
-            # Triangulate mesh using bmesh
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
-            bmesh.ops.triangulate(bm, faces=bm.faces[:])
-            bm.to_mesh(mesh)
-            bm.free()
-
-            # Convert to numpy arrays
-            vertices = np.empty((len(mesh.vertices), 3), dtype=np.float32)
-            mesh.vertices.foreach_get('co', vertices.ravel())
-            
-            faces = np.empty((len(mesh.polygons), 3), dtype=np.int32)
-            mesh.polygons.foreach_get('vertices', faces.ravel())
-            
-            eval_ob.to_mesh_clear()
-
-            # Run CoACD
-            coacd_mesh = coacd.Mesh(vertices, faces)
-            
-            kwargs = {
-                "threshold": scene.nwo.coacd_threshold,
-                "max_convex_hull": scene.nwo.coacd_max_hulls,
-                "preprocess_mode": scene.nwo.coacd_preprocess_mode,
-                "preprocess_resolution": scene.nwo.coacd_preprocess_resolution,
-                "resolution": scene.nwo.coacd_sample_resolution,
-                "mcts_nodes": scene.nwo.coacd_mcts_nodes,
-                "mcts_iterations": scene.nwo.coacd_mcts_iterations,
-                "mcts_max_depth": scene.nwo.coacd_mcts_max_depth,
-                "pca": scene.nwo.coacd_pca,
-                "merge": scene.nwo.coacd_merge,
-                "seed": scene.nwo.coacd_seed,
-            }
-            
-            if scene.nwo.coacd_decimate:
-                kwargs["max_ch_vertex"] = scene.nwo.coacd_max_vertices
-                kwargs["decimate"] = True
-                
-            parts = coacd.run_coacd(coacd_mesh, **kwargs)
-
-            if not parts:
-                self.report({'ERROR'}, "CoACD generated no mesh hulls.")
-                return {'CANCELLED'}
-            
-            original_name = active_ob.name
-            armature_parent = active_ob.parent
-
-            # Restore active object context for proxy_instance_new
-            context.view_layer.objects.active = active_ob
-
-            original_objects_set = set(bpy.data.objects.keys())
-            
-            imported_hulls = []
-            for idx, (p_verts, p_faces) in enumerate(parts):
-                # Create a new mesh in blender
-                me = bpy.data.meshes.new(f"coacd_hull_{idx}")
-                
-                # CoACD returns numpy arrays, convert to flat list for from_pydata
-                me.from_pydata(p_verts.tolist(), [], p_faces.tolist())
-                me.update()
-                
-                hull_ob = bpy.data.objects.new(me.name, me)
-                context.collection.objects.link(hull_ob)
-                
-                # Assign to imported hulls
-                imported_hulls.append(hull_ob)
-                
-                # Set world matrix before running proxy_instance_new
-                hull_ob.matrix_world = active_ob.matrix_world
-
-                # Call proxy_instance_new to create a proxy physics mesh from the local-space hull data
-                bpy.ops.nwo.proxy_instance_new(
-                    proxy_type="physics",
-                    proxy_source="existing",
-                    proxy_copy=hull_ob.data.name,
-                    proxy_edit=False
-                )
-                
-                # Find the newly created object in the database
-                new_objects = [bpy.data.objects[name] for name in bpy.data.objects.keys() if name not in original_objects_set]
-                if new_objects:
-                    proxy_ob = new_objects[0]
-                    original_objects_set.add(proxy_ob.name)
-                    
-                    # Rename proxy object using standard HEK physics prefixes
-                    proxy_ob.name = f"$physics_hull_{original_name}_{idx:02d}"
-                    
-                    # Ensure mesh type is set to physics
-                    proxy_ob.data.nwo.mesh_type = '_connected_geometry_mesh_type_physics'
-                    
-                    # Set the proxy's world transform to match the active object's world transform
-                    proxy_ob.matrix_world = active_ob.matrix_world.copy()
-                    
-                    # Parent if necessary
-                    if armature_parent and armature_parent.type == 'ARMATURE':
-                        matrix_world = proxy_ob.matrix_world.copy()
-                        proxy_ob.parent = armature_parent
-                        proxy_ob.matrix_world = matrix_world
-
-            # Delete the imported hulls and their mesh data to avoid cluttering the scene
-            for hull in imported_hulls:
-                hull_mesh = hull.data
-                bpy.data.objects.remove(hull, do_unlink=True)
-                bpy.data.meshes.remove(hull_mesh)
-
-            self.report({'INFO'}, f"Successfully generated {len(imported_hulls)} Havok hulls.")
-
-        except Exception as e:
-            self.report({'ERROR'}, f"Error during CoACD physics generation: {str(e)}")
-            return {'CANCELLED'}
-
-        finally:
-
-            for ob in original_selected:
-                try:
-                    ob.select_set(True)
-                except:
-                    pass
-            try:
-                context.view_layer.objects.active = active_ob
-            except:
-                pass
-
         return {'FINISHED'}
 

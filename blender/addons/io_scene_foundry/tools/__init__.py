@@ -60,7 +60,7 @@ from .barebones_model_format import NWO_OT_ExportBMF
 is_blender_startup = True
 
 # import Tool Operators
-from .instance_proxies import NWO_ProxyInstanceNew, NWO_ProxyInstanceCancel, NWO_ProxyInstanceEdit, NWO_ProxyInstanceDelete, NWO_GenerateCoacdPhysics
+from .instance_proxies import NWO_ProxyInstanceNew, NWO_ProxyInstanceCancel, NWO_ProxyInstanceEdit, NWO_ProxyInstanceDelete, NWO_ProxyInstancePhysicsClear
 
 #######################################
 # NEW TOOL UI
@@ -125,9 +125,9 @@ classes = (
     NWO_TagExplore,
     NWO_ProxyInstanceCancel,
     NWO_ProxyInstanceDelete,
+    NWO_ProxyInstancePhysicsClear,
     NWO_ProxyInstanceEdit,
     NWO_ProxyInstanceNew,
-    NWO_GenerateCoacdPhysics,
     NWO_CollectionManager_CreateMove,
     NWO_CollectionManager_Create,
     NWO_AutoSeam,

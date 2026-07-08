@@ -2901,14 +2901,14 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
 
     coacd_threshold: bpy.props.FloatProperty(
         name="Concavity Threshold",
-        description="Controls how tightly the hulls hug the original mesh",
-        default=0.05,
+        description="Controls how tightly hulls hug the mesh; higher values create fewer hulls and run faster",
+        default=0.3,
         min=0.01,
         max=1.0,
     )
     coacd_max_hulls: bpy.props.IntProperty(
         name="Max Hulls",
-        description="Sets the absolute limit on the number of generated convex shapes (-1 for no limit)",
+        description="Sets the absolute limit on generated convex shapes when Merge Hulls is enabled (-1 for no limit)",
         default=5,
         min=-1,
         max=64,
@@ -2938,35 +2938,35 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
     coacd_preprocess_resolution: bpy.props.IntProperty(
         name="Preprocess Resolution",
         description="Resolution for manifold preprocessing (20-100)",
-        default=50,
+        default=20,
         min=20,
         max=100,
     )
     coacd_sample_resolution: bpy.props.IntProperty(
         name="Sample Resolution",
         description="Sampling resolution for Hausdorff distance calculation (1000-10000)",
-        default=2000,
+        default=1000,
         min=1000,
         max=10000,
     )
     coacd_mcts_nodes: bpy.props.IntProperty(
         name="MCTS Nodes",
         description="Max number of child nodes in MCTS (10-40)",
-        default=20,
+        default=10,
         min=10,
         max=40,
     )
     coacd_mcts_iterations: bpy.props.IntProperty(
         name="MCTS Iterations",
         description="Number of search iterations in MCTS (60-2000)",
-        default=150,
+        default=60,
         min=60,
         max=2000,
     )
     coacd_mcts_max_depth: bpy.props.IntProperty(
         name="MCTS Max Depth",
         description="Max search depth in MCTS (1-7)",
-        default=3,
+        default=2,
         min=1,
         max=7,
     )
@@ -2976,9 +2976,9 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
         default=False,
     )
     coacd_merge: bpy.props.BoolProperty(
-        name="Merge",
-        description="Enable merge post-processing",
-        default=True,
+        name="Merge Hulls",
+        description="Merge hulls after decomposition; enables Max Hulls but can substantially increase processing time",
+        default=False,
     )
     coacd_seed: bpy.props.IntProperty(
         name="Seed",
