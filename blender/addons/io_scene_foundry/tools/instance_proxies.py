@@ -9,6 +9,133 @@ from ..tools.property_apply import apply_props_material
 from ..utils import deselect_all_objects, get_scene_props, is_corinth, set_active_object, set_object_mode, unlink
 
 
+def coacd_property_annotations():
+    return {
+        "coacd_threshold": bpy.props.FloatProperty(
+            name="Concavity Threshold",
+            description="Controls how tightly hulls hug the mesh; higher values create fewer hulls and run faster",
+            default=0.3,
+            min=0.01,
+            max=1.0,
+        ),
+        "coacd_max_hulls": bpy.props.IntProperty(
+            name="Max Hulls",
+            description="Sets the absolute limit on generated convex shapes when Merge Hulls is enabled (-1 for no limit)",
+            default=5,
+            min=-1,
+            max=64,
+        ),
+        "coacd_preprocess_mode": bpy.props.EnumProperty(
+            name="Preprocess",
+            description="Controls manifold preprocessing mode. Set to 'Off' for open or unclosed meshes",
+            items=[
+                ("auto", "Auto", "Automatically checks and preprocesses non-manifold meshes"),
+                ("on", "On", "Forces preprocessing on (for non-watertight/dirty meshes)"),
+                ("off", "Off", "Forces preprocessing off (retains original open mesh structure)"),
+            ],
+            default="auto",
+        ),
+        "coacd_decimate": bpy.props.BoolProperty(
+            name="Decimate Hulls",
+            description="Enable vertex decimation on generated convex hulls",
+            default=True,
+        ),
+        "coacd_max_vertices": bpy.props.IntProperty(
+            name="Max Vertices per Hull",
+            description="Maximum number of vertices allowed for each convex hull",
+            default=32,
+            min=4,
+            max=1024,
+        ),
+        "coacd_preprocess_resolution": bpy.props.IntProperty(
+            name="Preprocess Resolution",
+            description="Resolution for manifold preprocessing (20-100)",
+            default=20,
+            min=20,
+            max=100,
+        ),
+        "coacd_sample_resolution": bpy.props.IntProperty(
+            name="Sample Resolution",
+            description="Sampling resolution for Hausdorff distance calculation (1000-10000)",
+            default=1000,
+            min=1000,
+            max=10000,
+        ),
+        "coacd_mcts_nodes": bpy.props.IntProperty(
+            name="MCTS Nodes",
+            description="Max number of child nodes in MCTS (10-40)",
+            default=10,
+            min=10,
+            max=40,
+        ),
+        "coacd_mcts_iterations": bpy.props.IntProperty(
+            name="MCTS Iterations",
+            description="Number of search iterations in MCTS (60-2000)",
+            default=60,
+            min=60,
+            max=2000,
+        ),
+        "coacd_mcts_max_depth": bpy.props.IntProperty(
+            name="MCTS Max Depth",
+            description="Max search depth in MCTS (1-7)",
+            default=2,
+            min=1,
+            max=7,
+        ),
+        "coacd_pca": bpy.props.BoolProperty(
+            name="PCA",
+            description="Enable PCA pre-processing",
+            default=False,
+        ),
+        "coacd_merge": bpy.props.BoolProperty(
+            name="Merge Hulls",
+            description="Merge hulls after decomposition; enables Max Hulls but can substantially increase processing time",
+            default=False,
+        ),
+        "coacd_seed": bpy.props.IntProperty(
+            name="Seed",
+            description="Random seed used for sampling (0 for random)",
+            default=0,
+            min=0,
+        ),
+        "coacd_advanced": bpy.props.BoolProperty(
+            name="Advanced Settings",
+            description="Show advanced CoACD parameters",
+            default=False,
+        ),
+    }
+
+
+def draw_coacd_settings(layout, settings):
+    layout.prop(settings, "coacd_threshold")
+    layout.prop(settings, "coacd_merge")
+    row = layout.row()
+    row.enabled = settings.coacd_merge
+    row.prop(settings, "coacd_max_hulls")
+    layout.prop(settings, "coacd_decimate")
+    if settings.coacd_decimate:
+        layout.prop(settings, "coacd_max_vertices")
+
+    advanced = layout.box()
+    advanced.prop(
+        settings,
+        "coacd_advanced",
+        text="Advanced Settings",
+        icon="TRIA_DOWN" if settings.coacd_advanced else "TRIA_RIGHT",
+        emboss=False,
+    )
+    if settings.coacd_advanced:
+        advanced.prop(settings, "coacd_preprocess_mode")
+        if settings.coacd_preprocess_mode != "off":
+            advanced.prop(settings, "coacd_preprocess_resolution")
+        advanced.prop(settings, "coacd_sample_resolution")
+        advanced.prop(settings, "coacd_mcts_nodes")
+        advanced.prop(settings, "coacd_mcts_iterations")
+        advanced.prop(settings, "coacd_mcts_max_depth")
+        advanced.prop(settings, "coacd_pca")
+        advanced.prop(settings, "coacd_seed")
+
+
 def _close_manifold_holes(bm):
     """Return a hole-capped copy when it forms a valid solid, otherwise return bm."""
     boundary_edges = [edge for edge in bm.edges if len(edge.link_faces) == 1]
@@ -36,7 +163,7 @@ def _close_manifold_holes(bm):
     return repaired
 
 
-def run_coacd(context, active_ob, log_level="warn"):
+def run_coacd(context, active_ob, settings, log_level="warn"):
     """Decompose an object's evaluated mesh and return (parts, elapsed_seconds)."""
     from time import perf_counter
 
@@ -64,25 +191,24 @@ def run_coacd(context, active_ob, log_level="warn"):
     finally:
         eval_ob.to_mesh_clear()
 
-    scene_nwo = context.scene.nwo
-    merge = scene_nwo.coacd_merge
+    merge = settings.coacd_merge
     kwargs = {
-        "threshold": scene_nwo.coacd_threshold,
+        "threshold": settings.coacd_threshold,
         # CoACD only applies the hull limit during its expensive merge pass.
-        "max_convex_hull": scene_nwo.coacd_max_hulls if merge else -1,
-        "preprocess_mode": scene_nwo.coacd_preprocess_mode,
-        "preprocess_resolution": scene_nwo.coacd_preprocess_resolution,
-        "resolution": scene_nwo.coacd_sample_resolution,
-        "mcts_nodes": scene_nwo.coacd_mcts_nodes,
-        "mcts_iterations": scene_nwo.coacd_mcts_iterations,
-        "mcts_max_depth": scene_nwo.coacd_mcts_max_depth,
-        "pca": scene_nwo.coacd_pca,
+        "max_convex_hull": settings.coacd_max_hulls if merge else -1,
+        "preprocess_mode": settings.coacd_preprocess_mode,
+        "preprocess_resolution": settings.coacd_preprocess_resolution,
+        "resolution": settings.coacd_sample_resolution,
+        "mcts_nodes": settings.coacd_mcts_nodes,
+        "mcts_iterations": settings.coacd_mcts_iterations,
+        "mcts_max_depth": settings.coacd_mcts_max_depth,
+        "pca": settings.coacd_pca,
         "merge": merge,
-        "seed": scene_nwo.coacd_seed,
+        "seed": settings.coacd_seed,
     }
 
-    if scene_nwo.coacd_decimate:
-        kwargs["max_ch_vertex"] = scene_nwo.coacd_max_vertices
+    if settings.coacd_decimate:
+        kwargs["max_ch_vertex"] = settings.coacd_max_vertices
         kwargs["decimate"] = True
 
     coacd.set_log_level(log_level)
@@ -228,6 +354,7 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
     bl_description = "New Proxy Instance"
     bl_label = "Instance Proxy New"
     bl_options = {'REGISTER', 'UNDO'}
+    __annotations__ = coacd_property_annotations()
     
     @classmethod
     def poll(cls, context):
@@ -374,7 +501,7 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
         assignments = []
 
         try:
-            parts, decomposition_time = run_coacd(context, active_ob)
+            parts, decomposition_time = run_coacd(context, active_ob, self)
 
             if not parts:
                 self.report({'ERROR'}, "CoACD generated no mesh hulls.")
@@ -525,41 +652,8 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
             row = layout.row()
             row.prop_search(self, "proxy_copy", search_data=bpy.data, search_property="meshes")
         elif self.proxy_source == "coacd":
-            scene = context.scene
-            
-            layout.prop(scene.nwo, "coacd_threshold")
-            layout.prop(scene.nwo, "coacd_merge")
-            row = layout.row()
-            row.enabled = scene.nwo.coacd_merge
-            row.prop(scene.nwo, "coacd_max_hulls")
-            
-            layout.prop(scene.nwo, "coacd_decimate")
-            if scene.nwo.coacd_decimate:
-                layout.prop(scene.nwo, "coacd_max_vertices")
-            
             layout.separator()
-            
-            adv_box = layout.box()
-            row_header = adv_box.row(align=True)
-            row_header.alignment = 'LEFT'
-            row_header.prop(
-                scene.nwo,
-                "coacd_advanced",
-                text="Advanced Settings",
-                icon="TRIA_DOWN" if scene.nwo.coacd_advanced else "TRIA_RIGHT",
-                emboss=False,
-            )
-            
-            if scene.nwo.coacd_advanced:
-                adv_box.prop(scene.nwo, "coacd_preprocess_mode")
-                if scene.nwo.coacd_preprocess_mode != 'off':
-                    adv_box.prop(scene.nwo, "coacd_preprocess_resolution")
-                adv_box.prop(scene.nwo, "coacd_sample_resolution")
-                adv_box.prop(scene.nwo, "coacd_mcts_nodes")
-                adv_box.prop(scene.nwo, "coacd_mcts_iterations")
-                adv_box.prop(scene.nwo, "coacd_mcts_max_depth")
-                adv_box.prop(scene.nwo, "coacd_pca")
-                adv_box.prop(scene.nwo, "coacd_seed")
+            draw_coacd_settings(layout, self)
                 
         if self.proxy_source != "coacd":
             row = layout.row()

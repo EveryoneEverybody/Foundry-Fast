@@ -4,10 +4,48 @@ import bpy
 
 from ..icons import get_icon_id
 
+from ..tools.instance_proxies import coacd_property_annotations, draw_coacd_settings, run_coacd
 from ..tools.property_apply import apply_prefix, apply_props_material
 from .. import utils
 
 from ..constants import VALID_MESHES 
+
+
+def _objects_from_coacd_parts(ob, parts):
+    """Replace ob with the first hull and return it plus objects for remaining hulls."""
+    base_name = ob.name
+    collections = tuple(ob.users_collection)
+    materials = tuple(ob.data.materials)
+    hull_meshes = []
+    try:
+        for idx, (vertices, faces) in enumerate(parts):
+            hull_mesh = bpy.data.meshes.new(f"{ob.data.name}_hull_{idx:02d}")
+            hull_meshes.append(hull_mesh)
+            hull_mesh.from_pydata(vertices.tolist(), [], faces.tolist())
+            hull_mesh.update()
+            for material in materials:
+                if material is not None:
+                    hull_mesh.materials.append(material)
+    except Exception:
+        for hull_mesh in reversed(hull_meshes):
+            if hull_mesh.users == 0:
+                bpy.data.meshes.remove(hull_mesh)
+        raise
+
+    hull_objects = [ob]
+    for idx in range(1, len(hull_meshes)):
+        hull_ob = ob.copy()
+        hull_ob.name = f"{base_name}_hull_{idx:02d}"
+        for collection in collections:
+            collection.objects.link(hull_ob)
+        hull_objects.append(hull_ob)
+
+    for hull_ob, hull_mesh in zip(hull_objects, hull_meshes):
+        hull_ob.data = hull_mesh
+        hull_ob.modifiers.clear()
+
+    return hull_objects
+
 
 class NWO_MT_PIE_ApplyTypeMesh(bpy.types.Menu):
     bl_label = "Mesh Type"
@@ -45,6 +83,7 @@ class NWO_OT_ApplyTypeMesh(bpy.types.Operator):
     bl_idname = "nwo.apply_type_mesh"
     bl_description = "Applies the specified mesh type to the selected objects"
     bl_options = {"REGISTER", "UNDO"}
+    __annotations__ = coacd_property_annotations()
     
     @classmethod
     def poll(cls, context):
@@ -58,6 +97,7 @@ class NWO_OT_ApplyTypeMesh(bpy.types.Operator):
             ("keep", "Keep", "Keeps the current mesh"),
             ("convex_hull", "Convex Hull", "Convert mesh to a convex hull"),
             ("bounding_box", "Bounding Box", "Convert mesh to its bounding box"),
+            ("coacd", "Decomposition", "Generates optimized game-ready convex hulls using CoACD"),
         ]
     )
 
@@ -280,6 +320,8 @@ class NWO_OT_ApplyTypeMesh(bpy.types.Operator):
         self.layout.use_property_split = True
         self.layout.prop(self, "m_type", text="Mesh Type")
         self.layout.prop(self, "convert_mesh", text="Convert Mesh", expand=True)
+        if self.convert_mesh == "coacd":
+            draw_coacd_settings(self.layout, self)
         if utils.get_prefs().apply_materials:
             self.layout.prop(self, "apply_material", text="Apply Material")
         
@@ -297,17 +339,59 @@ class NWO_OT_ApplyTypeMesh(bpy.types.Operator):
             ob for ob in context.selected_objects
             if ob.type in VALID_MESHES
         ]
+
+        decomposition = {}
+        if self.convert_mesh == "coacd":
+            unsupported = [ob for ob in meshes if ob.type != 'MESH']
+            meshes = [ob for ob in meshes if ob.type == 'MESH']
+            if unsupported:
+                self.report(
+                    {'WARNING'},
+                    f"Skipped {len(unsupported)} non-mesh "
+                    f"{'object' if len(unsupported) == 1 else 'objects'} during decomposition."
+                )
+            if not meshes:
+                self.report({'WARNING'}, "No mesh objects selected for decomposition.")
+                return {'CANCELLED'}
+
+            try:
+                for ob in meshes:
+                    parts, _elapsed = run_coacd(context, ob, self)
+                    if not parts:
+                        self.report({'ERROR'}, f"CoACD generated no hulls for {ob.name}.")
+                        return {'CANCELLED'}
+                    decomposition[ob] = parts
+            except ImportError:
+                self.report(
+                    {'ERROR'},
+                    "CoACD module not found. Please rebuild the extension with build_extension.py"
+                )
+                return {'CANCELLED'}
+            except Exception as e:
+                self.report({'ERROR'}, f"Physics decomposition failed: {e}")
+                return {'CANCELLED'}
+
+        generated_objects = []
         for ob in meshes:
-            utils.set_active_object(ob)
-            ob.select_set(True)
-            ob.data.nwo.mesh_type = mesh_type
+            if self.convert_mesh == "coacd":
+                converted_objects = _objects_from_coacd_parts(ob, decomposition[ob])
+                generated_objects.extend(converted_objects[1:])
+            else:
+                converted_objects = [ob]
 
-            if self.apply_prefix:
-                apply_prefix(ob, self.m_type, prefix_setting)
+            for converted_ob in converted_objects:
+                utils.set_active_object(converted_ob)
+                converted_ob.select_set(True)
+                converted_ob.data.nwo.mesh_type = mesh_type
 
-            if apply_materials and self.apply_material:
-                apply_props_material(ob, material)
-                
+                if self.apply_prefix:
+                    apply_prefix(converted_ob, self.m_type, prefix_setting)
+
+                if apply_materials and self.apply_material:
+                    apply_props_material(converted_ob, material)
+
+                converted_ob.select_set(False)
+
             if self.convert_mesh == "convex_hull":
                 utils.to_convex_hull(ob)
             elif self.convert_mesh == "bounding_box":
@@ -317,13 +401,12 @@ class NWO_OT_ApplyTypeMesh(bpy.types.Operator):
             #     closest_bsp = utils.closest_bsp_object(context, ob)
             #     if closest_bsp is not None:
             #         ob.nwo.seam_back = utils.true_region(closest_bsp.nwo)
-                    
-            ob.select_set(False)
-
         self.report(
-            {"INFO"}, f"Applied Mesh Type [{self.m_type}] to {len(meshes)} objects"
+            {"INFO"},
+            f"Applied Mesh Type [{self.m_type}] to "
+            f"{len(meshes) + len(generated_objects)} objects"
         )
-        [ob.select_set(True) for ob in original_selection]
+        [ob.select_set(True) for ob in (*original_selection, *generated_objects)]
         utils.set_active_object(original_active)
         return {"FINISHED"}
 
