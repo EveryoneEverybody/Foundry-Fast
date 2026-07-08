@@ -2083,7 +2083,7 @@ class NWO_Import(bpy.types.Operator):
                     if scene_nwo.animations:
                         scene_nwo.active_animation_index = len(scene_nwo.animations) - 1
                         
-                if self.generate_frames and imported_animations:
+                if self.generate_frames and imported_animations and 'jma' in importer.extensions:
                     generator = FrameGenerator(a for a in scene_nwo.animations if a not in current_animations)
                     generator.generate()
 
@@ -2735,11 +2735,11 @@ class NWOImporter:
             con.target = armature
             con.subtarget = camera_control_bone.name
             
-            con = camera.constraints.new('COPY_ROTATION')
-            con.target = armature
-            con.subtarget = camera_control_bone.name
-            con.target_space = 'LOCAL_OWNER_ORIENT'
-            con.owner_space = 'LOCAL'
+            # con = camera.constraints.new('COPY_ROTATION')
+            # con.target = armature
+            # con.subtarget = camera_control_bone.name
+            # con.target_space = 'LOCAL_OWNER_ORIENT'
+            # con.owner_space = 'LOCAL'
 
         self.context.scene.camera = camera
         return camera

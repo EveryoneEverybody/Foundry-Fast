@@ -274,6 +274,12 @@ class FoundryPreferences(AddonPreferences):
         description="Allows importing of animated functions when importing a Halo shader or material tag into Blender. Animated shaders can be taxing on Blender when the timeline is playing"
     )
 
+    bitmap_color_space_conversion: BoolProperty(
+        name="Bitmap Color Space Conversion",
+        default=True,
+        description="Convert extracted xRGB bitmap pixels to sRGB for Blender. Disable to leave extracted xRGB pixel values unchanged"
+    )
+
     default_import_template: EnumProperty(
         name="Default Import Template",
         description="The preset selected by default in the Foundry drag and drop importer",
@@ -398,6 +404,8 @@ class FoundryPreferences(AddonPreferences):
         row.prop(prefs, "debug_menu_on_launch")
         row = box.row(align=True)
         row.prop(prefs, "import_shaders_with_time_period")
+        row = box.row(align=True)
+        row.prop(prefs, "bitmap_color_space_conversion")
         row = box.row(align=True)
         row.prop(prefs, "default_import_template")
         row = box.row(align=True)

@@ -287,6 +287,7 @@ class ExportScene:
         self.warnings = []
         self.exported_animations = []
         self.lights = {}
+        self.airprobes = {}
         self.temp_objects = set()
         self.temp_meshes = set()
         self.sky_lights = []
@@ -319,7 +320,7 @@ class ExportScene:
         self.external_animations = {}
         self.local_views = set()
         self.decorators = []
-        self.hidden_objects = set()
+        self.hidden_objects = {}
         self.marker_instancers = []
         self.used_game_object_names = set()
         self.pretend_object_instances = {}
@@ -353,9 +354,13 @@ class ExportScene:
             self.context.view_layer.update()
 
         for ob in self.context.view_layer.objects:
-            if ob.hide_get():
-                self.hidden_objects.add(ob)
-                ob.hide_set(False)
+            hidden, viewport_hidden = ob.hide_get(), ob.hide_viewport
+            if hidden or viewport_hidden:
+                self.hidden_objects[ob] = hidden, viewport_hidden
+                if hidden:
+                    ob.hide_set(False)
+                if viewport_hidden:
+                    ob.hide_viewport = False
             
             # if self.asset_type.supports_animations:
             #     if ob.type == 'MESH':
@@ -731,8 +736,18 @@ class ExportScene:
                             self.temp_meshes.add(copy_ob.data)
                             
                         case ObjectCopy.WATER_PHYSICS:
-                            copy_ob.data = copy_ob.data.copy()
+                            if copy_ob.eval_ob is not None:
+                                copy_ob.data = bpy.data.meshes.new_from_object(
+                                    copy_ob.eval_ob,
+                                    preserve_all_data_layers=True,
+                                    depsgraph=self.depsgraph,
+                                )
+                                copy_ob.eval_ob = None
+                                copy_ob.modifiers = tuple()
+                            else:
+                                copy_ob.data = copy_ob.data.copy()
                             copy_props["bungie_mesh_type"] = MeshType.water_physics_volume.value
+                            copy_props["foundry_simplify"] = 1
                             self._setup_water_physics_props(copy_ob.nwo, copy_props)
                             self.temp_meshes.add(copy_ob.data)
                             
@@ -1071,7 +1086,6 @@ class ExportScene:
                         match nwo.water_type:
                             case 'BOTH':
                                 copy = ObjectCopy.WATER_PHYSICS
-                                props["foundry_simplify"] = 1
                             case 'PHYSICS':
                                 if self.processed_meshes.get(ob.data):
                                     copy = ObjectCopy.WATER_PHYSICS
@@ -1382,6 +1396,10 @@ class ExportScene:
                     if self.corinth:
                         props["bungie_marker_always_run_scripts"] = int(nwo.marker_always_run_scripts)
             
+            elif marker_type == "_connected_geometry_marker_type_airprobe" and not self.corinth:
+                self.airprobes[ob] = ob.name
+                return
+                
             elif marker_type == "_connected_geometry_marker_type_envfx":
                 props["bungie_marker_looping_effect"] = nwo.marker_looping_effect
                 
@@ -2605,8 +2623,11 @@ class ExportScene:
             if refresh_view_layer:
                 self.context.view_layer.update()
             
-        for ob in self.hidden_objects:
-            ob.hide_set(True)
+        for ob, (hidden, viewport_hidden) in self.hidden_objects.items():
+            if hidden:
+                ob.hide_set(True)
+            if viewport_hidden:
+                ob.hide_viewport = True
         
         if self.asset_type in {AssetType.MODEL, AssetType.ANIMATION} and self.scene_settings.animations and self.scene_settings.active_animation_index > -1:
             self.scene_settings.active_animation_index = self.scene_settings.active_animation_index

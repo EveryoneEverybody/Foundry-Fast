@@ -113,6 +113,16 @@ class NWO_MeshToMarker(bpy.types.Operator):
                     1,
                 )
             )
+            
+            items.append(
+                (
+                    "_connected_geometry_marker_type_airprobe",
+                    "Airprobe",
+                    "Airprobes store a representation of scenario lighting at their origins. Objects close to this airprobe will take its lighting values as their own. Helpful if an object is not being lit correctly in the scenario",
+                    get_icon_id("airprobe"),
+                    2,
+                )
+            )
 
             if h4:
                 items.append(
@@ -121,7 +131,7 @@ class NWO_MeshToMarker(bpy.types.Operator):
                         "Environment Effect",
                         "Marker which loops the specified effect",
                         get_icon_id("environment_effect"),
-                        2,
+                        3,
                     )
                 )
                 items.append(
@@ -130,15 +140,6 @@ class NWO_MeshToMarker(bpy.types.Operator):
                         "Light Cone",
                         "Creates a light cone with the parameters defined",
                         get_icon_id("light_cone"),
-                        3,
-                    )
-                )
-                items.append(
-                    (
-                        "_connected_geometry_marker_type_airprobe",
-                        "Airprobe",
-                        "Airprobes store a representation of scenario lighting at their origins. Objects close to this airprobe will take its lighting values as their own. Helpful if an object is not being lit correctly in the scenario",
-                        get_icon_id("airprobe"),
                         4,
                     )
                 )

@@ -211,7 +211,7 @@ object_game_validation = {
     '_connected_geometry_marker_type_physics_constraint': ('reach', 'corinth'),
     '_connected_geometry_marker_type_target': ('reach', 'corinth'),
     '_connected_geometry_marker_type_game_instance': ('reach', 'corinth'),
-    '_connected_geometry_marker_type_airprobe': ('corinth',),
+    '_connected_geometry_marker_type_airprobe': ('reach', 'corinth'),
     '_connected_geometry_marker_type_envfx': ('corinth',),
     '_connected_geometry_marker_type_lightCone': ('corinth',),
     }

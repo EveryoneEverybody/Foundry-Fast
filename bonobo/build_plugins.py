@@ -78,7 +78,7 @@ def main() -> None:
             name="Omaha / HREK",
             project=script_dir / "FoundryPluginOmaha" / "FoundryPluginOmaha.csproj",
             output=script_dir / "FoundryPluginOmaha" / "bin" / output_subdir / "FoundryPlugin.dll",
-            test_path=Path(r"S:\Halo\Modding\Main\HREK\bin\tools\bonobo\FoundryPlugin\FoundryPlugin.dll"),
+            test_path=Path(r"G:\Halo\Modding\Main\HREK\bin\tools\bonobo\FoundryPlugin\FoundryPlugin.dll"),
             build_path=foundry_root
             / "blender"
             / "addons"
@@ -91,7 +91,7 @@ def main() -> None:
             name="Midnight / H4EK",
             project=script_dir / "FoundryPluginMidnight" / "FoundryPluginMidnight.csproj",
             output=script_dir / "FoundryPluginMidnight" / "bin" / output_subdir / "FoundryPlugin.dll",
-            test_path=Path(r"S:\Halo\Modding\Main\H4EK\bin\tools\bonobo\FoundryPlugin\FoundryPlugin.dll"),
+            test_path=Path(r"G:\Halo\Modding\Main\H4EK\bin\tools\bonobo\FoundryPlugin\FoundryPlugin.dll"),
             build_path=foundry_root
             / "blender"
             / "addons"
@@ -104,7 +104,7 @@ def main() -> None:
             name="Groundhog / H2AMPEK",
             project=script_dir / "FoundryPluginGroundhog" / "FoundryPluginGroundhog.csproj",
             output=script_dir / "FoundryPluginGroundhog" / "bin" / output_subdir / "FoundryPlugin.dll",
-            test_path=Path(r"S:\Halo\Modding\Main\H2AMPEK\bin\tools\bonobo\FoundryPlugin\FoundryPlugin.dll"),
+            test_path=Path(r"G:\Halo\Modding\Main\H2AMPEK\bin\tools\bonobo\FoundryPlugin\FoundryPlugin.dll"),
             build_path=foundry_root
             / "blender"
             / "addons"
