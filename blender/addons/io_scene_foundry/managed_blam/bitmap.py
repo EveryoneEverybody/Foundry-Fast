@@ -767,6 +767,38 @@ class BitmapTag(Tag):
         face_type, coor_x, coor_y = BitmapTag._cubemap_equirectangular_coordinates(cube_faces.shape[1], height, width)
         return BitmapTag._sample_cubemap_faces(cube_faces, face_type, coor_x, coor_y, mode)
 
+    @staticmethod
+    def _rotate_cubemap_face(face, rotation: int):
+        if rotation == 0:
+            return face
+        return np.rot90(face, k=rotation).copy()
+
+    @classmethod
+    def _cubemap_faces_from_vertical_rgba(cls, rgba: bytes, face_size: int) -> dict:
+        strip = np.frombuffer(rgba, dtype=np.uint8).reshape(face_size * 6, face_size, 4)
+        # Reach/H4 MCC Gen3 raw cube order, matching Reclaimer's MccGen3CubeLayout.
+        layout = (
+            ("R", -1),
+            ("B", 2),
+            ("L", 1),
+            ("F", 0),
+            ("U", 0),
+            ("D", 2),
+        )
+
+        faces = {}
+        for index, (name, rotation) in enumerate(layout):
+            face = strip[index * face_size:(index + 1) * face_size, :, :]
+            faces[name] = cls._rotate_cubemap_face(face, rotation)
+
+        return faces
+
+    @classmethod
+    def _cubemap_vertical_rgba_to_equirectangular(cls, rgba: bytes, face_size: int, mode: str = "bilinear") -> bytes:
+        faces = cls._cubemap_faces_from_vertical_rgba(rgba, face_size)
+        equirectangular = cls._cubemap_faces_to_equirectangular(faces, face_size * 2, face_size * 4, mode)
+        return np.ascontiguousarray(equirectangular).tobytes()
+
     def cubemap_to_equirectangular(self, bitmap, mode: str = "bilinear"):
         from System.Drawing import Bitmap # type: ignore
         from System import Array, Byte # type: ignore
@@ -1647,6 +1679,9 @@ class BitmapTag(Tag):
             return str(Path(self.data_dir, self.tag_path.RelativePath, f"{self.tag_path.ShortName}{suffix}").with_suffix('.tiff'))
         return str(Path(self.data_dir, self.tag_path.RelativePath).with_suffix('.tiff'))
 
+    def _raw_cubemap_equirectangular_save_path(self, suffix: str):
+        return str(Path(self.data_dir, f"{self.tag_path.RelativePath}{suffix}_equirectangular").with_suffix('.tiff'))
+
     def _bitmap_format_name(self, bitmap_format: int) -> str:
         return BITMAP_FORMAT_NAMES.get(bitmap_format, f"unknown format {bitmap_format}")
 
@@ -1684,8 +1719,10 @@ class BitmapTag(Tag):
         pixels_size = self._select_int(bitmap_element, "LongInteger:pixels size", -1)
         details = self._bitmap_extraction_details(bitmap_element)
 
-        if bitmap_type != 0:
+        if bitmap_type not in {0, 2}:
             raise BitmapExtractionError(f"Unsupported bitmap type for new extraction: {details}")
+        if bitmap_type == 2 and width != height:
+            raise BitmapExtractionError(f"Cubemap faces must be square for new extraction: {details}")
         if bitmap_format not in SUPPORTED_BITMAP_FORMAT_NAMES:
             raise BitmapExtractionError(f"Unsupported bitmap format for new extraction: {details}")
         if pixels_offset < 0 or pixels_size <= 0:
@@ -1700,7 +1737,8 @@ class BitmapTag(Tag):
                 f"processed data length={len(processed_data)}"
             )
 
-        rgba = self._decode_bitmap_rgba(width, height, bitmap_format, processed_data[pixels_offset:end])
+        decode_height = height * 6 if bitmap_type == 2 else height
+        rgba = self._decode_bitmap_rgba(width, decode_height, bitmap_format, processed_data[pixels_offset:end])
         if rgba is None:
             raise BitmapExtractionError(f"Failed to decode bitmap pixels for new extraction: {details}")
 
@@ -1709,8 +1747,16 @@ class BitmapTag(Tag):
 
         save_path = self._raw_tiff_save_path(suffix)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        self._write_rgba_tiff(save_path, width, height, rgba)
-        return save_path
+        self._write_rgba_tiff(save_path, width, decode_height, rgba)
+
+        if bitmap_type != 2:
+            return save_path
+
+        equirectangular_path = self._raw_cubemap_equirectangular_save_path(suffix)
+        equirectangular = self._cubemap_vertical_rgba_to_equirectangular(rgba, width)
+        os.makedirs(os.path.dirname(equirectangular_path), exist_ok=True)
+        self._write_rgba_tiff(equirectangular_path, width * 4, height * 2, equirectangular)
+        return equirectangular_path
 
     def _save_single(self, blue_channel_fix: bool, format: str, frame_index: int, suffix: str):
         if format != 'tiff':
