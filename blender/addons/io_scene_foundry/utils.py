@@ -1475,9 +1475,14 @@ class ProjectXML():
     def parse(self, project_root):
         has_changes = False
         self.project_xml = Path(project_root, "project.xml")
-        if not self.project_xml.exists():
-            return print(f"{project_root} is not a path to a valid Halo project. Expected project root directory to contain project.xml")
-        tree = ET.parse(self.project_xml)
+        try:
+            if not self.project_xml.exists():
+                return print(f"{project_root} is not a path to a valid Halo project. Expected project root directory to contain project.xml")
+            tree = ET.parse(self.project_xml)
+        except OSError as ex:
+            return print_warning(f"Failed to access project XML: {self.project_xml} ({ex})")
+        except ET.ParseError as ex:
+            return print_warning(f"Failed to parse XML: {self.project_xml} ({ex})")
         root = tree.getroot()
         if self.name and self.name != root.get('name', 0):
             root.set("name", self.name)
@@ -1573,7 +1578,10 @@ class ProjectXML():
             has_changes = True
         
         if has_changes:
-            tree.write(self.project_xml, encoding='utf-8', xml_declaration=True)
+            try:
+                tree.write(self.project_xml, encoding='utf-8', xml_declaration=True)
+            except OSError as ex:
+                return print_warning(f"Failed to update project XML: {self.project_xml} ({ex})")
 
 def setup_projects_list(skip_registry_check=False, report=None):
     projects_list = read_projects_list()
