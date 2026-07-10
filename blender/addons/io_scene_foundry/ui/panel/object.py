@@ -1052,6 +1052,34 @@ class NWO_MT_SeamBackfaceMenu(NWO_MT_RegionsMenu):
         for r_name in region_names:
             layout.operator("nwo.seam_backface_assign_single", text=r_name).name = r_name
 
+class NWO_OT_SeamBackfaceAssignClosest(bpy.types.Operator):
+    bl_idname = "nwo.seam_backface_assign_closest"
+    bl_label = "Auto Backfacing BSP"
+    bl_description = "Sets this seam's backfacing BSP from the closest BSP along the seam backface normal"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.object
+        return (
+            ob
+            and utils.is_mesh(ob)
+            and ob.nwo.mesh_type == "_connected_geometry_mesh_type_seam"
+            and not ob.nwo.seam_back_manual
+        )
+
+    def execute(self, context):
+        ob = context.object
+        closest_bsp = utils.closest_bsp_object(context, ob)
+        if closest_bsp is None:
+            self.report({"WARNING"}, "No backfacing BSP found")
+            return {"CANCELLED"}
+
+        backface = utils.true_region(closest_bsp.nwo)
+        ob.nwo.seam_back = backface
+        self.report({"INFO"}, f"Set backfacing BSP to {backface}")
+        return {"FINISHED"}
+
 class NWO_MT_PermutationsMenu(bpy.types.Menu):
     bl_label = "Permutations"
     bl_idname = "NWO_MT_Permutations"

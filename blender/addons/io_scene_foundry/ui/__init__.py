@@ -222,6 +222,7 @@ classes = [
     object.NWO_OT_GlobalMaterialMenuMaterial,
     object.NWO_MT_RegionsMenuSelection,
     object.NWO_MT_SeamBackfaceMenu,
+    object.NWO_OT_SeamBackfaceAssignClosest,
     object.NWO_MT_RegionsMenu,
     object.NWO_MT_FaceRegionsMenu,
     object.NWO_MT_MaterialRegionsMenu,

@@ -20,7 +20,7 @@ import zipfile
 import bmesh
 import bpy
 import platform
-from mathutils import Color, Euler, Matrix, Vector, Quaternion, geometry as geom
+from mathutils import Color, Euler, Matrix, Vector, Quaternion, geometry as geom, bvhtree
 import os
 import random
 import xml.etree.ElementTree as ET
@@ -957,37 +957,87 @@ def sort_alphanum(var_list):
     )
 
 
-def closest_bsp_object(context, ob, valid_targets=[]):
+def closest_bsp_object(context, ob, valid_targets=None):
     """
-    Returns the closest bsp to the specified object
-     (that is different from the current objects bsp)
+    Returns the BSP hit by a ray cast from the seam backface.
     """
+    if ob is None or ob.type not in VALID_MESHES or ob.data is None:
+        return None
+
+    depsgraph = context.evaluated_depsgraph_get()
+    ray_offset = 0.001
     closest_bsp = None
-    distance = -1
+    closest_distance = float("inf")
 
-    def get_distance(source_object, target_object):
-        me = source_object.data
-        verts_sel = [v.co for v in me.vertices]
-        if verts_sel:
-            seam_median = (
-                source_object.matrix_world @ sum(verts_sel, Vector()) / len(verts_sel)
-            )
+    def object_bvh(target_object):
+        eval_ob = target_object.evaluated_get(depsgraph)
+        mesh = None
+        try:
+            mesh = eval_ob.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+            if mesh is None or not mesh.polygons:
+                return None
 
-            me = target_object.data
-            verts = [v.co for v in me.vertices]
-            if not verts:
-                return
+            mesh.calc_loop_triangles()
+            if not mesh.loop_triangles:
+                return None
 
-            target_median = (
-                target_object.matrix_world @ sum(verts, Vector()) / len(verts)
-            )
+            matrix_world = target_object.matrix_world or Matrix.Identity(4)
+            verts = [matrix_world @ vertex.co for vertex in mesh.vertices]
+            flip_winding = matrix_world.is_negative
+            if getattr(target_object, "invert_topology", False):
+                flip_winding = not flip_winding
 
-            [x1, y1, z1] = seam_median
-            [x2, y2, z2] = target_median
+            tris = []
+            for tri in mesh.loop_triangles:
+                indices = tuple(tri.vertices)
+                if flip_winding:
+                    indices = indices[0], indices[2], indices[1]
+                tris.append(indices)
 
-            return (((x2 - x1) ** 2) + ((y2 - y1) ** 2) + ((z2 - z1) ** 2)) ** (1 / 2)
+            if not tris:
+                return None
 
-        return
+            return bvhtree.BVHTree.FromPolygons(verts, tris)
+        finally:
+            if mesh is not None:
+                eval_ob.to_mesh_clear()
+
+    def backface_rays(source_object):
+        eval_ob = source_object.evaluated_get(depsgraph)
+        mesh = None
+        rays = []
+        try:
+            mesh = eval_ob.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+            if mesh is None or not mesh.polygons:
+                return rays
+
+            matrix_world = source_object.matrix_world or Matrix.Identity(4)
+            normal_matrix = matrix_world.to_3x3().inverted_safe().transposed()
+            flip_normal = matrix_world.is_negative
+            if getattr(source_object, "invert_topology", False):
+                flip_normal = not flip_normal
+
+            for polygon in mesh.polygons:
+                normal = normal_matrix @ polygon.normal
+                if flip_normal:
+                    normal.negate()
+
+                if not normal.length_squared:
+                    continue
+
+                normal.normalize()
+                direction = -normal
+                origin = matrix_world @ polygon.center - direction * ray_offset
+                rays.append((origin, direction))
+
+            return rays
+        finally:
+            if mesh is not None:
+                eval_ob.to_mesh_clear()
+
+    rays = backface_rays(ob)
+    if not rays:
+        return None
 
     if not valid_targets:
         valid_targets = {ob for ob in export_objects(context) if ob.type in VALID_MESHES}
@@ -995,13 +1045,22 @@ def closest_bsp_object(context, ob, valid_targets=[]):
     for target_ob in valid_targets:
         if (
             ob != target_ob
+            and target_ob.type in VALID_MESHES
+            and target_ob.data is not None
             and target_ob.data.nwo.mesh_type == "_connected_geometry_mesh_type_structure"
             and true_region(target_ob.nwo) != true_region(ob.nwo)
         ):
-            d = get_distance(ob, target_ob)
-            if d is not None:
-                if distance < 0 or d < distance:
-                    distance = d
+            bvh = object_bvh(target_ob)
+            if bvh is None:
+                continue
+
+            for origin, direction in rays:
+                loc, _normal, _index, distance = bvh.ray_cast(origin, direction)
+                if loc is None:
+                    continue
+
+                if distance < closest_distance:
+                    closest_distance = distance
                     closest_bsp = target_ob
     
     return closest_bsp

@@ -4411,10 +4411,12 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         else:
             col1.menu("NWO_MT_Regions", text=utils.true_region(nwo), icon_value=get_icon_id("region"))
         if is_seam and not nwo.seam_back_manual:
+            backface_row = col2.row(align=True)
             if utils.true_region(nwo) == nwo.seam_back:
-                col2.menu("NWO_MT_SeamBackface", text="", icon='ERROR')
+                backface_row.menu("NWO_MT_SeamBackface", text="", icon='ERROR')
             else:
-                col2.menu("NWO_MT_SeamBackface", text=nwo.seam_back, icon_value=get_icon_id("region"))
+                backface_row.menu("NWO_MT_SeamBackface", text=nwo.seam_back, icon_value=get_icon_id("region"))
+            backface_row.operator("nwo.seam_backface_assign_closest", text="", icon="FILE_REFRESH")
             col3.menu("NWO_MT_Permutations", text=utils.true_permutation(nwo), icon_value=get_icon_id("permutation"))
         else:
             col2.menu("NWO_MT_Permutations", text=utils.true_permutation(nwo), icon_value=get_icon_id("permutation"))
