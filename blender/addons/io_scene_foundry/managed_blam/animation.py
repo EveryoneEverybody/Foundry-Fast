@@ -211,6 +211,7 @@ class Animation:
         self.pca_group = ""
         self.composite_index = -1
         self.is_pose_overlay = False
+        self.translate_and_scale_root_only = False
         
     def from_element(self, element: TagFieldBlockElement, shared_element: TagFieldBlockElement, corinth: bool):
         self.name = utils.AnimationName(element.Fields[0].GetStringData())
@@ -223,6 +224,13 @@ class Animation:
         self.resource_group_member = shared_element.SelectField("resource_group_member").Data
         self.element = element
         self.shared_element = shared_element
+
+        user_flags = element.SelectField("user flags")
+        self.translate_and_scale_root_only = (
+            user_flags.TestBit("translate and scale root only")
+            if user_flags is not None
+            else False
+        )
         
         internal_flags = shared_element.SelectField("internal flags")
         self.world_relative = internal_flags.TestBit("world relative")
@@ -3413,6 +3421,90 @@ class AnimationTag(Tag):
             ],
         )
 
+    def _frame_world_matrix(self, animation_data, defaults: list[DefaultAnimationNode], frame_index: int, node_index: int, world_cache: dict):
+        cached = world_cache.get(node_index)
+        if cached is not None:
+            return cached
+
+        local_matrix = Matrix.LocRotScale(
+            animation_data.translations[node_index][frame_index],
+            animation_data.rotations[node_index][frame_index],
+            Vector.Fill(3, animation_data.scales[node_index][frame_index]),
+        )
+
+        parent_index = defaults[node_index].parent_index
+        if parent_index > -1 and parent_index < animation_data.node_count:
+            world_matrix = self._frame_world_matrix(animation_data, defaults, frame_index, parent_index, world_cache) @ local_matrix
+        else:
+            world_matrix = local_matrix
+
+        world_cache[node_index] = world_matrix
+        return world_matrix
+
+    def _foot_ground_height(self, animation_data, defaults: list[DefaultAnimationNode], foot_node_indices: list[int], frame_index: int) -> float | None:
+        heights = []
+        world_cache = {}
+        for node_index in foot_node_indices:
+            if node_index < 0 or node_index >= animation_data.node_count or node_index >= len(defaults):
+                continue
+            heights.append(self._frame_world_matrix(animation_data, defaults, frame_index, node_index, world_cache).translation.z)
+
+        return min(heights) if heights else None
+
+    def _root_child_for_body_offset(self, defaults: list[DefaultAnimationNode], node_usages: dict) -> int | None:
+        pelvis_index = node_usages.get("pelvis")
+        if pelvis_index is not None and 0 < pelvis_index < len(defaults):
+            node_index = pelvis_index
+            while defaults[node_index].parent_index not in {-1, 0}:
+                parent_index = defaults[node_index].parent_index
+                if parent_index < 0 or parent_index >= len(defaults):
+                    break
+                node_index = parent_index
+            return node_index
+
+        root_children = [idx for idx, node in enumerate(defaults) if node.parent_index == 0]
+        return root_children[0] if len(root_children) == 1 else None
+
+    def _apply_translate_and_scale_root_only(self, animation_data, defaults: list[DefaultAnimationNode], node_usages: dict):
+        if animation_data.frame_count < 1:
+            return
+
+        frame_index = 0
+        foot_node_indices = [
+            node_usages[usage]
+            for usage in ("left foot", "right foot")
+            if usage in node_usages
+        ]
+        source_ground_height = self._foot_ground_height(animation_data, defaults, foot_node_indices, frame_index)
+
+        node_count = min(animation_data.node_count, len(defaults))
+        for node_index in range(1, node_count):
+            default_node = defaults[node_index]
+            for frame_index in range(animation_data.frame_count):
+                animation_data.translations[node_index][frame_index] = default_node.translation.copy()
+                animation_data.scales[node_index][frame_index] = default_node.scale
+            animation_data.translation_flags[node_index] = False
+            animation_data.scale_flags[node_index] = False
+
+        if source_ground_height is None:
+            return
+
+        retargeted_ground_height = self._foot_ground_height(animation_data, defaults, foot_node_indices, 0)
+        if retargeted_ground_height is None:
+            return
+
+        body_offset_node_index = self._root_child_for_body_offset(defaults, node_usages)
+        if body_offset_node_index is None or body_offset_node_index >= node_count:
+            return
+
+        ground_offset = source_ground_height - retargeted_ground_height
+        if abs(ground_offset) < tolerance:
+            return
+
+        for frame_index in range(animation_data.frame_count):
+            animation_data.translations[body_offset_node_index][frame_index].z += ground_offset
+        animation_data.translation_flags[body_offset_node_index] = True
+
     def _build_animation(self, tag_animation: Animation, defaults, overlay_defaults, graph, shared_static_codec, resource_cache, animation_cache, all_tag_animations, final_frame_stack=None):
         index = tag_animation.index
         if index in animation_cache:
@@ -3470,6 +3562,9 @@ class AnimationTag(Tag):
 
             if tag_animation.is_pose_overlay:
                 self._apply_pose_overlay_blend_screen_control_basis(tag_animation, animation_data)
+
+        if tag_animation.translate_and_scale_root_only:
+            self._apply_translate_and_scale_root_only(animation_data, defaults, self.get_node_usages())
 
         animation_cache[index] = animation_data
         return animation_data
