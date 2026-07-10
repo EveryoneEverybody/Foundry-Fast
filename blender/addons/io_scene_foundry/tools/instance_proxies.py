@@ -644,20 +644,19 @@ class NWO_ProxyInstanceNew(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = False
-        row = layout.row(heading="Type")
-        row.prop(self, "proxy_type", text="Type", expand=True)
-        row = layout.row(heading="Source")
-        row.prop(self, "proxy_source", text="Source", expand=True)
+        col = layout.column()
+        col.label(text="Type")
+        col.prop(self, "proxy_type", text="Type", expand=True)
+        col.label(text="Source")
+        col.prop(self, "proxy_source", text="Source", expand=True)
         if self.proxy_source == "existing":
-            row = layout.row()
-            row.prop_search(self, "proxy_copy", search_data=bpy.data, search_property="meshes")
+            col.prop_search(self, "proxy_copy", search_data=bpy.data, search_property="meshes")
         elif self.proxy_source == "coacd":
             layout.separator()
             draw_coacd_settings(layout, self)
                 
         if self.proxy_source != "coacd":
-            row = layout.row()
-            row.prop(self, "proxy_edit", text="Edit Proxy")
+            col.prop(self, "proxy_edit", text="Edit Proxy")
     
 class NWO_ProxyInstanceDelete(bpy.types.Operator):
     bl_idname = "nwo.proxy_instance_delete"
