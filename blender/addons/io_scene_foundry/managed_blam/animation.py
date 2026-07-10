@@ -59,6 +59,10 @@ BLEND_SCREEN_HEADER_SIZE = 12
 POSE_OVERLAY_DEBUG_FORCE_AIM_TURN_WRAP = False
 DEBUG_PRINT_BASE_ANIMATION_CANDIDATES = False
 DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT = 8
+DEBUG_PRINT_APPLIED_BASE_ANIMATION = True
+FORCE_OVERLAY_STATIC_CHANNELS_TO_BASE_FRAME = True
+ADJUST_OVERLAY_OBJECT_SPACE_PARENT_NODES = False
+ADJUST_REPLACEMENT_OBJECT_SPACE_PARENT_NODES = False
 
 RESOURCE_SECTION_ORDER = (
     "static_node_flags",
@@ -3113,6 +3117,41 @@ class AnimationTag(Tag):
         print_candidates("raw", base_candidates)
         print_candidates("resolved", resolved_candidates)
 
+    def _debug_print_applied_base_animation(
+        self,
+        tag_animation: Animation,
+        base_tag_animation: Animation | None,
+        base_animation_data,
+        base_frame: FrameChannels,
+        object_space_parent_targets: list,
+        applied_object_space_parent_targets: list,
+    ) -> None:
+        if not DEBUG_PRINT_APPLIED_BASE_ANIMATION:
+            return
+        if tag_animation.animation_type not in (AnimationType.OVERLAY, AnimationType.REPLACEMENT):
+            return
+
+        animation_type = tag_animation.animation_type.name.lower()
+        utils.print_step(f"Applied base frame for {animation_type} [{tag_animation.name.data_name}]")
+        if base_tag_animation is None:
+            utils.print_info("base source: default frame")
+        else:
+            utils.print_info(f"base source: {self._debug_base_animation_candidate_label(base_tag_animation)}")
+            utils.print_info(
+                f"base resource: group={base_tag_animation.resource_group}, "
+                f"member={base_tag_animation.resource_group_member}, "
+                f"tag frames={base_tag_animation.frame_count}, "
+                f"built frames={getattr(base_animation_data, 'frame_count', '<none>')}"
+            )
+
+        utils.print_info(f"base frame node count: {len(base_frame.rotations)}")
+        utils.print_info(
+            "object-space parent node adjustment: "
+            f"{'enabled' if self._adjust_object_space_parent_nodes(tag_animation) else 'disabled'}, "
+            f"tag targets={len(object_space_parent_targets)}, "
+            f"applied targets={len(applied_object_space_parent_targets)}"
+        )
+
     def _normalized_int16_quaternion_component(self, value) -> float:
         return max(-1.0, min(1.0, float(int(value)) / INT16_NORMALIZED_MAX))
 
@@ -3146,6 +3185,13 @@ class AnimationTag(Tag):
                 targets.append((node_index, translation, rotation, scale))
 
         return targets
+
+    def _adjust_object_space_parent_nodes(self, tag_animation: Animation) -> bool:
+        if tag_animation.animation_type == AnimationType.OVERLAY:
+            return ADJUST_OVERLAY_OBJECT_SPACE_PARENT_NODES
+        if tag_animation.animation_type == AnimationType.REPLACEMENT:
+            return ADJUST_REPLACEMENT_OBJECT_SPACE_PARENT_NODES
+        return False
 
     def _frame_object_space_matrices(
         self,
@@ -3679,18 +3725,40 @@ class AnimationTag(Tag):
             )
 
             object_space_parent_targets = self._object_space_parent_transform_targets(tag_animation)
+            applied_object_space_parent_targets = (
+                object_space_parent_targets
+                if self._adjust_object_space_parent_nodes(tag_animation)
+                else []
+            )
+            base_animation = None
+            selected_base_tag_animation = None
             if base_tag_animations:
-                base_animation = self._build_animation(base_tag_animations[0], defaults, overlay_defaults, graph, shared_static_codec, resource_cache, animation_cache, all_tag_animations, final_frame_stack)
+                selected_base_tag_animation = base_tag_animations[0]
+                base_animation = self._build_animation(selected_base_tag_animation, defaults, overlay_defaults, graph, shared_static_codec, resource_cache, animation_cache, all_tag_animations, final_frame_stack)
                 base_frame = base_animation.first_frame()
             else:
                 base_frame = default_frame_channels(defaults)
 
+            self._debug_print_applied_base_animation(
+                tag_animation,
+                selected_base_tag_animation,
+                base_animation,
+                base_frame,
+                object_space_parent_targets,
+                applied_object_space_parent_targets,
+            )
+
             if tag_animation.animation_type == AnimationType.OVERLAY:
-                animation_data = compose_overlay_animation(animation_data, base_frame, resource_data)
+                animation_data = compose_overlay_animation(
+                    animation_data,
+                    base_frame,
+                    resource_data,
+                    FORCE_OVERLAY_STATIC_CHANNELS_TO_BASE_FRAME,
+                )
             else:
                 animation_data = compose_replacement_animation(animation_data, base_frame)
 
-            if object_space_parent_targets and tag_animation.animation_type == AnimationType.OVERLAY:
+            if applied_object_space_parent_targets:
                 self._apply_object_space_base_corrections(tag_animation, animation_data, base_frame, defaults)
 
             if tag_animation.is_pose_overlay:

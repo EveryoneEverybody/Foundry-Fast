@@ -1306,6 +1306,7 @@ def compose_overlay_animation(
     animation: AnimationData,
     base_frame: FrameChannels,
     resource_data: AnimationResourceData | None = None,
+    force_static_channels_to_base_frame: bool = False,
 ) -> AnimationData:
     translations: list[list[Vector]] = []
     rotations: list[list[Quaternion]] = []
@@ -1329,15 +1330,19 @@ def compose_overlay_animation(
         base_scale = base_frame.scales[node_index]
         reference_translation = (
             animation.translations[node_index][0].copy()
-            if static_translation_flags[node_index]
+            if static_translation_flags[node_index] and not force_static_channels_to_base_frame
             else base_translation.copy()
         )
         reference_rotation = (
             animation.rotations[node_index][0].copy()
-            if static_rotation_flags[node_index]
+            if static_rotation_flags[node_index] and not force_static_channels_to_base_frame
             else base_rotation.copy()
         )
-        reference_scale = animation.scales[node_index][0] if static_scale_flags[node_index] else base_scale
+        reference_scale = (
+            animation.scales[node_index][0]
+            if static_scale_flags[node_index] and not force_static_channels_to_base_frame
+            else base_scale
+        )
         # Imported overlays start with the untouched base pose, then the keyed
         # overlay samples follow after that first frame. Static overlay data is
         # also part of that reference frame; Tool writes it from frame 0.
