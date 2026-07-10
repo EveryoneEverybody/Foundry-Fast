@@ -235,7 +235,7 @@ class NWO_OT_ApplyTypeMesh(bpy.types.Operator):
                     utils.nwo_enum(
                         "rain_sheet",
                         "Rain Sheet",
-                        "A plane which blocks all rain particles that hit it. Regions under this plane will not render rain",
+                        "A plane which is intended to display rain. Appears to be non-functional but is being kept incase there is a use",
                         "rain_sheet",
                         index,
                     )
