@@ -1911,6 +1911,8 @@ class NWO_OT_NewAnimation(bpy.types.Operator):
             utils.clear_animation(current_animation)
         
         animation = scene_nwo.animations.add()
+
+        duplicated_actions = set()
         
         if self.copy and current_animation:
             for key, value in current_animation.items():
@@ -1923,7 +1925,7 @@ class NWO_OT_NewAnimation(bpy.types.Operator):
             # animation.animation_renames.clear()
             for track in animation.action_tracks:
                 if track.action:
-                    if self.create_new_actions:
+                    if self.create_new_actions and track.action not in duplicated_actions:
                         track.action = track.action.copy()
             scene_nwo.active_animation_index = len(scene_nwo.animations) - 1
             return {'FINISHED'}
