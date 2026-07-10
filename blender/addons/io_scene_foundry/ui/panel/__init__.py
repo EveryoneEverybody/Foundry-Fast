@@ -4349,81 +4349,10 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
 
     def draw_settings(self):
         prefs = utils.get_prefs()
-        # box = self.box.box()
         context = self.context
-        # box.label(text=update_str, icon_value=get_icon_id("foundry"))
-        # if update_needed:
-        #     box.operator("nwo.open_url", text="Get Latest", icon_value=get_icon_id("github")).url = FOUNDRY_GITHUB
+        from ...preferences import draw_foundry_preferences
 
-        box = self.box.box()
-        row = box.row()
-        row.label(text="Projects")
-        row = box.row()
-        rows = 5
-        row.template_list(
-            "NWO_UL_Projects",
-            "",
-            prefs,
-            "projects",
-            prefs,
-            "current_project_index",
-            rows=rows,
-        )
-        col = row.column(align=True)
-        col.operator("nwo.project_add", text="", icon="ADD")
-        col.operator("nwo.project_remove", icon="REMOVE", text="")
-        col.separator()
-        col.operator("nwo.project_edit", icon="SETTINGS", text="")
-        col.separator()
-        col.operator("nwo.project_move", text="", icon="TRIA_UP").direction = 'up'
-        col.operator("nwo.project_move", icon="TRIA_DOWN", text="").direction = 'down'
-        row = box.row(align=True, heading="Tool Version")
-        row.prop(prefs, "tool_type", expand=True)
-        # row = box.row(align=True, heading="Default Scene Matrix")
-        # row.prop(prefs, "scene_matrix", expand=True)
-        row = box.row(align=True, heading="Default Object Prefixes")
-        row.prop(prefs, "apply_prefix", expand=True)
-        row = box.row(align=True)
-        row.prop(prefs, "apply_materials", text="Update Materials on Object Type Change")
-        row = box.row(align=True)
-        row.prop(prefs, "apply_empty_display")
-        row = box.row(align=True)
-        row.prop(prefs, "toolbar_icons_only", text="Foundry Toolbar Icons Only")
-        row = box.row(align=True)
-        row.prop(prefs, "protect_materials")
-        row = box.row(align=True)
-        row.prop(prefs, "update_materials_on_shader_path")
-        row = box.row(align=True)
-        row.prop(prefs, "sync_timeline_range")
-        row = box.row(align=True)
-        row.prop(prefs, "ignore_final_frame")
-        row = box.row(align=True)
-        row.prop(prefs, "debug_menu_on_export")
-        row = box.row(align=True)
-        row.prop(prefs, "debug_menu_on_launch")
-        row = box.row(align=True)
-        row.prop(prefs, "import_shaders_with_time_period")
-        row = box.row(align=True)
-        row.prop(prefs, "bitmap_color_space_conversion")
-        row = box.row(align=True)
-        row.prop(prefs, "default_import_template")
-        row = box.row(align=True)
-        row.prop(prefs, "allow_tool_patches")
-        row = box.row(align=True)
-        row.prop(prefs, "allow_foundation_plugin_install")
-        row = box.row(align=True)
-        row.prop(prefs, "rename_halo_collections")
-        row = box.row(align=True)
-        row.prop(prefs, "rename_material")
-        row = box.row(align=True)
-        row.prop(prefs, "default_scale_model")
-        row = box.row(align=True)
-        row.prop(prefs, "granny_viewer_path")
-        blend_prefs = context.preferences
-        if blend_prefs.use_preferences_save and (not bpy.app.use_userpref_skip_save_on_exit):
-            return
-        row = box.row()
-        row.operator("wm.save_userpref", text=("Save Foundry Settings") + (" *" if blend_prefs.is_dirty else ""))
+        draw_foundry_preferences(self.box, prefs, context, show_save_button=True)
 
 
     def draw_table_menus(self, col, nwo, ob):

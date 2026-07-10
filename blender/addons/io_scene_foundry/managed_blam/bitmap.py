@@ -278,6 +278,37 @@ def _bitmap_sequence_paths(image_path: str | Path) -> list[Path]:
 
 class BitmapExtractionError(RuntimeError):
     pass
+
+def _bitmap_color_space_conversion_enabled() -> bool:
+    try:
+        return bool(utils.get_prefs().bitmap_color_space_conversion)
+    except Exception:
+        return True
+
+def _bitmap_info_color_space(info: BitmapInfo) -> str:
+    if info.for_normal:
+        return "Non-Color"
+    if info.curve == 3:
+        return "Linear Rec.709"
+    if info.curve in {0, 1, 2} and not _bitmap_color_space_conversion_enabled():
+        return "xRGB"
+    return "sRGB"
+
+def apply_bitmap_info_color_space(image: bpy.types.Image, info: BitmapInfo):
+    color_space = _bitmap_info_color_space(info)
+    try:
+        image.colorspace_settings.name = color_space
+    except Exception as ex:
+        if color_space != "xRGB":
+            raise
+        utils.print_warning(
+            "Blender's xRGB color space is not available. Install it from Foundry preferences "
+            "and restart Blender, or enable Bitmap Color Space Conversion. Falling back to sRGB."
+        )
+        image.colorspace_settings.name = "sRGB"
+
+    if not info.for_normal:
+        image.alpha_mode = 'CHANNEL_PACKED'
     
 def bitmap_to_image(path: str | Path, always_extract_bitmaps=False) -> BitmapInfo:
     
@@ -384,14 +415,7 @@ def bitmap_to_image(path: str | Path, always_extract_bitmaps=False) -> BitmapInf
     image.nwo.filepath = utils.relative_path(info.image_path)
     image.nwo.shader_type = info.shader_type
 
-    if info.for_normal:
-        image.colorspace_settings.name = 'Non-Color'
-    elif info.curve == 3:
-        image.colorspace_settings.name = 'Linear Rec.709'
-        image.alpha_mode = 'CHANNEL_PACKED'
-    else:
-        image.colorspace_settings.name = 'sRGB'
-        image.alpha_mode = 'CHANNEL_PACKED'
+    apply_bitmap_info_color_space(image, info)
 
     if info.sequence_length > 1:
         image.source = 'SEQUENCE'
@@ -1653,10 +1677,7 @@ class BitmapTag(Tag):
 
     @staticmethod
     def _bitmap_color_space_conversion_enabled() -> bool:
-        try:
-            return bool(utils.get_prefs().bitmap_color_space_conversion)
-        except Exception:
-            return True
+        return _bitmap_color_space_conversion_enabled()
 
     @staticmethod
     def _linear_to_srgb(linear):

@@ -1,6 +1,9 @@
 
 
 import os
+import re
+import subprocess
+import tempfile
 from pathlib import Path
 from bpy.types import Operator, AddonPreferences
 from bpy.props import BoolProperty, StringProperty, EnumProperty, CollectionProperty
@@ -193,6 +196,249 @@ class NWO_OT_ProjectEdit(Operator):
         layout.prop(self, "display_name")
         layout.prop(self, "material_path", text=f"Default {shader_name} Tag")
 
+class NWO_OT_InstallXRGBColorspace(Operator):
+    bl_label = "Install xRGB Color Space"
+    bl_idname = "nwo.install_xrgb_colorspace"
+    bl_description = "Install Foundry's xRGB color space into Blender's active OCIO config. This will use a powershell script and may request elevated (admin) permissions. This is necessary because the file this operator edits is usually stored within a protected folder e.g. program files"
+
+    @staticmethod
+    def _ocio_path() -> Path:
+        blender_path = Path(bpy.app.binary_path)
+        version_dir = f"{bpy.app.version[0]}.{bpy.app.version[1]}"
+        return blender_path.parent / version_dir / "datafiles" / "colormanagement" / "config.ocio"
+
+    @staticmethod
+    def _xrgb_block(newline: str) -> str:
+        lines = [
+            "",
+            "  - !<ColorSpace>",
+            "    name: xRGB",
+            "    aliases: [Halo xRGB, Halo xRGB 1.95]",
+            "    family: Halo",
+            "    equalitygroup:",
+            "    bitdepth: 8ui",
+            "    description: |",
+            "      Halo xRGB texture encoding using Rec.709 primaries, D65 white point,",
+            "      and a pure 1.95 exponent.",
+            "    isdata: false",
+            "    encoding: sdr-video",
+            "    to_scene_reference: !<GroupTransform>",
+            "      children:",
+            "        - !<ExponentTransform> {value: [1.95, 1.95, 1.95, 1]}",
+            "        - !<ColorSpaceTransform> {src: Linear Rec.709, dst: Linear CIE-XYZ E}",
+        ]
+        return newline.join(lines) + newline
+
+    @staticmethod
+    def _quote_ps(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    @classmethod
+    def _patch_ocio_config(cls, text: str) -> tuple[str, bool]:
+        exact_name = re.compile(r"(?m)^\s*name:\s*xRGB\s*$")
+        if exact_name.search(text):
+            return text, False
+
+        existing_case_variant = re.compile(r"(?m)^(\s*name:\s*)xrgb\s*$", re.IGNORECASE)
+        if existing_case_variant.search(text):
+            return existing_case_variant.sub(r"\1xRGB", text, count=1), True
+
+        newline = "\r\n" if "\r\n" in text else "\n"
+        block = cls._xrgb_block(newline)
+
+        linear_marker = f"{newline}  - !<ColorSpace>{newline}    name: Linear Rec.709"
+        start = text.find(linear_marker)
+        if start >= 0:
+            next_start = text.find(f"{newline}  - !<ColorSpace>", start + len(linear_marker))
+            if next_start >= 0:
+                return text[:next_start] + block + text[next_start:], True
+
+        colorspaces_marker = f"colorspaces:{newline}"
+        start = text.find(colorspaces_marker)
+        if start >= 0:
+            insert_at = start + len(colorspaces_marker)
+            return text[:insert_at] + block.lstrip(newline) + text[insert_at:], True
+
+        raise RuntimeError("Could not find the colorspaces section in Blender's OCIO config")
+
+    @classmethod
+    def _write_with_elevation(cls, ocio_path: Path, patched_path: Path, backup_path: Path):
+        temp_dir = Path(tempfile.gettempdir()) / "Foundry"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        script_path = temp_dir / "install_xrgb_ocio.ps1"
+        log_path = temp_dir / "install_xrgb_ocio.log"
+        ps_script = "\n".join(
+            [
+                "$ErrorActionPreference = 'Stop'",
+                f"$OcioPath = {cls._quote_ps(str(ocio_path))}",
+                f"$PatchedPath = {cls._quote_ps(str(patched_path))}",
+                f"$BackupPath = {cls._quote_ps(str(backup_path))}",
+                f"$LogPath = {cls._quote_ps(str(log_path))}",
+                "try {",
+                "    if (!(Test-Path -LiteralPath $OcioPath)) { throw \"OCIO config was not found: $OcioPath\" }",
+                "    if (!(Test-Path -LiteralPath $BackupPath)) { Copy-Item -LiteralPath $OcioPath -Destination $BackupPath }",
+                "    Copy-Item -LiteralPath $PatchedPath -Destination $OcioPath -Force",
+                "    Set-Content -LiteralPath $LogPath -Value 'OK'",
+                "    exit 0",
+                "} catch {",
+                "    Set-Content -LiteralPath $LogPath -Value $_.Exception.Message",
+                "    exit 1",
+                "}",
+            ]
+        )
+        script_path.write_text(ps_script, encoding="utf-8")
+
+        elevated_args = f"-NoProfile -ExecutionPolicy Bypass -File \"{script_path}\""
+        command = (
+            "$p = Start-Process -FilePath 'powershell.exe' "
+            f"-ArgumentList {cls._quote_ps(elevated_args)} "
+            "-Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+        )
+        return subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+            capture_output=True,
+            text=True,
+        ), log_path
+
+    def execute(self, context):
+        ocio_path = self._ocio_path()
+        if not ocio_path.exists():
+            self.report({'ERROR'}, f"Blender OCIO config not found: {ocio_path}")
+            return {'CANCELLED'}
+
+        original_text = ocio_path.read_text(encoding="utf-8")
+        try:
+            patched_text, changed = self._patch_ocio_config(original_text)
+        except RuntimeError as ex:
+            self.report({'ERROR'}, str(ex))
+            return {'CANCELLED'}
+
+        if not changed:
+            self.report({'INFO'}, "xRGB color space is already installed")
+            return {'FINISHED'}
+
+        backup_path = ocio_path.with_name(f"{ocio_path.name}.foundry_backup")
+        try:
+            if not backup_path.exists():
+                backup_path.write_text(original_text, encoding="utf-8")
+            ocio_path.write_text(patched_text, encoding="utf-8")
+        except PermissionError:
+            temp_dir = Path(tempfile.gettempdir()) / "Foundry"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            patched_path = temp_dir / "config.ocio.xrgb"
+            patched_path.write_text(patched_text, encoding="utf-8")
+            result, log_path = self._write_with_elevation(ocio_path, patched_path, backup_path)
+            if result.returncode != 0:
+                if log_path.exists():
+                    details = log_path.read_text(encoding="utf-8").strip()
+                else:
+                    details = (result.stderr or result.stdout or "Windows cancelled or denied the elevated write").strip()
+                self.report({'ERROR'}, f"Failed to install xRGB color space: {details}")
+                return {'CANCELLED'}
+        except OSError as ex:
+            self.report({'ERROR'}, f"Failed to install xRGB color space: {ex}")
+            return {'CANCELLED'}
+
+        self.report({'INFO'}, "Installed xRGB color space. Restart Blender to load the updated OCIO config")
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(
+            self,
+            event,
+            title="Install xRGB color space?",
+            confirm_text="Install",
+        )
+
+def _settings_box(layout, title: str):
+    box = layout.box()
+    box.label(text=title)
+    return box
+
+def draw_foundry_preferences(layout, prefs, context=None, show_save_button=False):
+    box = _settings_box(layout, "Projects")
+    row = box.row()
+    rows = 5
+    row.template_list(
+        "NWO_UL_Projects",
+        "",
+        prefs,
+        "projects",
+        prefs,
+        "current_project_index",
+        rows=rows,
+    )
+    col = row.column(align=True)
+    col.operator("nwo.project_add", text="", icon="ADD")
+    col.operator("nwo.project_remove", icon="REMOVE", text="")
+    col.separator()
+    col.operator("nwo.project_edit", icon="SETTINGS", text="")
+    col.separator()
+    col.operator("nwo.project_move", text="", icon="TRIA_UP").direction = 'up'
+    col.operator("nwo.project_move", icon="TRIA_DOWN", text="").direction = 'down'
+
+    box = _settings_box(layout, "Halo Tools")
+    row = box.row(align=True, heading="Tool Version")
+    row.prop(prefs, "tool_type", expand=True)
+    row = box.row(align=True)
+    row.prop(prefs, "allow_tool_patches")
+    row = box.row(align=True)
+    row.prop(prefs, "allow_foundation_plugin_install")
+    row = box.row(align=True)
+    row.prop(prefs, "granny_viewer_path")
+
+    box = _settings_box(layout, "Import & Bitmaps")
+    row = box.row(align=True)
+    row.prop(prefs, "default_import_template")
+    row = box.row(align=True)
+    row.prop(prefs, "default_scale_model")
+    row = box.row(align=True)
+    row.prop(prefs, "import_shaders_with_time_period")
+    row = box.row(align=True)
+    row.prop(prefs, "bitmap_color_space_conversion")
+    row.operator("nwo.install_xrgb_colorspace", text="Install xRGB")
+
+    box = _settings_box(layout, "Objects & Materials")
+    row = box.row(align=True, heading="Default Object Prefixes")
+    row.prop(prefs, "apply_prefix", expand=True)
+    row = box.row(align=True)
+    row.prop(prefs, "apply_materials", text="Update Materials on Object Type Change")
+    row = box.row(align=True)
+    row.prop(prefs, "apply_empty_display")
+    row = box.row(align=True)
+    row.prop(prefs, "protect_materials")
+    row = box.row(align=True)
+    row.prop(prefs, "update_materials_on_shader_path")
+    row = box.row(align=True)
+    row.prop(prefs, "rename_halo_collections")
+    row = box.row(align=True)
+    row.prop(prefs, "rename_material")
+
+    box = _settings_box(layout, "Animation & Debug")
+    row = box.row(align=True)
+    row.prop(prefs, "sync_timeline_range")
+    row = box.row(align=True)
+    row.prop(prefs, "ignore_final_frame")
+    row = box.row(align=True)
+    row.prop(prefs, "debug_menu_on_export")
+    row = box.row(align=True)
+    row.prop(prefs, "debug_menu_on_launch")
+
+    box = _settings_box(layout, "Interface")
+    row = box.row(align=True)
+    row.prop(prefs, "toolbar_icons_only", text="Foundry Toolbar Icons Only")
+
+    if not show_save_button or context is None:
+        return
+
+    blend_prefs = context.preferences
+    if blend_prefs.use_preferences_save and (not bpy.app.use_userpref_skip_save_on_exit):
+        return
+
+    box = layout.box()
+    row = box.row()
+    row.operator("wm.save_userpref", text=("Save Foundry Settings") + (" *" if blend_prefs.is_dirty else ""))
+
 class FoundryPreferences(AddonPreferences):
     bl_idname = __package__
 
@@ -353,73 +599,7 @@ class FoundryPreferences(AddonPreferences):
         layout = self.layout
         if not startup.load_handler_complete:
             return layout.operator("nwo.launch_foundry")
-        
-        box = layout.box()
-        row = box.row()
-        row.label(text="Projects")
-        row = box.row()
-        rows = 5
-        row.template_list(
-            "NWO_UL_Projects",
-            "",
-            self,
-            "projects",
-            self,
-            "current_project_index",
-            rows=rows,
-        )
-        col = row.column(align=True)
-        col.operator("nwo.project_add", text="", icon="ADD")
-        col.operator("nwo.project_remove", icon="REMOVE", text="")
-        col.separator()
-        col.operator("nwo.project_edit", icon="SETTINGS", text="")
-        col.separator()
-        col.operator("nwo.project_move", text="", icon="TRIA_UP").direction = 'up'
-        col.operator("nwo.project_move", icon="TRIA_DOWN", text="").direction = 'down'
-        row = box.row(align=True, heading="Tool Version")
-        row.prop(prefs, "tool_type", expand=True)
-        # row = box.row(align=True, heading="Default Scene Matrix")
-        # row.prop(prefs, "scene_matrix", expand=True)
-        row = box.row(align=True, heading="Default Object Prefixes")
-        row.prop(prefs, "apply_prefix", expand=True)
-        row = box.row(align=True)
-        row.prop(prefs, "apply_materials", text="Update Materials on Object Type Change")
-        row = box.row(align=True)
-        row.prop(prefs, "apply_empty_display")
-        # row = box.row(align=True)
-        # row.prop(prefs, "poop_default")
-        row = box.row(align=True)
-        row.prop(prefs, "toolbar_icons_only", text="Foundry Toolbar Icons Only")
-        row = box.row(align=True)
-        row.prop(prefs, "protect_materials")
-        row = box.row(align=True)
-        row.prop(prefs, "update_materials_on_shader_path")
-        row = box.row(align=True)
-        row.prop(prefs, "sync_timeline_range")
-        row = box.row(align=True)
-        row.prop(prefs, "ignore_final_frame")
-        row = box.row(align=True)
-        row.prop(prefs, "debug_menu_on_export")
-        row = box.row(align=True)
-        row.prop(prefs, "debug_menu_on_launch")
-        row = box.row(align=True)
-        row.prop(prefs, "import_shaders_with_time_period")
-        row = box.row(align=True)
-        row.prop(prefs, "bitmap_color_space_conversion")
-        row = box.row(align=True)
-        row.prop(prefs, "default_import_template")
-        row = box.row(align=True)
-        row.prop(prefs, "allow_tool_patches")
-        row = box.row(align=True)
-        row.prop(prefs, "allow_foundation_plugin_install")
-        row = box.row(align=True)
-        row.prop(prefs, "rename_halo_collections")
-        row = box.row(align=True)
-        row.prop(prefs, "rename_material")
-        row = box.row(align=True)
-        row.prop(prefs, "default_scale_model")
-        row = box.row(align=True)
-        row.prop(prefs, "granny_viewer_path")
+        draw_foundry_preferences(layout, prefs)
         
 classes = [
     NWO_Project_ListItems,
@@ -428,6 +608,7 @@ classes = [
     NWO_ProjectRemove,
     NWO_ProjectMove,
     NWO_OT_ProjectEdit,
+    NWO_OT_InstallXRGBColorspace,
     FoundryPreferences,
 ]
 

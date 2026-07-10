@@ -188,14 +188,9 @@ def _apply_image_path(image: bpy.types.Image, filepath: str | Path, bitmap_info=
         image.nwo.filepath = utils.relative_path(filepath)
 
     if bitmap_info is not None:
-        if bitmap_info.for_normal:
-            image.colorspace_settings.name = "Non-Color"
-        elif bitmap_info.curve == 3:
-            image.colorspace_settings.name = "Linear Rec.709"
-            image.alpha_mode = "CHANNEL_PACKED"
-        else:
-            image.colorspace_settings.name = "sRGB"
-            image.alpha_mode = "CHANNEL_PACKED"
+        from ..managed_blam.bitmap import apply_bitmap_info_color_space
+
+        apply_bitmap_info_color_space(image, bitmap_info)
 
         if bitmap_info.sequence_length > 1:
             image.source = "SEQUENCE"
