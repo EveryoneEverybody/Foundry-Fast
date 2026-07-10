@@ -1431,7 +1431,7 @@ class NWO_OT_AnimationLinkToGR2(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         scene_nwo = utils.get_scene_props()
-        return scene_nwo.animations and scene_nwo.active_animation_index > -1
+        return scene_nwo.animations and scene_nwo.active_animation_index > -1 and utils.valid_nwo_asset(context)
     
     def execute(self, context):
         scene_nwo = utils.get_scene_props()
@@ -1449,6 +1449,7 @@ class NWO_OT_AnimationLinkToGR2(bpy.types.Operator):
     def invoke(self, context, _):
         asset_path = utils.get_asset_path_full()
         scene_nwo = utils.get_scene_props()
+
         if Path(asset_path).exists():
             self.filepath = asset_path
             animation = scene_nwo.animations[scene_nwo.active_animation_index]
