@@ -3323,6 +3323,12 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
         options=set(),
         description="Adds empty camera and atmosphere globals to the scenario if they do not exist. If a scenario template is in use then these will first be instead copied from the template scenario"
     )
+    scenario_auto_bsp_by_origin: bpy.props.BoolProperty(
+        name="Auto BSP by Object Origin",
+        default=False,
+        options=set(),
+        description="On export, assigns non-BSP-defining scenario objects to the BSP that contains their origin. Objects outside all BSPs use the default BSP"
+    )
     
     
 

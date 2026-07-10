@@ -866,6 +866,7 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         col.use_property_split = True
         draw_tag_path(col, nwo, "template_scenario")
         col.prop(nwo, "scenario_add_globals")
+        col.prop(nwo, "scenario_auto_bsp_by_origin")
         col.separator()
         col.operator("nwo.new_sky", text="Add New Sky to Scenario", icon_value=get_icon_id('sky'))
         
@@ -4360,6 +4361,21 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         region_name = "Region"
         is_mesh = utils.is_mesh(ob)
         is_seam = nwo.mesh_type == "_connected_geometry_mesh_type_seam" and utils.is_mesh(ob)
+        manual_bsp_mesh_types = {
+            "_connected_geometry_mesh_type_structure",
+            "_connected_geometry_mesh_type_portal",
+            "_connected_geometry_mesh_type_planar_fog_volume",
+            "_connected_geometry_mesh_type_lightmap_region",
+            "_connected_geometry_mesh_type_water_surface",
+            "_connected_geometry_mesh_type_water_physics_volume",
+            "_connected_geometry_mesh_type_boundary_surface",
+            "_connected_geometry_mesh_type_seam",
+        }
+        auto_bsp = (
+            utils.poll_ui(("scenario",))
+            and self.scene_nwo.scenario_auto_bsp_by_origin
+            and not (is_mesh and nwo.mesh_type in manual_bsp_mesh_types)
+        )
         if utils.poll_ui(("scenario",)):
             perm_name = "Layer"
             if is_seam:
@@ -4379,7 +4395,7 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         col2 = split.column()
         if is_seam and not nwo.seam_back_manual:
             col3 = split.column()
-        col1.enabled = not nwo.region_name_locked
+        col1.enabled = not nwo.region_name_locked and not auto_bsp
         if is_seam and not nwo.seam_back_manual:
             col3.enabled = not nwo.permutation_name_locked
         else:
@@ -4390,7 +4406,10 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
             col3.label(text=perm_name, icon_value=get_icon_id("collection_creator") if nwo.permutation_name_locked else 0)
         else:
             col2.label(text=perm_name, icon_value=get_icon_id("collection_creator") if nwo.permutation_name_locked else 0)
-        col1.menu("NWO_MT_Regions", text=utils.true_region(nwo), icon_value=get_icon_id("region"))
+        if auto_bsp:
+            col1.label(text="Auto", icon_value=get_icon_id("region"))
+        else:
+            col1.menu("NWO_MT_Regions", text=utils.true_region(nwo), icon_value=get_icon_id("region"))
         if is_seam and not nwo.seam_back_manual:
             if utils.true_region(nwo) == nwo.seam_back:
                 col2.menu("NWO_MT_SeamBackface", text="", icon='ERROR')
