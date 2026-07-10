@@ -3327,7 +3327,7 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
         name="Auto BSP by Object Origin",
         default=False,
         options=set(),
-        description="On export, assigns non-BSP-defining scenario objects to the BSP that contains their origin. Objects outside all BSPs use the default BSP"
+        description="On export, assigns non-BSP-defining scenario objects to the BSP that contains their origin. Objects outside all BSPs use the default BSP only when automatic structure is being generated"
     )
     
     

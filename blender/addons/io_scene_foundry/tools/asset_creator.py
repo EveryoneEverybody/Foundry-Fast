@@ -476,7 +476,9 @@ class NWO_OT_NewAsset(bpy.types.Operator):
             )
             
         elif self.asset_type == 'scenario':
-            col.prop(utils.get_scene_props(), 'scenario_type')
+            scene_nwo = utils.get_scene_props()
+            col.prop(scene_nwo, 'scenario_type')
+            col.prop(scene_nwo, 'scenario_auto_bsp_by_origin')
             
         elif self.asset_type == 'animation':
             col.prop(self, 'animation_type')
