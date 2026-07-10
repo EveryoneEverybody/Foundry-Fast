@@ -57,6 +57,8 @@ BLEND_SCREEN_CONNECTION_DELAUNAY_TRIANGLE = 1
 BLEND_SCREEN_CONNECTION_SAMPLE_SPHERE_TRIANGLE = 2
 BLEND_SCREEN_HEADER_SIZE = 12
 POSE_OVERLAY_DEBUG_FORCE_AIM_TURN_WRAP = False
+DEBUG_PRINT_BASE_ANIMATION_CANDIDATES = False
+DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT = 8
 
 RESOURCE_SECTION_ORDER = (
     "static_node_flags",
@@ -2836,11 +2838,55 @@ class AnimationTag(Tag):
 
         return matches
 
-    def _get_base_animation_candidates(self, graph: dict, name: str, animation_type: AnimationType = AnimationType.NONE):
-        base_name = utils.AnimationName(name)
-        if not base_name.valid or base_name.type != utils.AnimationStateType.ACTION:
-            return []
-        scope = (base_name.mode, base_name.weapon_class, base_name.weapon_type, base_name.set)
+    def _animation_identity_key(self, animation):
+        index = getattr(animation, "index", None)
+        return ("index", index) if index is not None else ("object", id(animation))
+
+    def _graph_animation_paths(self, graph: dict, target_animation: Animation) -> list[str]:
+        paths: list[str] = []
+        target_key = self._animation_identity_key(target_animation)
+
+        def add_path(path_tokens, animation):
+            if animation is not None and self._animation_identity_key(animation) == target_key:
+                paths.append(":".join(path_tokens))
+
+        def walk(path_tokens, node):
+            if not isinstance(node, dict):
+                return
+
+            for state, animation in node.get("actions", {}).items():
+                add_path(path_tokens + [state], animation)
+
+            for state, animation in node.get("overlay_animations", {}).items():
+                add_path(path_tokens + [state], animation)
+
+            for state, destinations in node.get("transitions", {}).items():
+                for destination, animation in destinations.items():
+                    add_path(path_tokens + [state, destination], animation)
+
+            for damage_state, direction_map in node.get("death_and_damage", {}).items():
+                for direction, region_map in direction_map.items():
+                    for region, animation in region_map.items():
+                        add_path(path_tokens + [damage_state, direction, region], animation)
+
+            for key, subnode in node.items():
+                if key in ("actions", "overlay_animations", "transitions", "death_and_damage"):
+                    continue
+                walk(path_tokens + [key], subnode)
+
+        walk([], graph)
+        return paths
+
+    def _base_animation_candidate_names(self, graph: dict, tag_animation: Animation) -> list[str]:
+        graph_paths = self._graph_animation_paths(graph, tag_animation)
+        if graph_paths:
+            return graph_paths
+
+        return [] if tag_animation.name.custom else [tag_animation.name.tag_name]
+
+    def _get_base_animation_candidates(self, graph: dict, names, animation_type: AnimationType = AnimationType.NONE):
+        if isinstance(names, str):
+            names = (names,)
 
         def branch_groups(level: dict, token: str, depth: int):
             nested_keys = [key for key, value in level.items() if isinstance(value, dict)]
@@ -2898,15 +2944,21 @@ class AnimationTag(Tag):
 
         candidates = []
         used_indices = set()
-        for state in self._base_state_candidates(base_name, animation_type):
-            results = walk_tree(graph, scope, state)
-            for result in results:
-                index = getattr(result, "index", None)
-                key = index if index is not None else id(result)
-                if key in used_indices:
-                    continue
-                used_indices.add(key)
-                candidates.append(result)
+        for name in names:
+            base_name = utils.AnimationName(name)
+            if not base_name.valid or base_name.custom:
+                continue
+
+            scope = (base_name.mode, base_name.weapon_class, base_name.weapon_type, base_name.set)
+            for state in self._base_state_candidates(base_name, animation_type):
+                results = walk_tree(graph, scope, state)
+                for result in results:
+                    index = getattr(result, "index", None)
+                    key = index if index is not None else id(result)
+                    if key in used_indices:
+                        continue
+                    used_indices.add(key)
+                    candidates.append(result)
 
         return candidates
 
@@ -2993,6 +3045,73 @@ class AnimationTag(Tag):
             animations.append(animation)
 
         return animations
+
+    def _debug_base_animation_candidate_label(self, animation) -> str:
+        if animation is None:
+            return "<none>"
+
+        index = getattr(animation, "index", None)
+        name = getattr(animation, "name", "")
+        if hasattr(name, "data_name"):
+            name = name.data_name
+        elif hasattr(name, "tag_name"):
+            name = name.tag_name
+        else:
+            name = str(name)
+
+        animation_type = getattr(animation, "animation_type", None)
+        if isinstance(animation_type, AnimationType):
+            type_name = animation_type.name.lower()
+        else:
+            try:
+                type_name = AnimationType(animation_type).name.lower()
+            except Exception:
+                type_name = str(animation_type)
+
+        composite_index = getattr(animation, "composite_index", -1)
+        composite = f", composite={composite_index}" if composite_index is not None and composite_index > -1 else ""
+        return f"{index}: {name} [{type_name}{composite}]"
+
+    def _debug_print_base_animation_candidates(
+        self,
+        tag_animation: Animation,
+        base_candidate_names,
+        base_candidates,
+        resolved_candidates: list[Animation],
+        skipped_reason: str = "",
+    ) -> None:
+        if not DEBUG_PRINT_BASE_ANIMATION_CANDIDATES:
+            return
+        if tag_animation.animation_type not in (AnimationType.OVERLAY, AnimationType.REPLACEMENT):
+            return
+
+        animation_type = tag_animation.animation_type.name.lower()
+        utils.print_step(f"Base animation candidates for {animation_type} [{tag_animation.name.data_name}]")
+        utils.print_info(
+            "graph paths: "
+            + (", ".join(base_candidate_names[:DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT]) if base_candidate_names else "<none>")
+        )
+        if skipped_reason:
+            utils.print_info(f"lookup skipped: {skipped_reason}")
+            return
+
+        for name in base_candidate_names[:DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT]:
+            base_name = utils.AnimationName(name)
+            attempted_states = self._base_state_candidates(base_name, tag_animation.animation_type) if base_name.valid else ()
+            utils.print_info(f"states tried for {name}: {', '.join(attempted_states) if attempted_states else '<none>'}")
+
+        def print_candidates(label: str, candidates) -> None:
+            if not candidates:
+                utils.print_info(f"{label}: <none>")
+                return
+
+            visible_count = min(len(candidates), DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT)
+            utils.print_info(f"{label} top {visible_count} of {len(candidates)}:")
+            for index, candidate in enumerate(candidates[:DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT], start=1):
+                utils.print_info(f"{index}. {self._debug_base_animation_candidate_label(candidate)}")
+
+        print_candidates("raw", base_candidates)
+        print_candidates("resolved", resolved_candidates)
 
     def _normalized_int16_quaternion_component(self, value) -> float:
         return max(-1.0, min(1.0, float(int(value)) / INT16_NORMALIZED_MAX))
@@ -3535,15 +3654,29 @@ class AnimationTag(Tag):
                     self._movement_data_from_second_frame(resource_data.movement_data, animation_data.frame_count),
                 )
         if tag_animation.animation_type in (AnimationType.OVERLAY, AnimationType.REPLACEMENT):
+            base_candidate_names = self._base_animation_candidate_names(graph, tag_animation)
+            base_candidates = []
             base_tag_animations = []
             use_rest_base = tag_animation.is_pose_overlay and tag_animation.name.state in POSE_OVERLAY_REST_BASE_STATES
-            if not use_rest_base and not tag_animation.name.custom:
+            skipped_base_candidate_reason = ""
+            if use_rest_base:
+                skipped_base_candidate_reason = "pose overlay uses rest base"
+            elif not base_candidate_names:
+                skipped_base_candidate_reason = "custom animation name not found in graph"
+            else:
                 base_candidates = self._get_base_animation_candidates(
                     graph,
-                    tag_animation.name.tag_name,
+                    base_candidate_names,
                     tag_animation.animation_type,
                 )
                 base_tag_animations = self._resolved_base_candidates(base_candidates, all_tag_animations)
+            self._debug_print_base_animation_candidates(
+                tag_animation,
+                base_candidate_names,
+                base_candidates,
+                base_tag_animations,
+                skipped_base_candidate_reason,
+            )
 
             object_space_parent_targets = self._object_space_parent_transform_targets(tag_animation)
             if base_tag_animations:
