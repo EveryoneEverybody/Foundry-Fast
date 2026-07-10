@@ -286,8 +286,9 @@ class Actor:
                         if not cinematic_graph.exists():
                             return f"Actor {self.name} has no cinematic animation graph"
                         with AnimationTag(path=cinematic_graph) as cin_graph:
-                            cin_graph.block_skeleton_nodes.CopyEntireTagBlock()
-                            graph.block_skeleton_nodes.PasteReplaceEntireBlock()
+                            graph.block_skeleton_nodes.Deserialize(cin_graph.block_skeleton_nodes.Serialize())
+                            # cin_graph.block_skeleton_nodes.CopyEntireTagBlock()
+                            # graph.block_skeleton_nodes.PasteReplaceEntireBlock()
                             graph.tag_has_changes = True
                         
                         model.reference_animation.Path = graph.tag_path
@@ -326,9 +327,10 @@ class Actor:
                     scenery_object.SelectField("material effects").Path = obj_object.SelectField("material effects").Path
                     scenery_object.SelectField("simulation_interpolation").Path = obj_object.SelectField("material effects").Path
                     # Copy tag blocks
-                    obj_object.SelectField("functions").CopyEntireTagBlock()
                     funcs = scenery_object.SelectField("functions")
-                    funcs.PasteReplaceEntireBlock()
+                    funcs.Deserialize(obj_object.SelectField("functions").Serialize())
+                    # obj_object.SelectField("functions").CopyEntireTagBlock()
+                    # funcs.PasteReplaceEntireBlock()
                     # set all import names to zero so functions are script controlled
                     found_ones = False
                     found_tens = False
@@ -351,18 +353,24 @@ class Actor:
                             e.SelectField("import name").SetStringData("zero")
                             e.SelectField("export name").SetStringData(AMMO_FUNCTIONS[1])
                 
-                    obj_object.SelectField("attachments").CopyEntireTagBlock()
-                    scenery_object.SelectField("attachments").PasteReplaceEntireBlock()
-                    obj_object.SelectField("hull surfaces").CopyEntireTagBlock()
-                    scenery_object.SelectField("hull surfaces").PasteReplaceEntireBlock()
-                    obj_object.SelectField("jetwash").CopyEntireTagBlock()
-                    scenery_object.SelectField("jetwash").PasteReplaceEntireBlock()
-                    obj_object.SelectField("widgets").CopyEntireTagBlock()
-                    scenery_object.SelectField("widgets").PasteReplaceEntireBlock()
-                    obj_object.SelectField("change colors").CopyEntireTagBlock()
-                    scenery_object.SelectField("change colors").PasteReplaceEntireBlock()
-                    obj_object.SelectField("spawn effects").CopyEntireTagBlock()
-                    scenery_object.SelectField("spawn effects").PasteReplaceEntireBlock()
+                    scenery_object.SelectField("attachments").Deserialize(obj_object.SelectField("attachments").Serialize())
+                    # obj_object.SelectField("attachments").CopyEntireTagBlock()
+                    # scenery_object.SelectField("attachments").PasteReplaceEntireBlock()
+                    scenery_object.SelectField("hull surfaces").Deserialize(obj_object.SelectField("hull surfaces").Serialize())
+                    # obj_object.SelectField("hull surfaces").CopyEntireTagBlock()
+                    # scenery_object.SelectField("hull surfaces").PasteReplaceEntireBlock()
+                    scenery_object.SelectField("jetwash").Deserialize(obj_object.SelectField("jetwash").Serialize())
+                    # obj_object.SelectField("jetwash").CopyEntireTagBlock()
+                    # scenery_object.SelectField("jetwash").PasteReplaceEntireBlock()
+                    scenery_object.SelectField("widgets").Deserialize(obj_object.SelectField("widgets").Serialize())
+                    # obj_object.SelectField("widgets").CopyEntireTagBlock()
+                    # scenery_object.SelectField("widgets").PasteReplaceEntireBlock()
+                    scenery_object.SelectField("change colors").Deserialize(obj_object.SelectField("change colors").Serialize())
+                    # obj_object.SelectField("change colors").CopyEntireTagBlock()
+                    # scenery_object.SelectField("change colors").PasteReplaceEntireBlock()
+                    scenery_object.SelectField("spawn effects").Deserialize(obj_object.SelectField("spawn effects").Serialize())
+                    # obj_object.SelectField("spawn effects").CopyEntireTagBlock()
+                    # scenery_object.SelectField("spawn effects").PasteReplaceEntireBlock()
                     
                     scenery.tag_has_changes = True
                             

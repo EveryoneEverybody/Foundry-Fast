@@ -2915,8 +2915,9 @@ class ExportScene:
                                 
                                 scenario_skies = scenario.tag.SelectField("Block:skies")
                                 if scenario_skies.Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:skies").CopyEntireTagBlock()
-                                    scenario_skies.PasteReplaceEntireBlock()
+                                    scenario_skies.Deserialize(template_scenario.tag.SelectField("Block:skies").Serialize())
+                                    # template_scenario.tag.SelectField("Block:skies").CopyEntireTagBlock()
+                                    # scenario_skies.PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                     
                                     template_object_names = template_scenario.tag.SelectField("Block:object names")
@@ -2932,164 +2933,196 @@ class ExportScene:
                                             scenario_skies.Elements[e.ElementIndex].SelectField("name").Value = -1
                                 
                                 if scenario.tag.SelectField("Block:scenery palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:scenery palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:scenery palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:scenery palette").Deserialize(template_scenario.tag.SelectField("Block:scenery palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:scenery palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:scenery palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:biped palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:biped palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:biped palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:biped palette").Deserialize(template_scenario.tag.SelectField("Block:biped palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:biped palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:biped palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:vehicle palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:vehicle palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:vehicle palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:vehicle palette").Deserialize(template_scenario.tag.SelectField("Block:vehicle palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:vehicle palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:vehicle palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:equipment palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:equipment palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:equipment palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:equipment palette").Deserialize(template_scenario.tag.SelectField("Block:equipment palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:equipment palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:equipment palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:weapon palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:weapon palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:weapon palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:weapon palette").Deserialize(template_scenario.tag.SelectField("Block:weapon palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:weapon palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:weapon palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:machine palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:machine palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:machine palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:machine palette").Deserialize(template_scenario.tag.SelectField("Block:machine palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:machine palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:machine palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:terminal palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:terminal palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:terminal palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:terminal palette").Deserialize(template_scenario.tag.SelectField("Block:terminal palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:terminal palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:terminal palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:control palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:control palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:control palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:control palette").Deserialize(template_scenario.tag.SelectField("Block:control palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:control palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:control palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if self.corinth:
                                     if scenario.tag.SelectField("Block:dispenser palette").Elements.Count <= 0:
-                                        template_scenario.tag.SelectField("Block:dispenser palette").CopyEntireTagBlock()
-                                        scenario.tag.SelectField("Block:dispenser palette").PasteReplaceEntireBlock()
+                                        scenario.tag.SelectField("Block:dispenser palette").Deserialize(template_scenario.tag.SelectField("Block:dispenser palette").Serialize())
+                                        # template_scenario.tag.SelectField("Block:dispenser palette").CopyEntireTagBlock()
+                                        # scenario.tag.SelectField("Block:dispenser palette").PasteReplaceEntireBlock()
                                         scenario.tag_has_changes = True
                                     
                                     if scenario.tag.SelectField("Block:spawner palette").Elements.Count <= 0:
-                                        template_scenario.tag.SelectField("Block:spawner palette").CopyEntireTagBlock()
-                                        scenario.tag.SelectField("Block:spawner palette").PasteReplaceEntireBlock()
+                                        scenario.tag.SelectField("Block:spawner palette").Deserialize(template_scenario.tag.SelectField("Block:spawner palette").Serialize())
+                                        # template_scenario.tag.SelectField("Block:spawner palette").CopyEntireTagBlock()
+                                        # scenario.tag.SelectField("Block:spawner palette").PasteReplaceEntireBlock()
                                         scenario.tag_has_changes = True
                                     
                                     if scenario.tag.SelectField("Block:bink palette").Elements.Count <= 0:
-                                        template_scenario.tag.SelectField("Block:bink palette").CopyEntireTagBlock()
-                                        scenario.tag.SelectField("Block:bink palette").PasteReplaceEntireBlock()
+                                        scenario.tag.SelectField("Block:bink palette").Deserialize(template_scenario.tag.SelectField("Block:bink palette").Serialize())
+                                        # template_scenario.tag.SelectField("Block:bink palette").CopyEntireTagBlock()
+                                        # scenario.tag.SelectField("Block:bink palette").PasteReplaceEntireBlock()
                                         scenario.tag_has_changes = True
                                         
                                 if scenario.tag.SelectField("Block:sound scenery palette").Elements.Count <= 0:    
-                                    template_scenario.tag.SelectField("Block:sound scenery palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:sound scenery palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:sound scenery palette").Deserialize(template_scenario.tag.SelectField("Block:sound scenery palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:sound scenery palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:sound scenery palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:giant palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:giant palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:giant palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:giant palette").Deserialize(template_scenario.tag.SelectField("Block:giant palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:giant palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:giant palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:effect scenery palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:effect scenery palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:effect scenery palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:effect scenery palette").Deserialize(template_scenario.tag.SelectField("Block:effect scenery palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:effect scenery palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:effect scenery palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:map variant palettes").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:map variant palettes").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:map variant palettes").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:map variant palettes").Deserialize(template_scenario.tag.SelectField("Block:map variant palettes").Serialize())
+                                    # template_scenario.tag.SelectField("Block:map variant palettes").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:map variant palettes").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:map variant palettes compatibility").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:map variant palettes compatibility").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:map variant palettes compatibility").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:map variant palettes compatibility").Deserialize(template_scenario.tag.SelectField("Block:map variant palettes compatibility").Serialize())
+                                    # template_scenario.tag.SelectField("Block:map variant palettes compatibility").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:map variant palettes compatibility").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:Playtest req palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:Playtest req palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:Playtest req palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:Playtest req palette").Deserialize(template_scenario.tag.SelectField("Block:Playtest req palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:Playtest req palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:Playtest req palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:decal palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:decal palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:decal palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:decal palette").Deserialize(template_scenario.tag.SelectField("Block:decal palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:decal palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:decal palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:detail object collection palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:detail object collection palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:detail object collection palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:detail object collection palette").Deserialize(template_scenario.tag.SelectField("Block:detail object collection palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:detail object collection palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:detail object collection palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:style pallette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:style pallette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:style pallette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:style pallette").Deserialize(template_scenario.tag.SelectField("Block:style pallette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:style pallette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:style pallette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:character palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:character palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:character palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:character palette").Deserialize(template_scenario.tag.SelectField("Block:character palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:character palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:character palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:character palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:character palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:character palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:character palette").Deserialize(template_scenario.tag.SelectField("Block:character palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:character palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:character palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:acoustics palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:acoustics palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:acoustics palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:acoustics palette").Deserialize(template_scenario.tag.SelectField("Block:acoustics palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:acoustics palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:acoustics palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:atmosphere").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:atmosphere").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:atmosphere").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:atmosphere").Deserialize(template_scenario.tag.SelectField("Block:atmosphere").Serialize())
+                                    # template_scenario.tag.SelectField("Block:atmosphere").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:atmosphere").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:camera fx palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:camera fx palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:camera fx palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:camera fx palette").Deserialize(template_scenario.tag.SelectField("Block:camera fx palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:camera fx palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:camera fx palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:weather palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:weather palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:weather palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:weather palette").Deserialize(template_scenario.tag.SelectField("Block:weather palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:weather palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:weather palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:crate palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:crate palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:crate palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:crate palette").Deserialize(template_scenario.tag.SelectField("Block:crate palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:crate palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:crate palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:flock palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:flock palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:flock palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:flock palette").Deserialize(template_scenario.tag.SelectField("Block:flock palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:flock palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:flock palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:creature palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:creature palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:creature palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:creature palette").Deserialize(template_scenario.tag.SelectField("Block:creature palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:creature palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:creature palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:big battle creature palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:big battle creature palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:big battle creature palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:big battle creature palette").Deserialize(template_scenario.tag.SelectField("Block:big battle creature palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:big battle creature palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:big battle creature palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:neuticle palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:neuticle palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:neuticle palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:neuticle palette").Deserialize(template_scenario.tag.SelectField("Block:neuticle palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:neuticle palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:neuticle palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 if scenario.tag.SelectField("Block:cinematic lighting palette").Elements.Count <= 0:
-                                    template_scenario.tag.SelectField("Block:cinematic lighting palette").CopyEntireTagBlock()
-                                    scenario.tag.SelectField("Block:cinematic lighting palette").PasteReplaceEntireBlock()
+                                    scenario.tag.SelectField("Block:cinematic lighting palette").Deserialize(template_scenario.tag.SelectField("Block:cinematic lighting palette").Serialize())
+                                    # template_scenario.tag.SelectField("Block:cinematic lighting palette").CopyEntireTagBlock()
+                                    # scenario.tag.SelectField("Block:cinematic lighting palette").PasteReplaceEntireBlock()
                                     scenario.tag_has_changes = True
                                 
                                 # Decorators

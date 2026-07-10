@@ -713,10 +713,12 @@ class ScenarioTag(Tag):
 
         with Tag(path=cinematic_resource.Path.RelativePathWithExtension) as resource:
             try:
-                self.tag.SelectField("Block:cinematics").CopyEntireTagBlock()
-                resource.tag.SelectField("Block:cinematics").PasteReplaceEntireBlock()
-                self.tag.SelectField("Block:cutscene flags").CopyEntireTagBlock()
-                resource.tag.SelectField("Block:flags").PasteReplaceEntireBlock()
+                resource.tag.SelectField("Block:cinematics").Deserialize(self.tag.SelectField("Block:cinematics").Serialize())
+                # self.tag.SelectField("Block:cinematics").CopyEntireTagBlock()
+                # resource.tag.SelectField("Block:cinematics").PasteReplaceEntireBlock()
+                resource.tag.SelectField("Block:flags").Deserialize(self.tag.SelectField("Block:cutscene flags").Serialize())
+                # self.tag.SelectField("Block:cutscene flags").CopyEntireTagBlock()
+                # resource.tag.SelectField("Block:flags").PasteReplaceEntireBlock()
             finally:
                 resource.tag_has_changes = True
             
