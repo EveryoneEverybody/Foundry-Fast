@@ -3534,7 +3534,7 @@ class AnimationTag(Tag):
                     animation_data,
                     self._movement_data_from_second_frame(resource_data.movement_data, animation_data.frame_count),
                 )
-        if tag_animation.animation_type in (2, 3):
+        if tag_animation.animation_type in (AnimationType.OVERLAY, AnimationType.REPLACEMENT):
             base_tag_animations = []
             use_rest_base = tag_animation.is_pose_overlay and tag_animation.name.state in POSE_OVERLAY_REST_BASE_STATES
             if not use_rest_base and not tag_animation.name.custom:
@@ -3552,12 +3552,12 @@ class AnimationTag(Tag):
             else:
                 base_frame = default_frame_channels(defaults)
 
-            if tag_animation.animation_type == 2:
+            if tag_animation.animation_type == AnimationType.OVERLAY:
                 animation_data = compose_overlay_animation(animation_data, base_frame, resource_data)
             else:
                 animation_data = compose_replacement_animation(animation_data, base_frame)
 
-            if object_space_parent_targets:
+            if object_space_parent_targets and tag_animation.animation_type == AnimationType.OVERLAY:
                 self._apply_object_space_base_corrections(tag_animation, animation_data, base_frame, defaults)
 
             if tag_animation.is_pose_overlay:
