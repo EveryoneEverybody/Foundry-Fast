@@ -8,7 +8,7 @@ import random
 import uuid
 import bmesh
 import bpy
-from mathutils import Matrix, Vector, bvhtree
+from mathutils import Matrix, Vector
 import numpy as np
 import time
 
@@ -51,6 +51,7 @@ from .build_sidecar import Sidecar, get_cinematic_scenes
 from .export_info import AdditionalCompression, BoundarySurfaceType, ExportInfo, FaceDrawDistance, FaceMode, FaceSides, FaceType, LightmapType, MeshObbVolumeType, PoopCollisionType, PoopInstanceImposterPolicy, PoopLighting, PoopInstancePathfindingPolicy, MeshTessellationDensity, MeshType, ObjectType
 from ..props.mesh import NWO_MeshPropertiesGroup
 from ..props.object import NWO_ObjectPropertiesGroup
+from ..auto_bsp import AutoBSPAssigner
 from .virtual_geometry import AnimatedBone, VectorEvent, VirtualAnimation, VirtualNode, VirtualScene
 from ..granny import Granny
 from .. import utils
@@ -66,22 +67,6 @@ class ObjectCopy(Enum):
     INSTANCE = 2
     WATER_PHYSICS = 3
     PHYSICS = 4
-
-AUTO_BSP_MANUAL_MESH_TYPES = {
-    "_connected_geometry_mesh_type_structure",
-    "_connected_geometry_mesh_type_portal",
-    "_connected_geometry_mesh_type_planar_fog_volume",
-    "_connected_geometry_mesh_type_lightmap_region",
-    "_connected_geometry_mesh_type_water_surface",
-    "_connected_geometry_mesh_type_water_physics_volume",
-    "_connected_geometry_mesh_type_boundary_surface",
-    "_connected_geometry_mesh_type_seam",
-}
-
-AUTO_BSP_SOURCE_MESH_TYPES = {
-    "_connected_geometry_mesh_type_structure",
-    "_connected_geometry_mesh_type_seam",
-}
 
 class ExportTagType(Enum):
     RENDER = 0
@@ -345,8 +330,7 @@ class ExportScene:
         self.render_regions_perms = defaultdict(set) # region is key, perm is set
         self.collision_physics_regions_perms = defaultdict(set)
         self.collection_view_layers_to_restore = set()
-        self.auto_bsp_bvhs = {}
-        self.auto_bsp_structure_regions = set()
+        self.auto_bsp_assigner = None
         
     def ready_scene(self, collection_view_layer=None):
         # Annoying but need to loop all instancers and set them to not instance if they are intended as markers
@@ -469,9 +453,11 @@ class ExportScene:
             
             nwo.collection_region = ""
             nwo.collection_permutation = ""
+            proxy.collection_region = ""
             if has_export_collection:
                 if collection.region:
                     nwo.collection_region = collection.region
+                    proxy.collection_region = collection.region
                 if collection.permutation:
                     nwo.collection_permutation = collection.permutation
             
@@ -500,148 +486,6 @@ class ExportScene:
         
         self.virtual_scene = VirtualScene(self.asset_type, self.depsgraph, self.corinth, self.tags_dir, self.granny, self.export_settings, utils.time_step(), self.scene_settings.default_animation_compression, self.rotation_correction, self.scene_settings.maintain_marker_axis, self.granny_textures, utils.get_project(self.scene_settings.scene_project), self.to_halo_scale, self.unit_factor, self.atten_scalar, self.context, self.halo_transform_scale, self.scene_settings)
         self.has_no_virtual_scene = False
-
-    def _scenario_auto_bsp_enabled(self) -> bool:
-        return (
-            self.asset_type == AssetType.SCENARIO
-            and self.scene_settings.scenario_auto_bsp_by_origin
-        )
-
-    def _mesh_type_for_bsp_assignment(self, ob: utils.ExportObject) -> str:
-        if ob.type not in VALID_MESHES or ob.data is None:
-            return ""
-
-        return ob.data.nwo.mesh_type or "_connected_geometry_mesh_type_default"
-
-    def _manual_region_for_bsp_assignment(self, ob: utils.ExportObject) -> str:
-        region = ob.nwo.collection_region or ob.nwo.region_name or self.default_region
-        if region not in self.regions_set:
-            return self.default_region
-
-        return region
-
-    def _auto_bsp_source_regions(self, ob: utils.ExportObject) -> tuple[str, ...]:
-        mesh_type = self._mesh_type_for_bsp_assignment(ob)
-        if mesh_type not in AUTO_BSP_SOURCE_MESH_TYPES:
-            return tuple()
-
-        region = self._manual_region_for_bsp_assignment(ob)
-        if region.lower() == "shared":
-            return tuple()
-
-        regions = {region}
-        if mesh_type == "_connected_geometry_mesh_type_seam" and not ob.nwo.seam_back_manual:
-            back_region = ob.nwo.seam_back
-            if back_region in self.regions_set and back_region.lower() != "shared":
-                regions.add(back_region)
-
-        return tuple(regions)
-
-    def _auto_bsp_object_adds_structure(self, ob: utils.ExportObject) -> bool:
-        if self._mesh_type_for_bsp_assignment(ob) != "_connected_geometry_mesh_type_structure":
-            return False
-
-        seam_material = ob.data.materials.get("+seam")
-        return seam_material is None or len(ob.data.materials) > 1
-
-    def _build_auto_bsp_structure_regions(self) -> set[str]:
-        regions = set()
-        for ob in self.export_objects:
-            if not self._auto_bsp_object_adds_structure(ob):
-                continue
-
-            region = self._manual_region_for_bsp_assignment(ob)
-            if region.lower() != "shared":
-                regions.add(region)
-
-        return regions
-
-    def _export_object_bvh(self, ob: utils.ExportObject):
-        eval_ob = ob.eval_ob
-        if eval_ob is None and ob.ob is not None:
-            eval_ob = ob.ob.evaluated_get(self.depsgraph)
-
-        mesh = None
-        evaluated = eval_ob is not None
-        mesh_from_eval = False
-        try:
-            if evaluated:
-                mesh = eval_ob.to_mesh(preserve_all_data_layers=True, depsgraph=self.depsgraph)
-                mesh_from_eval = True
-            else:
-                mesh = ob.data
-
-            if mesh is None or not mesh.polygons:
-                return None
-
-            mesh.calc_loop_triangles()
-            if not mesh.loop_triangles:
-                return None
-
-            matrix_world = ob.matrix_world or Matrix.Identity(4)
-            verts = [matrix_world @ vertex.co for vertex in mesh.vertices]
-            flip_winding = matrix_world.is_negative
-            if ob.invert_topology:
-                flip_winding = not flip_winding
-
-            tris = []
-            for tri in mesh.loop_triangles:
-                indices = tuple(tri.vertices)
-                if flip_winding:
-                    indices = indices[0], indices[2], indices[1]
-                tris.append(indices)
-
-            if not tris:
-                return None
-
-            return bvhtree.BVHTree.FromPolygons(verts, tris)
-        finally:
-            if mesh_from_eval:
-                eval_ob.to_mesh_clear()
-
-    def _build_auto_bsp_bvhs(self) -> dict[str, list]:
-        bvhs_by_region = defaultdict(list)
-        for ob in self.export_objects:
-            regions = self._auto_bsp_source_regions(ob)
-            if not regions:
-                continue
-
-            bvh = self._export_object_bvh(ob)
-            if bvh is None:
-                continue
-
-            for region in regions:
-                bvhs_by_region[region].append(bvh)
-
-        return dict(bvhs_by_region)
-
-    def _uses_auto_bsp_assignment(self, ob: utils.ExportObject, object_type: ObjectType) -> bool:
-        if not self._scenario_auto_bsp_enabled():
-            return False
-
-        if object_type == ObjectType.mesh:
-            return self._mesh_type_for_bsp_assignment(ob) not in AUTO_BSP_MANUAL_MESH_TYPES
-
-        return self.supports_bsp and object_type != ObjectType.none
-
-    def _auto_bsp_region_for_object(self, ob: utils.ExportObject) -> str | None:
-        point = (ob.matrix_world or Matrix.Identity(4)).to_translation()
-        for region in self.regions:
-            if region.lower() == "shared":
-                continue
-
-            bvhs = self.auto_bsp_bvhs.get(region)
-            if bvhs and utils.test_point_bvh(bvhs, point):
-                return region
-
-        if self.export_settings.export_structure and self.default_region not in self.auto_bsp_structure_regions:
-            return self.default_region
-
-        self.warnings.append(
-            f"Object [{ob.name}] is not inside any BSP and will not be exported. "
-            "Auto BSP by Object Origin only falls back to the default BSP when automatic structure is being generated"
-        )
-        return None
 
     def create_instance_proxies(self, ob: bpy.types.Object, ob_halo_data: dict, region: str, permutation: str):
         self.processed_poop_meshes.add(ob.data)
@@ -758,12 +602,15 @@ class ExportScene:
         object_parent_dict = {}
         support_armatures = {ob for ob in self.support_armatures if ob is not None}
         self.objects_with_children = {ob.parent for ob in bpy.data.objects if ob.parent}
-        if self._scenario_auto_bsp_enabled():
-            self.auto_bsp_structure_regions = self._build_auto_bsp_structure_regions()
-            self.auto_bsp_bvhs = self._build_auto_bsp_bvhs()
-        else:
-            self.auto_bsp_structure_regions = set()
-            self.auto_bsp_bvhs = {}
+        self.auto_bsp_assigner = AutoBSPAssigner(
+            self.context,
+            self.scene_settings,
+            self.export_settings.export_structure,
+            self.collection_map,
+            self.export_objects,
+            self.depsgraph,
+            self.warnings,
+        )
 
         def set_parent(obj: utils.ExportObject, parent, has_parent: bool, is_armature: bool):
             # Write object as if it has no parent if it is a poop. This solves an issue where instancing fails in Reach
@@ -1082,15 +929,15 @@ class ExportScene:
                 tmp_perm = ob.nwo.permutation_name
 
         if object_type == ObjectType.light:
-            if self._uses_auto_bsp_assignment(ob, object_type):
-                tmp_region = self._auto_bsp_region_for_object(ob)
+            if self.auto_bsp_assigner.uses_auto_assignment(ob):
+                tmp_region = self.auto_bsp_assigner.region_for_object(ob)
                 if tmp_region is None:
                     return
             self.lights[ob] = tmp_region
             return
 
-        if self._uses_auto_bsp_assignment(ob, object_type):
-            tmp_region = self._auto_bsp_region_for_object(ob)
+        if self.auto_bsp_assigner.uses_auto_assignment(ob):
+            tmp_region = self.auto_bsp_assigner.region_for_object(ob)
             if tmp_region is None:
                 return
 

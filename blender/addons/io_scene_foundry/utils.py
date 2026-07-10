@@ -5925,6 +5925,7 @@ class ExportObject:
         self.pca_animations = []
         self.modifiers = tuple()
         self.transform: Matrix = None
+        self.collection_region = ""
         
     def copy(self):
         return copy.copy(self)

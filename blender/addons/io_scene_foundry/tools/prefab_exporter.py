@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 import bpy
 from ..managed_blam.scenario_structure_bsp import ScenarioStructureBspTag
+from ..auto_bsp import AutoBSPAssigner
 from .. import utils
 
 class BlamPrefab:
@@ -55,9 +56,18 @@ def gather_prefabs(context):
         return nwo.marker_type == '_connected_geometry_marker_type_game_instance' and nwo.marker_game_instance_tag_name.lower().endswith(".prefab")
     
     collection_map = utils.create_parent_mapping(context)
+    scene_settings = utils.get_scene_props()
+    export_settings = utils.get_export_props()
     proxies = {}
     with utils.DepsgraphRead():
         depsgraph = context.evaluated_depsgraph_get()
+        auto_bsp_assigner = AutoBSPAssigner(
+            context,
+            scene_settings,
+            export_settings.export_structure,
+            collection_map,
+            depsgraph=depsgraph,
+        )
 
         for inst in depsgraph.object_instances:
             obj = inst.object
@@ -84,13 +94,22 @@ def gather_prefabs(context):
 
             proxy = utils.ExportObject()
             proxy.name = original.name
+            proxy.ob = original
             proxy.type = original.type
             proxy.nwo = nwo
             proxy.matrix_world = inst.matrix_world.copy()
             if has_export_collection and collection.region:
-                proxies[proxy] = collection.region
+                proxy.collection_region = collection.region
+                region = collection.region
             else:
-                proxies[proxy] = nwo.region_name
+                region = nwo.region_name
+
+            if auto_bsp_assigner.uses_auto_assignment(proxy):
+                region = auto_bsp_assigner.region_for_object(proxy)
+                if region is None:
+                    continue
+
+            proxies[proxy] = region
 
     print(len(proxies), "prefabs found")
     print("--- Gathered prefabs in: {:.3f}s".format(time.perf_counter() - start))

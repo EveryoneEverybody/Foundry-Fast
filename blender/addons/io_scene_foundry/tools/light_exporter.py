@@ -9,6 +9,7 @@ import bpy
 from ..managed_blam.model import ModelTag
 from ..managed_blam.scenario_structure_lighting_info import ScenarioStructureLightingInfoTag
 from ..constants import VALID_MESHES, WU_SCALAR
+from ..auto_bsp import AutoBSPAssigner
 from .. import utils
 import traceback
 
@@ -178,9 +179,18 @@ def gather_lights(context, collection_map):
     start = time.perf_counter()
     
     collection_map = utils.create_parent_mapping(context)
+    scene_settings = utils.get_scene_props()
+    export_settings = utils.get_export_props()
     proxies = {}
     with utils.DepsgraphRead():
         depsgraph = context.evaluated_depsgraph_get()
+        auto_bsp_assigner = AutoBSPAssigner(
+            context,
+            scene_settings,
+            export_settings.export_structure,
+            collection_map,
+            depsgraph=depsgraph,
+        )
 
         for inst in depsgraph.object_instances:
             obj = inst.object
@@ -211,14 +221,23 @@ def gather_lights(context, collection_map):
             
             proxy = utils.ExportObject()
             proxy.name = original.name
+            proxy.ob = original
             proxy.data = original.data
             proxy.type = 'LIGHT'
             proxy.nwo = nwo
             proxy.matrix_world = inst.matrix_world.copy()
             if has_export_collection and collection.region:
-                proxies[proxy] = collection.region
+                proxy.collection_region = collection.region
+                region = collection.region
             else:
-                proxies[proxy] = nwo.region_name
+                region = nwo.region_name
+
+            if auto_bsp_assigner.uses_auto_assignment(proxy):
+                region = auto_bsp_assigner.region_for_object(proxy)
+                if region is None:
+                    continue
+
+            proxies[proxy] = region
 
     print(len(proxies), "lights found")
     print("--- Gathered lights in: {:.3f}s".format(time.perf_counter() - start))
