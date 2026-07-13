@@ -43,6 +43,30 @@ class NWO_OT_SelectChildObjects(bpy.types.Operator):
         self.report({'INFO'}, f"Selected {len(children)} child objects")
         return {"FINISHED"}
 
+class NWO_OT_SelectParentArmature(bpy.types.Operator):
+    bl_idname = "nwo.select_parent_armature"
+    bl_label = "Select Parent Armature"
+    bl_description = "Selects the first armature found in this object's parent chain"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.object
+        return ob is not None and ob.type != 'ARMATURE' and utils.ultimate_armature_parent(ob) is not None
+
+    def execute(self, context):
+        armature = utils.ultimate_armature_parent(context.object)
+        if armature is None or armature == context.object:
+            self.report({'WARNING'}, "No parent armature found")
+            return {"CANCELLED"}
+
+        utils.set_object_mode(context)
+        utils.deselect_all_objects()
+        utils.set_active_object(armature)
+        armature.select_set(True)
+        self.report({'INFO'}, f"Selected parent armature: {armature.name}")
+        return {"FINISHED"}
+
 class NWO_OT_RemapChildDriversToArmature(bpy.types.Operator):
     bl_idname = "nwo.remap_child_drivers_to_armature"
     bl_label = "Remap Drivers"

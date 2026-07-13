@@ -72,6 +72,49 @@ class NWO_OT_CopyScenario(bpy.types.Operator):
             return {'CANCELLED'}
     
 
+class NWO_OT_ImportCinematicScenario(bpy.types.Operator):
+    bl_idname = "nwo.import_cinematic_scenario"
+    bl_label = "Import Cinematic Scenario"
+    bl_description = "Imports the cinematic scenario using the existing scenario importer options"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        scene_nwo = utils.get_scene_props()
+        if scene_nwo.asset_type != 'cinematic' or not scene_nwo.cinematic_scenario.strip():
+            return False
+
+        scenario_path = Path(utils.get_tags_path(), utils.relative_path(scene_nwo.cinematic_scenario))
+        return scenario_path.exists() and scenario_path.is_file() and utils.current_project_valid()
+
+    def invoke(self, context, event):
+        return self.execute(context)
+
+    def execute(self, context):
+        from ...tools import importer as importer_module
+
+        scene_nwo = utils.get_scene_props()
+        scenario_path = Path(utils.get_tags_path(), utils.relative_path(scene_nwo.cinematic_scenario))
+        if not scenario_path.exists() or not scenario_path.is_file():
+            self.report({'WARNING'}, f"Scenario does not exist: {scenario_path}")
+            return {'CANCELLED'}
+
+        with ScenarioTag(path=scenario_path) as scenario:
+            zone_sets = scenario.get_zone_sets_dict()
+
+        importer_module.zone_set_items = zone_sets
+        zone_set = scene_nwo.cinematic_zone_set.strip()
+        if not zone_set or zone_set not in zone_sets:
+            zone_set = "all_zone_sets"
+
+        return bpy.ops.nwo.import_from_drop(
+            'INVOKE_DEFAULT',
+            filepath=str(scenario_path),
+            tag_zone_set=zone_set,
+            setup_as_asset=False,
+            force_no_setup_as_asset=True,
+        )
+
 class NWO_OT_SceneSwitch(bpy.types.Operator):
     bl_idname = "nwo.scene_switch"
     bl_label = "Switch Cinematic Scene"

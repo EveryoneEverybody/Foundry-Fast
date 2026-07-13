@@ -635,6 +635,12 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
         description="Builds an FK & IK control rig for imported models",
         default=False,
     )
+
+    rename_armature: bpy.props.BoolProperty(
+        name="Rename Armature",
+        description="Rename the armature to the object tag name and variant",
+        default=True,
+    )
     
     import_variant_children: bpy.props.BoolProperty(
         name="Import Variant Child Objects",
@@ -691,6 +697,7 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
         layout = self.layout
         layout.use_property_split = True
         layout.label(text=f"Updating: {Path(context.object.nwo.cinematic_object).name}")
+        layout.prop(self, 'rename_armature')
         layout.prop(self, 'build_control_rig')
         if self._tag_is_biped(context):
             layout.prop(self, "import_biped_weapon")
@@ -730,6 +737,30 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
         for bone in list(armature.data.edit_bones):
             armature.data.edit_bones.remove(bone)
         bpy.ops.object.mode_set(mode='OBJECT')
+
+    def _armature_name_from_tag(self, tag_path: str, variant: str) -> str:
+        object_name = Path(utils.relative_path(tag_path)).with_suffix("").name
+        variant = variant.strip()
+        if variant:
+            return f"{object_name} [{variant}]"
+
+        return object_name
+
+    def _restore_armature_collections(self, context: bpy.types.Context, armature: bpy.types.Object, original_collections: tuple[bpy.types.Collection, ...]):
+        original_collections = tuple(collection for collection in original_collections if collection.name in bpy.data.collections)
+        original_collection_set = set(original_collections)
+
+        for collection in original_collections:
+            if armature.name not in collection.objects:
+                collection.objects.link(armature)
+
+        if original_collection_set:
+            for collection in tuple(armature.users_collection):
+                if collection not in original_collection_set:
+                    collection.objects.unlink(armature)
+
+        if not armature.users_collection:
+            context.scene.collection.objects.link(armature)
 
     def execute(self, context: bpy.types.Context):
         from ...tools import importer as importer_module
@@ -776,6 +807,7 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
                 variant = variant_names[variant]
 
         armature_name = armature.name
+        armature_collections = tuple(armature.users_collection)
         armature_pose_position = armature.data.pose_position
         transformed_for_import = False
         imported_objects = []
@@ -819,10 +851,14 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
                 op()
         finally:
             importer_module.deferred_ops = []
+            self._restore_armature_collections(context, armature, armature_collections)
 
         utils.set_object_mode(context)
         if armature.name in bpy.data.objects:
-            armature.name = armature_name
+            if self.rename_armature:
+                armature.name = self._armature_name_from_tag(tag_path_rel, importer.tag_variant or variant)
+            else:
+                armature.name = armature_name
             armature.data.pose_position = armature_pose_position
             nwo = armature.nwo
             nwo.cinematic_object = tag_path_rel

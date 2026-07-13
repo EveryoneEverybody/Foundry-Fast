@@ -569,6 +569,9 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
                 scenario_exists = scenario_path.exists() and scenario_path.is_absolute() and scenario_path.is_file()
                 col = box.column()
                 col.operator("nwo.copy_scenario", icon='COPY_ID')
+                row_import = col.row()
+                row_import.enabled = scenario_exists
+                row_import.operator("nwo.import_cinematic_scenario", icon='IMPORT')
                 col.separator()
                 row = col.row(align=True)
                 row.enabled = scenario_exists
@@ -2288,6 +2291,9 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
                 self.draw_expandable_box(box.box(), self.scene_nwo, "armature_pose_controls", ob=ob)
             
             return
+
+        if utils.ultimate_armature_parent(ob) is not None:
+            box.operator("nwo.select_parent_armature", icon='OUTLINER_OB_ARMATURE')
 
         row = box.row(align=True)
         row.scale_x = 0.5

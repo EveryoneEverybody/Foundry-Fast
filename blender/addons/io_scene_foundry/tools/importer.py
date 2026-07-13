@@ -334,7 +334,9 @@ def draw_scenario_import_sections(operator, layout, corinth, show_template=True,
     reimport_box = layout.box()
     reimport_box.label(text="Game Reimport")
     if show_setup_as_asset:
-        reimport_box.prop(operator, "setup_as_asset")
+        setup_as_asset_row = reimport_box.row()
+        setup_as_asset_row.enabled = not getattr(operator, "force_no_setup_as_asset", False)
+        setup_as_asset_row.prop(operator, "setup_as_asset")
     reimport_col = reimport_box.column(align=True)
     reimport_col.enabled = not operator.tag_bsp_render_only
     reimport_col.prop(operator, "tag_bsp_skip_structure_merge")
@@ -3450,6 +3452,7 @@ class NWOImporter:
                                             weapon_collection,
                                             is_game_object,
                                             make_armature_non_export=self.import_biped_weapon_non_export and self.scene_nwo.asset_type != 'cinematic',
+                                            export_attach_point=not (self.import_biped_weapon_non_export and self.scene_nwo.asset_type != 'cinematic'),
                                         ))
                                     self.context.view_layer.update()
                                     
@@ -3475,7 +3478,7 @@ class NWOImporter:
         else:
             return imported_objects, imported_animations
     
-    def import_child_object(self, child_object: ChildObject, parent_armature: bpy.types.Object, markers: dict[bpy.types.Object: str], child_collection, is_game_object, make_armature_non_export=True):
+    def import_child_object(self, child_object: ChildObject, parent_armature: bpy.types.Object, markers: dict[bpy.types.Object: str], child_collection, is_game_object, make_armature_non_export=True, export_attach_point=False):
         imported_objects = []
         armature = None
         if child_object.child_object is None:
@@ -3598,7 +3601,7 @@ class NWOImporter:
                         attach_point_matrix = attach_point.matrix_world.copy()
                         attach_point.parent = None
                         attach_point.matrix_world = attach_point_matrix
-                        attach_point.nwo.export_this = False
+                        attach_point.nwo.export_this = export_attach_point
                         child_collection.objects.link(attach_point)
                         imported_objects.append(attach_point)
                         arm_matrix = armature.matrix_world.copy()
@@ -5075,6 +5078,8 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         default=False,
         description="Updates the scene asset settings so that this object can be immediately reimported into the game"
     )
+
+    force_no_setup_as_asset: bpy.props.BoolProperty(options={"HIDDEN", "SKIP_SAVE"})
     
     def items_tag_zone_set(self, context):
         items = [("all_zone_sets", "All Zone Sets", "All scenario bsps will be imported")]
@@ -5331,6 +5336,9 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
     def execute(self, context):
         keywords = self.as_keywords()
         keywords.pop("import_template", None)
+        force_no_setup_as_asset = keywords.pop("force_no_setup_as_asset", False)
+        if force_no_setup_as_asset:
+            keywords["setup_as_asset"] = False
         keywords['files'] = [{'name': f.name} for f in self.files]
         bpy.ops.nwo.foundry_import(**keywords)
         return {'FINISHED'}
@@ -5338,7 +5346,7 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
     def invoke(self, context, event):
         scene_nwo = utils.get_scene_props()
         global checked_asset_once
-        if not self.setup_as_asset and not utils.valid_nwo_asset(context) and not checked_asset_once:
+        if not self.force_no_setup_as_asset and not self.setup_as_asset and not utils.valid_nwo_asset(context) and not checked_asset_once:
             checked_asset_once = True
             self.setup_as_asset = True
         self.mouse_x = event.mouse_region_x
@@ -5349,6 +5357,8 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         self.has_zone_sets = False
         self.import_type = Path(self.filepath).suffix[1:].lower()
         set_default_import_template(self)
+        if self.force_no_setup_as_asset:
+            self.setup_as_asset = False
         if scene_nwo.asset_type == "cinematic":
             self.tag_bsp_render_only = True
             self.tag_collision = False

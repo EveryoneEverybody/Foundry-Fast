@@ -599,7 +599,7 @@ class HaloRig:
 
         if any(not bone.use_deform for bone in self.rig_data.bones):
             halo_controlled.is_visible = False
-            halo_free.is_visible = False
+            halo_free.is_visible = True
             halo_helpers.is_visible = False
             halo_face.is_visible = False
             settings_collection.is_visible = False
