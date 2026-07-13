@@ -1642,28 +1642,61 @@ def setup_projects_list(skip_registry_check=False, report=None):
     return []
 
 def update_tables_from_objects(context):
-    regions_table = get_scene_props().regions_table
-    region_names = [e.name for e in regions_table]
-    permutations_table = get_scene_props().permutations_table
-    permutation_names = [e.name for e in permutations_table]
+    scene_nwo = get_scene_props()
+    regions_table = scene_nwo.regions_table
+    region_names = {e.name for e in regions_table}
+    permutations_table = scene_nwo.permutations_table
+    permutation_names = {e.name for e in permutations_table}
+    asset_set_type = set_type_from_asset(scene_nwo)
+
+    def ensure_region(region):
+        if not region or region in region_names:
+            return
+        new_region = regions_table.add()
+        new_region.old = region
+        new_region.name = region
+        new_region.set_type = asset_set_type
+        region_names.add(region)
+
+    def ensure_permutation(permutation):
+        if not permutation or permutation in permutation_names:
+            return
+        new_permutation = permutations_table.add()
+        new_permutation.old = permutation
+        new_permutation.name = permutation
+        new_permutation.set_type = asset_set_type
+        permutation_names.add(permutation)
+
+    def ensure_collection_sets(collection):
+        if collection.library:
+            return
+        match collection.nwo.type:
+            case 'region':
+                ensure_region(collection.nwo.region)
+            case 'permutation':
+                ensure_permutation(collection.nwo.permutation)
+        for child in collection.children:
+            ensure_collection_sets(child)
+
+    for collection in context.scene.collection.children:
+        ensure_collection_sets(collection)
+
+    default_region = regions_table[0].name if regions_table else ""
+    default_permutation = permutations_table[0].name if permutations_table else ""
     scene_obs = context.scene.objects
     for ob in scene_obs:
         ob_region = true_region(ob.nwo)
         if not ob_region:
-            ob.nwo.region_name = region_names[0]
-        elif ob_region not in region_names:
-            new_region = regions_table.add()
-            new_region.name = ob_region
-            region_names.add(ob_region)
+            ob.nwo.region_name = default_region
+        else:
+            ensure_region(ob_region)
             ob.nwo.region_name = ob_region
 
         ob_permutation = true_permutation(ob.nwo)
         if not ob_permutation:
-            ob.nwo.permutation_name = permutation_names[0]
-        elif ob_permutation not in permutation_names:
-            new_permutation = permutations_table.add()
-            new_permutation.name = ob_permutation
-            permutation_names.add(ob_permutation)
+            ob.nwo.permutation_name = default_permutation
+        else:
+            ensure_permutation(ob_permutation)
             ob.nwo.permutation_name = ob_permutation
 
 # def update_objects_from_tables(context, table_str, ob_prop_str):
@@ -3899,7 +3932,7 @@ def set_type_from_asset(scene_nwo):
     match scene_nwo.asset_type:
         case 'model' | 'sky':
             return 'MODEL'
-        case 'scenario' | 'prefab', 'multi_prefab':
+        case 'scenario' | 'prefab' | 'multi_prefab':
             return 'SCENARIO'
         
     return 'DEFAULT'

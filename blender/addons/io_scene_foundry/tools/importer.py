@@ -2822,24 +2822,34 @@ class NWOImporter:
         objects_cache[cache_key] = cache_entry
         return cache_entry
 
-    def _ensure_region_entry(self, region: str):
-        if not region or region in self.region_names:
+    def _ensure_region_entry(self, region: str, set_type: utils.SetType | None = None):
+        if not region:
             return
 
-        entry = self.scene_nwo.regions_table.add()
-        entry.old = region
-        entry.name = region
+        entry = self.scene_nwo.regions_table.get(region, 0)
+        if not entry:
+            entry = self.scene_nwo.regions_table.add()
+            entry.old = region
+            entry.name = region
+        if set_type is not None:
+            entry.set_type = set_type.name
         self.region_names.add(region)
+        return entry.name
 
-    def _ensure_permutation_entry(self, permutation: str):
-        if not permutation or permutation in self.permutation_names:
+    def _ensure_permutation_entry(self, permutation: str, set_type: utils.SetType | None = None):
+        if not permutation:
             return
 
-        entry = self.scene_nwo.permutations_table.add()
-        entry.old = permutation
-        entry.name = permutation
+        entry = self.scene_nwo.permutations_table.get(permutation, 0)
+        if not entry:
+            entry = self.scene_nwo.permutations_table.add()
+            entry.old = permutation
+            entry.name = permutation
+        if set_type is not None:
+            entry.set_type = set_type.name
         self.permutation_names.add(permutation)
-    
+        return entry.name
+
     def set_region(self, ob, region):
         self._ensure_region_entry(region)
         ob.nwo.region_name = region
@@ -4174,7 +4184,7 @@ class NWOImporter:
                 self.scene_collection.children.link(new_coll)
             if not is_model and possible_bsp:
                 new_coll.name = possible_bsp
-                self._ensure_region_entry(possible_bsp)
+                possible_bsp = self._ensure_region_entry(possible_bsp, utils.SetType.SCENARIO)
                 new_coll.nwo.type = 'region'
                 new_coll.nwo.region = possible_bsp
             
@@ -4353,7 +4363,7 @@ class NWOImporter:
             possible_bsp = file_name
             if possible_bsp.lower() == 'shared': possible_bsp = "default_shared"
             new_coll.name = possible_bsp
-            self._ensure_region_entry(possible_bsp)
+            possible_bsp = self._ensure_region_entry(possible_bsp, utils.SetType.SCENARIO)
             new_coll.nwo.type = 'region'
             new_coll.nwo.region = possible_bsp
         
@@ -4470,12 +4480,12 @@ class NWOImporter:
             marker.empty_display_type = 'ARROWS'
             
         if is_model and region is not None:
-            self._ensure_region_entry(region)
+            self._ensure_region_entry(region, utils.SetType.MODEL)
             marker.nwo.region_name = region
             marker.nwo.marker_uses_regions = True
             
             if is_model and perm is not None:
-                self._ensure_permutation_entry(perm)
+                self._ensure_permutation_entry(perm, utils.SetType.MODEL)
                 marker.nwo.marker_permutations.add().name = perm
                 marker.nwo.marker_permutation_type = 'include'
                 
