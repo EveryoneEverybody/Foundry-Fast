@@ -376,12 +376,27 @@ class ExportScene:
         main_armature = None
         if self.uses_main_armature:
             main_armature = utils.get_rig(self.context)
+            if self.scene_settings.main_armature != main_armature:
+                self.scene_settings.main_armature = main_armature
 
         support_armatures = []
         self.export_objects = []
             
         if self.uses_main_armature and not main_armature:
             main_armature = utils.get_rig_prioritize_active(self.context)
+
+        if main_armature and not self.any_node_usage_override():
+            auto_node_usage_names = {"pedestal", "aim_pitch", "aim_yaw"}
+            node_usage_bones = {}
+            for bone in main_armature.data.bones:
+                node_usage_name = utils.remove_node_prefix(bone.name).lower()
+                if node_usage_name in auto_node_usage_names:
+                    node_usage_bones.setdefault(node_usage_name, bone.name)
+
+            if auto_node_usage_names <= node_usage_bones.keys():
+                self.scene_settings.node_usage_pedestal = node_usage_bones["pedestal"]
+                self.scene_settings.node_usage_pose_blend_pitch = node_usage_bones["aim_pitch"]
+                self.scene_settings.node_usage_pose_blend_yaw = node_usage_bones["aim_yaw"]
                     
         if main_armature:
             for ob in bpy.data.objects:
