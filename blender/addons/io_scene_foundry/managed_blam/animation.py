@@ -61,12 +61,12 @@ DEBUG_PRINT_BASE_ANIMATION_CANDIDATES = False
 DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT = 8
 DEBUG_PRINT_APPLIED_BASE_ANIMATION = False
 FORCE_OVERLAY_STATIC_CHANNELS_TO_BASE_FRAME = True
-ADJUST_OVERLAY_OBJECT_SPACE_PARENT_NODES = False
+APPLY_OBJECT_SPACE_PARENT_CORRECTION_TO_FULL_ANIMATION = False
 PRESERVE_OVERLAY_OBJECT_SPACE_PARENT_FRAME = True
 PRESERVE_REPLACEMENT_OBJECT_SPACE_PARENT_FRAME = True
 # Object-space parent nodes are metadata generated from frame 0 by Tool.
-# Applying them as a second transform layer makes imported playback wrong,
-# but frame 0 still needs to match the stored parent orientations for reimport.
+# Set APPLY_OBJECT_SPACE_PARENT_CORRECTION_TO_FULL_ANIMATION to False to use
+# frame-0-only preservation instead of baking the correction across playback.
 
 RESOURCE_SECTION_ORDER = (
     "static_node_flags",
@@ -3178,8 +3178,19 @@ class AnimationTag(Tag):
         scale = element.SelectField("Struct:parent orientation[0]/default scale").Data
         return translation, rotation, scale
 
-    def _object_space_parent_transform_targets(self, tag_animation: Animation) -> list[tuple[int, Vector, Quaternion, float]]:
-        targets: list[tuple[int, Vector, Quaternion, float]] = []
+    def _object_space_parent_component_flags(self, element: TagFieldBlockElement) -> tuple[bool, bool, bool, bool]:
+        flags = element.SelectField("flags")
+        if flags is None:
+            return True, True, True, False
+        return (
+            flags.TestBit("translation"),
+            flags.TestBit("rotation"),
+            flags.TestBit("scale"),
+            flags.TestBit("motion root"),
+        )
+
+    def _object_space_parent_transform_targets(self, tag_animation: Animation) -> list[tuple[int, Vector, Quaternion, float, bool, bool, bool, bool]]:
+        targets: list[tuple[int, Vector, Quaternion, float, bool, bool, bool, bool]] = []
         parent_nodes = tag_animation.shared_element.SelectField("object-space parent nodes")
         if parent_nodes is None:
             return targets
@@ -3188,22 +3199,20 @@ class AnimationTag(Tag):
             node_index = int(element.Fields[0].Value)
             if node_index >= 0:
                 translation, rotation, scale = self._object_space_parent_orientation_transform(element)
-                targets.append((node_index, translation, rotation, scale))
+                use_translation, use_rotation, use_scale, motion_root = self._object_space_parent_component_flags(element)
+                targets.append((node_index, translation, rotation, scale, use_translation, use_rotation, use_scale, motion_root))
 
         return targets
 
     def _adjust_object_space_parent_nodes(self, tag_animation: Animation) -> bool:
-        if tag_animation.animation_type == AnimationType.OVERLAY:
-            return ADJUST_OVERLAY_OBJECT_SPACE_PARENT_NODES
-        if tag_animation.animation_type == AnimationType.REPLACEMENT:
-            # Tool packs replacement samples as normal local replacement data,
-            # then records object-space parent nodes as companion metadata.
-            # Keep those nodes for round-tripping, but do not bake them into the
-            # imported Blender action.
-            return False
-        return False
+        return (
+            APPLY_OBJECT_SPACE_PARENT_CORRECTION_TO_FULL_ANIMATION
+            and tag_animation.animation_type in (AnimationType.OVERLAY, AnimationType.REPLACEMENT)
+        )
 
     def _preserve_object_space_parent_reference_frame(self, tag_animation: Animation) -> bool:
+        if APPLY_OBJECT_SPACE_PARENT_CORRECTION_TO_FULL_ANIMATION:
+            return False
         if tag_animation.animation_type == AnimationType.OVERLAY:
             return (
                 tag_animation.is_pose_overlay
@@ -3285,12 +3294,12 @@ class AnimationTag(Tag):
         self,
         tag_animation: Animation,
         default_nodes: list[DefaultAnimationNode],
-    ) -> list[tuple[int, Matrix]]:
-        targets: list[tuple[int, Matrix]] = []
-        for node_index, translation, rotation, scale in self._object_space_parent_transform_targets(tag_animation):
+    ) -> list[tuple[int, Matrix, bool, bool, bool]]:
+        targets: list[tuple[int, Matrix, bool, bool, bool]] = []
+        for node_index, translation, rotation, scale, use_translation, use_rotation, use_scale, _motion_root in self._object_space_parent_transform_targets(tag_animation):
             target_index = self._object_space_parent_target_index(node_index, default_nodes)
             target_matrix = Matrix.LocRotScale(translation, rotation, Vector.Fill(3, scale))
-            targets.append((target_index, target_matrix))
+            targets.append((target_index, target_matrix, use_translation, use_rotation, use_scale))
 
         return sorted(
             targets,
@@ -3339,6 +3348,24 @@ class AnimationTag(Tag):
             animation_data.rotations[node_index][frame_index] = frame.rotations[node_index]
             animation_data.scales[node_index][frame_index] = frame.scales[node_index]
 
+    def _object_space_component_target_matrix(
+        self,
+        current_matrix: Matrix,
+        target_matrix: Matrix,
+        use_translation: bool,
+        use_rotation: bool,
+        use_scale: bool,
+    ) -> Matrix:
+        current_translation, current_rotation, current_scale = current_matrix.decompose()
+        target_translation, target_rotation, target_scale = target_matrix.decompose()
+        current_rotation.normalize()
+        target_rotation.normalize()
+        return Matrix.LocRotScale(
+            target_translation if use_translation else current_translation,
+            target_rotation if use_rotation else current_rotation,
+            target_scale if use_scale else current_scale,
+        )
+
     def _apply_object_space_delta_to_frame(
         self,
         frame: FrameChannels,
@@ -3376,9 +3403,17 @@ class AnimationTag(Tag):
             base_frame.scales[:],
         )
 
-        for target_index, target_matrix in self._object_space_base_correction_targets(tag_animation, default_nodes):
+        for target_index, target_matrix, use_translation, use_rotation, use_scale in self._object_space_base_correction_targets(tag_animation, default_nodes):
             object_space_matrices = self._frame_object_space_matrices(reference_frame, default_nodes)
-            delta_matrix = target_matrix @ object_space_matrices[target_index].inverted_safe()
+            current_target_matrix = object_space_matrices[target_index]
+            component_target_matrix = self._object_space_component_target_matrix(
+                current_target_matrix,
+                target_matrix,
+                use_translation,
+                use_rotation,
+                use_scale,
+            )
+            delta_matrix = component_target_matrix @ current_target_matrix.inverted_safe()
             node_indices = self._object_space_descendant_indices(target_index, default_nodes)
 
             self._apply_object_space_delta_to_frame(
@@ -3410,12 +3445,20 @@ class AnimationTag(Tag):
         reference_frame = self._animation_data_frame_channels(animation_data, 0)
         touched_node_indices: set[int] = set()
 
-        # Replacement correction nodes are regenerated by Tool from frame 0.
+        # Tool regenerates object-space parent metadata from frame 0.
         # Keep the playback samples local, but make that one reference frame
-        # reproduce the original stored object-space parent orientations.
-        for target_index, target_matrix in self._object_space_base_correction_targets(tag_animation, default_nodes):
+        # reproduce the original stored object-space parent components.
+        for target_index, target_matrix, use_translation, use_rotation, use_scale in self._object_space_base_correction_targets(tag_animation, default_nodes):
             object_space_matrices = self._frame_object_space_matrices(reference_frame, default_nodes)
-            delta_matrix = target_matrix @ object_space_matrices[target_index].inverted_safe()
+            current_target_matrix = object_space_matrices[target_index]
+            component_target_matrix = self._object_space_component_target_matrix(
+                current_target_matrix,
+                target_matrix,
+                use_translation,
+                use_rotation,
+                use_scale,
+            )
+            delta_matrix = component_target_matrix @ current_target_matrix.inverted_safe()
             node_indices = self._object_space_descendant_indices(target_index, default_nodes)
 
             self._apply_object_space_delta_to_frame(
