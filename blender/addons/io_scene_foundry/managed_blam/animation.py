@@ -62,9 +62,10 @@ DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT = 8
 DEBUG_PRINT_APPLIED_BASE_ANIMATION = False
 FORCE_OVERLAY_STATIC_CHANNELS_TO_BASE_FRAME = True
 ADJUST_OVERLAY_OBJECT_SPACE_PARENT_NODES = False
+PRESERVE_OVERLAY_OBJECT_SPACE_PARENT_FRAME = True
 PRESERVE_REPLACEMENT_OBJECT_SPACE_PARENT_FRAME = True
-# Replacement object-space parent nodes are metadata generated from frame 0 by
-# Tool. Applying them as a second transform layer makes imported playback wrong,
+# Object-space parent nodes are metadata generated from frame 0 by Tool.
+# Applying them as a second transform layer makes imported playback wrong,
 # but frame 0 still needs to match the stored parent orientations for reimport.
 
 RESOURCE_SECTION_ORDER = (
@@ -3203,6 +3204,11 @@ class AnimationTag(Tag):
         return False
 
     def _preserve_object_space_parent_reference_frame(self, tag_animation: Animation) -> bool:
+        if tag_animation.animation_type == AnimationType.OVERLAY:
+            return (
+                tag_animation.is_pose_overlay
+                and PRESERVE_OVERLAY_OBJECT_SPACE_PARENT_FRAME
+            )
         return (
             tag_animation.animation_type == AnimationType.REPLACEMENT
             and PRESERVE_REPLACEMENT_OBJECT_SPACE_PARENT_FRAME
@@ -3813,11 +3819,14 @@ class AnimationTag(Tag):
             if applied_object_space_parent_targets:
                 self._apply_object_space_base_corrections(tag_animation, animation_data, base_frame, defaults)
 
-            if reference_object_space_parent_targets:
+            if reference_object_space_parent_targets and tag_animation.animation_type == AnimationType.REPLACEMENT:
                 self._apply_object_space_reference_frame_corrections(tag_animation, animation_data, defaults)
 
             if tag_animation.is_pose_overlay:
                 self._apply_pose_overlay_blend_screen_control_basis(tag_animation, animation_data)
+
+            if reference_object_space_parent_targets and tag_animation.animation_type == AnimationType.OVERLAY:
+                self._apply_object_space_reference_frame_corrections(tag_animation, animation_data, defaults)
 
         if tag_animation.translate_and_scale_root_only:
             self._apply_translate_and_scale_root_only(animation_data, defaults, self.get_node_usages())
