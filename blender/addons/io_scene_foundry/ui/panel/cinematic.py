@@ -808,6 +808,7 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
 
         armature_name = armature.name
         armature_collections = tuple(armature.users_collection)
+        armature_matrix_world = armature.matrix_world.copy()
         armature_pose_position = armature.data.pose_position
         transformed_for_import = False
         imported_objects = []
@@ -820,6 +821,7 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
         armature.select_set(True)
         utils.set_active_object(armature)
         armature.data.pose_position = 'REST'
+        armature.matrix_world = Matrix.Identity(4)
         context.view_layer.update()
 
         importer_module.deferred_ops = []
@@ -851,6 +853,8 @@ class NWO_OT_UpdateActor(bpy.types.Operator):
                 op()
         finally:
             importer_module.deferred_ops = []
+            if armature.name in bpy.data.objects:
+                armature.matrix_world = armature_matrix_world
             self._restore_armature_collections(context, armature, armature_collections)
 
         utils.set_object_mode(context)
