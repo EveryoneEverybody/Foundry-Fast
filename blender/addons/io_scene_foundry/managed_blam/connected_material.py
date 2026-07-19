@@ -835,18 +835,18 @@ class Function:
             self.always_exports_value = flags.TestBit("always exports value")
             self.turn_off_with_uses_magnitude = flags.TestBit("turn off with uses magnitude")
             interp_elements = element.SelectField("interpolation").Elements
-            if interp_elements.Count > 0:
-                self.has_interpolation = True
-                if interp_elements.Count == 2:
-                    self.interpolation_increasing = Interpolation()
-                    self.interpolation_increasing.from_element(interp_elements[0])
-                    self.interpolation_decreasing = Interpolation()
-                    self.interpolation_decreasing.from_element(interp_elements[1])
-                    self.time_period = self.interpolation_increasing.linear_travel_time
-                else:
-                    self.interpolation_symmetric = Interpolation()
-                    self.interpolation_symmetric.from_element(interp_elements[0])
-                    self.time_period = self.interpolation_symmetric.linear_travel_time
+            # if interp_elements.Count > 0:
+            #     self.has_interpolation = True
+            #     if interp_elements.Count == 2:
+            #         self.interpolation_increasing = Interpolation()
+            #         self.interpolation_increasing.from_element(interp_elements[0])
+            #         self.interpolation_decreasing = Interpolation()
+            #         self.interpolation_decreasing.from_element(interp_elements[1])
+            #         self.time_period = self.interpolation_increasing.linear_travel_time
+            #     else:
+            #         self.interpolation_symmetric = Interpolation()
+            #         self.interpolation_symmetric.from_element(interp_elements[0])
+            #         self.time_period = self.interpolation_symmetric.linear_travel_time
         
         elif self.is_light_function:
             self.input = element.SelectField("Input Variable").GetStringData()
@@ -992,7 +992,7 @@ class Function:
         if uses_time_period:
             time_node = tree.nodes.new('ShaderNodeGroup')
             time_node.node_tree = utils.add_node_from_resources("shared_nodes", "Time Period")
-            time_node.inputs[0].default_value = self.time_period if self.time_period > 0 else 1
+            time_node.inputs[0].default_value = self.time_period
             tree.links.new(input=first_node_input, output=time_node.outputs[0])
             first_node_input = time_node.inputs[1]
                 
@@ -1090,6 +1090,9 @@ class Function:
                     if self.turn_off_with:
                         turn_off_attr_node = add_attribute_node(tree, self.turn_off_with)
                         tree.links.new(input=object_function_node.inputs[4], output=turn_off_attr_node.outputs[2] if turn_off_attr_node.bl_idname == 'ShaderNodeAttribute' else turn_off_attr_node.outputs[0])
+                    
+                    object_function_node.inputs[5].default_value = self.random_time_offset
+
                     tree.links.new(input=object_function_node.inputs[0], output=function_node.outputs[0])
 
             case FunctionEditorColorGraphType.OneColor:
