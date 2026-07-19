@@ -3625,7 +3625,7 @@ def gather_face_props(mesh_props: NWO_MeshPropertiesGroup, mesh: bpy.types.Mesh,
                     face_properties.setdefault("bungie_mesh_poop_collision_type", FaceSet(np.full(num_faces, face_prop_defaults["bungie_mesh_poop_collision_type"], dtype=np.int32))).update_from_material(mesh, material_indices, PoopCollisionType.invisible_wall.value)
             else:
                 face_properties.setdefault("bungie_face_type", FaceSet(np.full(num_faces, face_prop_defaults["bungie_face_type"], dtype=np.int32))).update_from_material(mesh, material_indices, FaceType.seam_sealer.value)
-        elif is_structure and material.name.lower().startswith('+seam') and props.get("bungie_mesh_type") != MeshType.seam.value:
+        elif is_structure and material.name.lower().startswith('+seam') and props.get("bungie_mesh_type") and props.get("bungie_mesh_type") != MeshType.seam.value:
             props.pop("bungie_mesh_type")
             face_properties.setdefault("bungie_mesh_type", FaceSet(np.full(num_faces, face_prop_defaults["bungie_mesh_type"], dtype=np.int32))).update_from_material(mesh, material_indices, MeshType.seam.value)
         elif material.name.lower().startswith('+'):
