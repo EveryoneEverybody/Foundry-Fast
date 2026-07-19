@@ -13,6 +13,8 @@ from .scenario import ScenarioTag
 from . import Tag
 
 # TODO Handle resources
+CINEMATIC_TAG_NAME_MAX_LENGTH = 25
+
 
 class ShotType(Enum):
     ALL = 0
@@ -60,6 +62,7 @@ class CinematicTag(Tag):
     def create(self, name: str, cinematic_scenes, scenario_path: Path | None = None, zone_set: str = "cinematic", scene_nwo=None):
         scene_nwo = scene_nwo or self.scene_nwo
         self.tag_has_changes = True
+        self.name.SetStringData(name[:CINEMATIC_TAG_NAME_MAX_LENGTH])
         
         # Add Cinematic Settings
         channel_type_value = int(scene_nwo.cinematic_channel_type)
@@ -122,7 +125,6 @@ class CinematicTag(Tag):
                 scenario.tag_has_changes = True
                 # Set link to scenario in cinematic tag
                 if needs_cinematic_scenario_update:
-                    self.name = name
                     self.scenario.Path = scenario.tag_path
                     # Add cinematic to scenario tag, first checking to see if the reference exists
                     block_cinematics = scenario.tag.SelectField("Block:cinematics")

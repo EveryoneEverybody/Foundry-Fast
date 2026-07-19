@@ -423,6 +423,8 @@ class CinematicCustomScript:
                         weapon_name = object_tag_weapon_names.get(event.actor, "")
                     if weapon_name:
                         self.set_weapon_trigger_script(weapon_name, event.script_type == "WEAPON_TRIGGER_START")
+                    elif event.actor:
+                        utils.print_warning(f"Event at frame {event.frame} tries to fire a weapon but actor {event.actor.name} is not an weapon tag or does not use a weapon tag attachment")
                             
             case 'SET_VARIANT':
                 if target_name and event.script_variant:
