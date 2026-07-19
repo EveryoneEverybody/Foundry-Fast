@@ -2432,8 +2432,9 @@ class NWO_CinematicScene(PropertyGroup):
     
     name: bpy.props.StringProperty(
         name="Scene ID",
-        default="default",
+        default="010",
         options=set(),
+        maxlen=3,
     )
     
     scene: bpy.props.PointerProperty(
