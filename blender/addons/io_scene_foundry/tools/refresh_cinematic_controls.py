@@ -61,11 +61,11 @@ def add_controls_to_debug_menu(corinth: bool, cinematic_path: Path, scene_name, 
             menu_commands.append(new_command(command_name, command))
             
             # PLAY SHOT
-            command_name = f"Foundry: Start Scene {scene_name} Shot {shot_index + 1}"
+            command_name = f"Foundry: Start Scene {scene_name} Shot {shot_index}"
             if corinth:
                 command = f'cinematic_debug_play \\"{cin_name}\\" \\"1 {scene_index} 1 {shot_index}\\" cache_file_builder_unshare_unique_map_locations {bsp_zone_flags}'
             else:
-                body = f'(begin_{cin_name}_debug) (cinematic_print \\"beginning scene {scene_index + 1}\\") (cinematic_scripting_create_scene {scene_index}) ({scene_name}_sh{shot_index + 1}) (cinematic_scripting_destroy_scene {scene_index}) (end_{cin_name}_debug)'
+                body = f'(begin_{cin_name}_debug) (cinematic_print \\"beginning scene {scene_index + 1}\\") (cinematic_scripting_create_scene {scene_index}) ({scene_name}_sh{shot_index}) (cinematic_scripting_destroy_scene {scene_index}) (end_{cin_name}_debug)'
                 if REACH_LOOP_IT_WORKS:
                     command  = f'(loop_clear) (if cache_file_builder_unshare_unique_map_locations (loop_it {{(begin {body})}}) (begin {body}))'
                 else:
