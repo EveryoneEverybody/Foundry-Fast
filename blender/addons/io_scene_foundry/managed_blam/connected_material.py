@@ -969,10 +969,12 @@ class Function:
                 final_output = curve_node.outputs[0]
                 
             case FunctionEditorMasterType.Periodic:
+                periodic_function = self.periodic_functions[graph_index]
+                periodic_frequency = self.frequencies[graph_index]
                 periodic_node = tree.nodes.new('ShaderNodeGroup')
-                periodic_node.node_tree = utils.add_node_from_resources("reach_nodes", f"periodic function type - {self.periodic_functions[graph_index]}")
-                if self.periodic_functions[graph_index] not in {"one", "zero"}:
-                    periodic_node.inputs[1].default_value = self.frequencies[graph_index]
+                periodic_node.node_tree = utils.add_node_from_resources("reach_nodes", f"periodic function type - {periodic_function}")
+                if periodic_function not in {"one", "zero"}:
+                    periodic_node.inputs[1].default_value = 1.0 if uses_time_period and periodic_frequency else periodic_frequency
                     periodic_node.inputs[2].default_value = self.phases[graph_index]
                 tree.links.new(input=map_range_node.inputs[0], output=periodic_node.outputs[0])
                 first_node_input = periodic_node.inputs[0]
@@ -992,13 +994,19 @@ class Function:
         if uses_time_period:
             time_node = tree.nodes.new('ShaderNodeGroup')
             time_node.node_tree = utils.add_node_from_resources("shared_nodes", "Time Period")
-            time_node.inputs[0].default_value = self.time_period
+            time_period = 0.0 if self.is_object_function else self.time_period
+            if self.master_type == FunctionEditorMasterType.Periodic and periodic_function not in {"one", "zero"}:
+                periodic_frequency = self.frequencies[graph_index]
+                if periodic_frequency:
+                    time_period = (time_period if time_period > 0 else 1.0) / periodic_frequency
+
+            time_node.inputs[0].default_value = time_period
+            time_node.inputs[1].default_value = 1.0
             tree.links.new(input=first_node_input, output=time_node.outputs[0])
-            first_node_input = time_node.inputs[1]
-                
-        attribute_node = add_attribute_node(tree, self.input)
-        self.input_uses_group_node = attribute_node.bl_idname == 'ShaderNodeGroup'
-        tree.links.new(input=first_node_input, output=attribute_node.outputs[2] if attribute_node.bl_idname == 'ShaderNodeAttribute' else attribute_node.outputs[0])    
+        else:
+            attribute_node = add_attribute_node(tree, self.input)
+            self.input_uses_group_node = attribute_node.bl_idname == 'ShaderNodeGroup'
+            tree.links.new(input=first_node_input, output=attribute_node.outputs[2] if attribute_node.bl_idname == 'ShaderNodeAttribute' else attribute_node.outputs[0])
         
         return final_output
     
@@ -1124,8 +1132,17 @@ class Function:
             exclusion_node.inputs[2].default_value = self.exclusion_max
             tree.links.new(input=first_node_input, output=exclusion_node.outputs[0])
             first_node_input = exclusion_node.inputs[0]
-        
-        uses_time_period = utils.get_prefs().import_shaders_with_time_period and (force_time_period or (not self.is_object_function and not self.uses_input) or (self.is_object_function and self.master_type == FunctionEditorMasterType.Periodic))
+
+        uses_object_periodic_time = self.is_object_function and self.master_type == FunctionEditorMasterType.Periodic
+        uses_shader_time_period = (
+            utils.get_prefs().import_shaders_with_time_period
+            and not self.is_object_function
+            and (force_time_period or not self.uses_input)
+        )
+        uses_time_period = (
+            self.color_type == FunctionEditorColorGraphType.Scalar
+            and (uses_object_periodic_time or (not self.uses_input and uses_shader_time_period))
+        )
         outputs = [self._graph_to_nodes(tree, i, uses_time_period) for i in range(self.graph_count)]
         if len(outputs) > 1:
             graph_mix_node = tree.nodes.new('ShaderNodeMix')
