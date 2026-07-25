@@ -216,6 +216,15 @@ class AnimatedParameterType(Enum):
     TRANSLATION_Y = 6
     FRAME_INDEX = 7
     ALPHA = 8
+
+shader_time_period_animation_types = {
+    AnimatedParameterType.VALUE,
+    AnimatedParameterType.SCALE_UNIFORM,
+    AnimatedParameterType.SCALE_X,
+    AnimatedParameterType.SCALE_Y,
+    AnimatedParameterType.TRANSLATION_X,
+    AnimatedParameterType.TRANSLATION_Y,
+}
     
 class TilingNodeInputs(Enum):
     TRANSLATION_X = 0
@@ -820,6 +829,12 @@ class Function:
                 self.is_object_function = True
             case "Mapping":
                 self.is_light_function = True
+
+        if not self.is_object_function and not self.is_light_function:
+            try:
+                self.animated_type = AnimatedParameterType(element.Fields[0].Value)
+            except (AttributeError, IndexError, ValueError):
+                pass
         
         if self.is_object_function:
             self.input = element.SelectField("import name").GetStringData()
@@ -1001,7 +1016,12 @@ class Function:
                     time_period = (time_period if time_period > 0 else 1.0) / periodic_frequency
 
             time_node.inputs[0].default_value = time_period
-            time_node.inputs[1].default_value = 1.0
+            if self.uses_input and not self.is_object_function:
+                attribute_node = add_attribute_node(tree, self.input)
+                self.input_uses_group_node = attribute_node.bl_idname == 'ShaderNodeGroup'
+                tree.links.new(input=time_node.inputs[1], output=attribute_node.outputs[2] if attribute_node.bl_idname == 'ShaderNodeAttribute' else attribute_node.outputs[0])
+            else:
+                time_node.inputs[1].default_value = 1.0
             tree.links.new(input=first_node_input, output=time_node.outputs[0])
         else:
             attribute_node = add_attribute_node(tree, self.input)
@@ -1137,11 +1157,12 @@ class Function:
         uses_shader_time_period = (
             utils.get_prefs().import_shaders_with_time_period
             and not self.is_object_function
-            and (force_time_period or not self.uses_input)
+            and not self.is_light_function
+            and (force_time_period or self.animated_type in shader_time_period_animation_types)
         )
         uses_time_period = (
             self.color_type == FunctionEditorColorGraphType.Scalar
-            and (uses_object_periodic_time or (not self.uses_input and uses_shader_time_period))
+            and (uses_object_periodic_time or uses_shader_time_period)
         )
         outputs = [self._graph_to_nodes(tree, i, uses_time_period) for i in range(self.graph_count)]
         if len(outputs) > 1:
