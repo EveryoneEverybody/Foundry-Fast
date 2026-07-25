@@ -264,6 +264,7 @@ classes = [
     object.NWO_OT_HaloAttach,
     panel.NWO_FoundryPanelProps,
     panel.NWO_FoundryPanelPopover,
+    panel.NWO_ShaderEditorMaterialPanel,
     panel.NWO_HotkeyDescription,
     panel.NWO_OpenURL,
     panel.NWO_OT_FoundryTip,

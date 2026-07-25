@@ -4477,11 +4477,45 @@ class NWO_OT_ToggleBoneCollectionSelection(bpy.types.Operator):
         context.view_layer.update()
         return {'FINISHED'}
             
+class NWO_ShaderEditorMaterialPanel(bpy.types.Panel):
+    bl_label = "Material Properties"
+    bl_idname = "NWO_PT_ShaderEditorMaterialPanel"
+    bl_space_type = "NODE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "Foundry"
+
+    # Reuse only the material helpers from the main Foundry panel.
+    draw_expandable_box = NWO_FoundryPanelProps.draw_expandable_box
+    draw_material_properties = NWO_FoundryPanelProps.draw_material_properties
+    draw_material_attributes = NWO_FoundryPanelProps.draw_material_attributes
+    draw_face_material_properties = NWO_FoundryPanelProps.draw_face_material_properties
+    draw_image_properties = NWO_FoundryPanelProps.draw_image_properties
+
+    @classmethod
+    def poll(cls, context):
+        space = context.space_data
+        return (
+            space
+            and space.type == "NODE_EDITOR"
+            and getattr(space, "tree_type", "") == "ShaderNodeTree"
+            and utils.get_prefs().projects
+            and utils.get_scene_props().scene_project
+        )
+
+    def draw(self, context):
+        self.context = context
+        self.h4 = utils.is_corinth(context)
+        self.scene = context.scene
+        self.scene_nwo = utils.get_scene_props()
+        self.scene_nwo_export = utils.get_export_props()
+        self.asset_type = self.scene_nwo.asset_type
+        self.box = self.layout
+        self.draw_material_properties()
+
 class NWO_FoundryPanelPopover(bpy.types.Operator, NWO_FoundryPanelProps):
     bl_label = "Foundry"
     bl_idname = "nwo.show_foundry_panel"
     bl_description = "Loads the Foundry Panel at the position of the mouse cursor"
-    bl_icon = 'MESH'
     
     def execute(self, context):
         return context.window_manager.invoke_popup(self, width=450)
