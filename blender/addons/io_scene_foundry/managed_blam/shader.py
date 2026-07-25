@@ -1164,44 +1164,75 @@ class ShaderTag(Tag):
                     scale_node, is_texture_tiling = utils.find_mapping_node(source, self.group_node)
                     if not scale_node: return mapping
                     if is_texture_tiling:
-                        factor = scale_node.inputs['Scale Multiplier'].default_value
-                        mapping[self.scale_u] = scale_node.inputs['Scale X'].default_value * factor
-                        mapping[self.scale_v] = scale_node.inputs['Scale Y'].default_value * factor
+                        tiling_inputs = (
+                            (AnimatedParameterType.TRANSLATION_X, 'Translate X'),
+                            (AnimatedParameterType.TRANSLATION_Y, 'Translate Y'),
+                            (AnimatedParameterType.SCALE_UNIFORM, 'Scale Multiplier'),
+                            (AnimatedParameterType.SCALE_X, 'Scale X'),
+                            (AnimatedParameterType.SCALE_Y, 'Scale Y'),
+                        )
+                        for animated_type, input_name in tiling_inputs:
+                            input_socket = scale_node.inputs.get(input_name)
+                            if input_socket is not None:
+                                mapping[animated_type] = input_socket.default_value
                     elif scale_node.type == 'MAPPING':
-                        mapping[self.scale_u] = scale_node.inputs['Scale'].default_value.x
-                        mapping[self.scale_v] = scale_node.inputs['Scale'].default_value.y
-                        mapping[self.translation_u] = scale_node.inputs['Location'].default_value.x
-                        mapping[self.translation_v] = scale_node.inputs['Location'].default_value.y
+                        mapping[AnimatedParameterType.SCALE_X] = scale_node.inputs['Scale'].default_value.x
+                        mapping[AnimatedParameterType.SCALE_Y] = scale_node.inputs['Scale'].default_value.y
+                        mapping[AnimatedParameterType.TRANSLATION_X] = scale_node.inputs['Location'].default_value.x
+                        mapping[AnimatedParameterType.TRANSLATION_Y] = scale_node.inputs['Location'].default_value.y
             case 'real' | 'int' | 'bool':
-                mapping['value'] = source
+                mapping[AnimatedParameterType.VALUE] = source
             case 'color':
-                mapping['color'] = source
+                mapping[AnimatedParameterType.COLOR] = source
                 
         return mapping
+
+    def _animated_parameter_enum_value(self, block, parameter_type):
+        if isinstance(parameter_type, AnimatedParameterType):
+            return parameter_type.value
+        if isinstance(parameter_type, int):
+            return parameter_type
+        return self._EnumIntValue(block, 'type', parameter_type)
+
+    def _animated_parameter_value_is_default(self, parameter_type, value) -> bool:
+        if parameter_type in {AnimatedParameterType.SCALE_UNIFORM, AnimatedParameterType.SCALE_X, AnimatedParameterType.SCALE_Y, self.scale_u, self.scale_v}:
+            return value == 1
+        if parameter_type in {AnimatedParameterType.TRANSLATION_X, AnimatedParameterType.TRANSLATION_Y, self.translation_u, self.translation_v}:
+            return value == 0
+        return value == 1 or value == 0
+
+    def _set_animated_parameter_type(self, element, parameter_type):
+        type_field = element.SelectField('type')
+        if isinstance(parameter_type, AnimatedParameterType):
+            type_field.Value = parameter_type.value
+        elif isinstance(parameter_type, int):
+            type_field.Value = parameter_type
+        else:
+            type_field.SetValue(parameter_type)
             
     def _setup_function_parameters(self, source: tuple[float] | bpy.types.Node, element: TagsNameSpace.TagElement, parameter_type: str):
         block_animated_parameters = element.SelectField(self.function_parameters)
         mapping = self._function_parameters_from_node(source, parameter_type)
         for k, v in mapping.items():
             new = False
-            enum_index = self._EnumIntValue(block_animated_parameters, 'type', k)
+            enum_index = self._animated_parameter_enum_value(block_animated_parameters, k)
             if enum_index is None:
                 sub_element = None
             else:
                 sub_element = self._Element_from_field_value(block_animated_parameters, 'type', enum_index)
-                if sub_element and (v == 1 or v == 0):
+                if sub_element and self._animated_parameter_value_is_default(k, v):
                     block_animated_parameters.RemoveElement(sub_element.ElementIndex)
                     continue
 
             if sub_element is None:
-                if v == 1 or v == 0: continue
+                if self._animated_parameter_value_is_default(k, v): continue
                 new = True
                 sub_element = block_animated_parameters.AddElement()
-                sub_element.SelectField('type').SetValue(k)
+                self._set_animated_parameter_type(sub_element, k)
 
             field_animation_function = sub_element.SelectField(self.animated_function)
             value = field_animation_function.Value
-            if k == 'color':
+            if k in {'color', AnimatedParameterType.COLOR}:
                 if new:
                     value.ColorGraphType = self._FunctionEditorColorGraphType(2) # Sets 2-color
                 new_color = self._GameColor_from_RGB(*v)

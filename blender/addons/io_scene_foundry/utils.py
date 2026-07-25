@@ -44,6 +44,7 @@ from .constants import object_asset_validation, object_game_validation
 spinny = itertools.cycle(["|", "/", "—", "\\"])
 
 HALO_SCALE_NODE = ['Scale Multiplier', 'Scale X', 'Scale Y']
+HALO_TILING_NODE = ['Translate X', 'Translate Y', *HALO_SCALE_NODE, 'Vector']
 MATERIAL_RESOURCES = os.path.join(os.path.dirname((os.path.realpath(__file__))), 'blends')
 
 special_material_names = [m.name for m in special_materials]
@@ -1395,14 +1396,9 @@ def get_prefs():
     return bpy.context.preferences.addons[__package__].preferences
 
 def is_halo_mapping_node(node: bpy.types.Node) -> bool:
-    """Given a Node and a list of valid inputs (each a string), checks if the given Node has exactly the inputs supplied"""
-    inputs = node.inputs
-    if len(inputs) != len(HALO_SCALE_NODE):
-        return False
-    for i in node.inputs:
-        if i.name in HALO_SCALE_NODE: continue
-        return False
-    return True
+    """Checks if the given node is one of Foundry's texture tiling node variants."""
+    input_names = {i.name for i in node.inputs}
+    return input_names == set(HALO_SCALE_NODE) or input_names == set(HALO_TILING_NODE)
 
 def recursive_image_search(tree_owner):
     nodes = tree_owner.node_tree.nodes
