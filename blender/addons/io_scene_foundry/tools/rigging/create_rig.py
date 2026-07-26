@@ -31,14 +31,13 @@ from ...tools.rigging import (
     misc_control_collection_name,
     neck_assist_constraint_name,
     needs_reach_fp_ik_fix,
-    pedestal_name,
     remove_empty_bone_collection,
     root_child_of_constraint_name,
     settings_control_collection_name,
     settings_control_name,
 )
 from bpy_extras import anim_utils
-from math import ceil, floor
+from math import atan2, ceil, floor, pi
 from mathutils import Matrix, Vector
 
 
@@ -1386,28 +1385,6 @@ def calculate_pose_pole_position(root_bone: bpy.types.PoseBone, mid_bone: bpy.ty
     dist = max((b - a).length, (c - b).length) * distance_scale
     return b + pole_dir * dist
 
-def calculate_pose_lateral_pole_position(rig_root: bpy.types.PoseBone, root_bone: bpy.types.PoseBone, mid_bone: bpy.types.PoseBone, end_bone: bpy.types.PoseBone, distance_scale=1.25) -> Vector:
-    chain_axis = end_bone.head - root_bone.head
-    pole_dir = root_bone.head - rig_root.head
-
-    if chain_axis.length >= 1e-6:
-        chain_axis.normalize()
-        pole_dir -= chain_axis * pole_dir.dot(chain_axis)
-
-    if pole_dir.length < 1e-6:
-        return calculate_pose_pole_position(root_bone, mid_bone, end_bone, None, distance_scale)
-
-    pole_dir.normalize()
-    dist = max((mid_bone.head - root_bone.head).length, (end_bone.head - mid_bone.head).length) * distance_scale
-    return mid_bone.head + pole_dir * dist
-
-def pose_pedestal_bone(arm: bpy.types.Object) -> bpy.types.PoseBone | None:
-    for pbone in arm.pose.bones:
-        if pbone.name == pedestal_name or utils.remove_node_prefix(pbone.name).lower() == pedestal_name:
-            return pbone
-
-    return arm.pose.bones[0] if len(arm.pose.bones) else None
-
 def uses_reach_fp_hand_ik_fix(arm: bpy.types.Object | None, fkb: bpy.types.PoseBone) -> bool:
     return (
         arm is not None
@@ -1420,12 +1397,81 @@ def pose_pole_position_for_ik_context(arm: bpy.types.Object | None, fkb: bpy.typ
     if len(chain) < 2:
         return fkb.head.copy()
 
-    if uses_reach_fp_hand_ik_fix(arm, fkb):
-        rig_root = pose_pedestal_bone(arm)
-        if rig_root is not None:
-            return calculate_pose_lateral_pole_position(rig_root, chain[0], chain[-2], fkb, distance_scale)
+    pole_position = calculate_pose_pole_position(chain[0], chain[-2], fkb, pole_target, distance_scale)
+    if not uses_reach_fp_hand_ik_fix(arm, fkb):
+        return pole_position
 
-    return calculate_pose_pole_position(chain[0], chain[-2], fkb, pole_target, distance_scale)
+    con = pose_ik_constraint(fkb)
+    if con is None:
+        return pole_position
+
+    return compensate_pose_pole_position_for_ik_angle(chain[0], fkb, pole_position, con.pole_angle)
+
+def pose_ik_constraint(pbone: bpy.types.PoseBone) -> bpy.types.Constraint | None:
+    fallback = None
+    for con in pbone.constraints:
+        if con.type != 'IK':
+            continue
+        if con.name == ik_constraint_name or con.name.startswith(f"{ik_constraint_name}."):
+            return con
+        if fallback is None:
+            fallback = con
+
+    return fallback
+
+def compensate_pose_pole_position_for_ik_angle(root_bone: bpy.types.PoseBone, end_bone: bpy.types.PoseBone, pole_position: Vector, pole_angle: float) -> Vector:
+    chain_axis = end_bone.head - root_bone.head
+    if chain_axis.length < 1e-6:
+        return pole_position
+
+    pole_offset = pole_position - root_bone.head
+    if pole_offset.length < 1e-6:
+        return pole_position
+
+    current_angle = calculate_pose_pole_angle(root_bone, end_bone, pole_position)
+    angle = angle_delta(current_angle, pole_angle)
+    if abs(angle) < 1e-6:
+        return pole_position
+
+    axis = chain_axis.normalized()
+    candidate = root_bone.head + (Matrix.Rotation(angle, 4, axis) @ pole_offset)
+    alternate = root_bone.head + (Matrix.Rotation(-angle, 4, axis) @ pole_offset)
+    if angle_distance(calculate_pose_pole_angle(root_bone, end_bone, alternate), pole_angle) < angle_distance(calculate_pose_pole_angle(root_bone, end_bone, candidate), pole_angle):
+        return alternate
+
+    return candidate
+
+def calculate_pose_pole_angle(root_bone: bpy.types.PoseBone, end_bone: bpy.types.PoseBone, pole_position: Vector, use_tail=False) -> float:
+    root_axis = root_bone.tail - root_bone.head
+    chain_end = end_bone.tail if use_tail else end_bone.head
+    chain_axis = chain_end - root_bone.head
+    pole_axis = pole_position - root_bone.head
+
+    if root_axis.length < 1e-6 or chain_axis.length < 1e-6 or pole_axis.length < 1e-6:
+        return 0.0
+
+    pole_normal = chain_axis.cross(pole_axis)
+    if pole_normal.length < 1e-6:
+        return 0.0
+
+    projected_pole_axis = pole_normal.cross(root_axis)
+    if projected_pole_axis.length < 1e-6:
+        return 0.0
+
+    root_axis.normalize()
+    projected_pole_axis.normalize()
+    reference_axis = root_bone.matrix.to_3x3().col[0].normalized()
+
+    return -atan2(
+        root_axis.dot(reference_axis.cross(projected_pole_axis)),
+        reference_axis.dot(projected_pole_axis),
+    )
+
+def angle_delta(angle: float, target: float) -> float:
+    return (angle - target + pi) % (2.0 * pi) - pi
+
+def angle_distance(angle: float, target: float) -> float:
+    return abs(angle_delta(angle, target))
 
 def active_armature_constraint_follow_targets(arm: bpy.types.Object | None, pbone: bpy.types.PoseBone) -> list[bpy.types.PoseBone]:
     if arm is None:
