@@ -91,6 +91,9 @@ reach_fp_ik_fix_render_models = frozenset({
 def needs_reach_fp_ik_fix(tag_path: str) -> bool:
     return str(tag_path).replace("/", "\\").lower() in reach_fp_ik_fix_render_models
 
+def needs_fp_hand_ik_shape_fix(tag_path: str) -> bool:
+    return str(tag_path).replace("/", "\\").lower().endswith(r"\fp\fp.render_model")
+
 # Bone that should be connected
 bone_links = (
     ("upperarm", "forearm", "hand"),
@@ -1287,6 +1290,15 @@ class HaloRig:
 
         fk_shape = get_or_create_fk_control_shape()
         fk_to_deform_mapping = {fk_name: deform_name for deform_name, fk_name in deform_fk_mapping.items()}
+        enlarge_fp_hand_ik_shapes = needs_fp_hand_ik_shape_fix(self.rig_ob.nwo.node_order_source)
+        fp_hand_bounds = {}
+        if enlarge_fp_hand_ik_shapes:
+            hand_deform_names = {
+                deform_name
+                for deform_name, fk_name in deform_fk_mapping.items()
+                if is_hand_ik_source_name(fk_name)
+            }
+            fp_hand_bounds = vertex_group_bounds_by_deform_bone(self.rig_ob, self.rig_pose, hand_deform_names)
                 
         for db_name, fkb_name in deform_fk_mapping.items():
             fkb = self.rig_pose.bones[fkb_name]
@@ -1339,13 +1351,25 @@ class HaloRig:
                 configure_finger_ik_limits(fkb)
                 setup_finger_curl_constraints(fkb, self.rig_ob, settings_pb, not reverse_controls)
 
-            ikb.custom_shape = ik_shape
-            ikb.custom_shape_wire_width = 2.5
-            ikb.custom_shape_scale_xyz = Vector.Fill(3, self.scale / 0.03048 * ik_shape_scale)
-            ikb.use_custom_shape_bone_size = True
-            ikb.custom_shape_translation = Vector((0.0, ikb.length, 0.0))
             source_deform_name = fk_to_deform_mapping.get(fkb_name)
             source_deform = self.rig_pose.bones.get(source_deform_name) if source_deform_name is not None else None
+            ik_shape_scale_xyz = Vector.Fill(3, self.scale / 0.03048 * ik_shape_scale)
+            ik_shape_translation = Vector((0.0, ikb.length, 0.0))
+            ik_use_bone_size = True
+            if enlarge_fp_hand_ik_shapes and is_hand_ik_source_name(fkb_name):
+                ik_shape_scale_xyz, ik_shape_translation = fp_hand_ik_shape_transform(
+                    ikb,
+                    source_deform or fkb,
+                    fp_hand_bounds.get(source_deform_name),
+                    shape_scale * self.shape_scale,
+                )
+                ik_use_bone_size = False
+
+            ikb.custom_shape = ik_shape
+            ikb.custom_shape_wire_width = 2.5
+            ikb.custom_shape_scale_xyz = ik_shape_scale_xyz
+            ikb.use_custom_shape_bone_size = ik_use_bone_size
+            ikb.custom_shape_translation = ik_shape_translation
             ikb.custom_shape_rotation_euler = ik_shape_rotation_for_source(ikb, source_deform or fkb)
 
             if foot_rollb is not None:
@@ -2255,6 +2279,29 @@ def apply_control_shape(pbone: bpy.types.PoseBone, shape: bpy.types.Object, scal
     pbone.custom_shape_translation = translation
     pbone.custom_shape_rotation_euler = rotation
     pbone.use_custom_shape_bone_size = use_bone_size
+
+def fp_hand_ik_shape_transform(ik_bone: bpy.types.PoseBone, source_bone: bpy.types.PoseBone, bounds: tuple[Vector, Vector] | None, rig_shape_scale: float) -> tuple[Vector, Vector]:
+    fallback_length = max(ik_bone.length, source_bone.length, 0.01)
+    scale_multiplier = 0.5
+    fallback_scale = max(fallback_length * 1.8, rig_shape_scale * 0.8, 0.01) * scale_multiplier
+    fallback_translation = Vector((0.0, ik_bone.length, 0.0))
+    if bounds is None:
+        return Vector.Fill(3, fallback_scale), fallback_translation
+
+    min_co, max_co = bounds
+    dimensions = max_co - min_co
+    if max(dimensions.x, dimensions.y, dimensions.z) < 1e-6:
+        return Vector.Fill(3, fallback_scale), fallback_translation
+
+    native_width = max(max(co[0] for co in ik_shape_vert_coords) - min(co[0] for co in ik_shape_vert_coords), 1e-6)
+    native_height = max(max(co[1] for co in ik_shape_vert_coords) - min(co[1] for co in ik_shape_vert_coords), 1e-6)
+    scale = max(
+        dimensions.x / native_width,
+        dimensions.y / native_height,
+        dimensions.z / native_width,
+    ) * 1.2
+    scale = max(scale, fallback_scale / scale_multiplier) * scale_multiplier
+    return Vector.Fill(3, scale), (min_co + max_co) * 0.5
 
 def ik_shape_rotation_for_source(ik_bone: bpy.types.PoseBone, source_bone: bpy.types.PoseBone) -> Vector:
     if is_foot_ik_source_name(ik_bone.name):
