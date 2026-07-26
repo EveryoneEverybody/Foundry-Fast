@@ -576,19 +576,23 @@ def biped_weapon_source_items(_self, _context):
     ]
     weapon_paths = defaultdict(set)
 
-    with Tag(path=r"multiplayer\globals.multiplayer_object_type_list", tag_must_exist=True, raise_on_error=False) as mp_globals:
-        
-        object_types = mp_globals.tag.SelectField("object types")
-        types_count = object_types.Elements.Count
-        
-        for element in mp_globals.tag.SelectField("Block:weapons").Elements:
-            type_value = element.Fields[0].Value
-            if type_value > -1 and type_value < types_count:
-                type_element = object_types.Elements[type_value]
-                object_tag_path = type_element.Fields[2].Path
-                if mp_globals.path_exists(object_tag_path):
-                    folder = Path(object_tag_path.RelativePath).parent.parent
-                    weapon_paths[folder.name].add(object_tag_path.RelativePathWithExtension)
+    try:
+        with Tag(path=r"multiplayer\globals.multiplayer_object_type_list", tag_must_exist=True, raise_on_error=False) as mp_globals:
+            
+            object_types = mp_globals.tag.SelectField("object types")
+            types_count = object_types.Elements.Count
+            
+            for element in mp_globals.tag.SelectField("Block:weapons").Elements:
+                type_value = element.Fields[0].Value
+                if type_value > -1 and type_value < types_count:
+                    type_element = object_types.Elements[type_value]
+                    object_tag_path = type_element.Fields[2].Path
+                    if mp_globals.path_exists(object_tag_path):
+                        folder = Path(object_tag_path.RelativePath).parent.parent
+                        weapon_paths[folder.name].add(object_tag_path.RelativePathWithExtension)
+    except Exception:
+        biped_weapon_source_item_cache = items
+        return biped_weapon_source_item_cache
     
     for folder, paths in weapon_paths.items():
         items.append(("", folder, ""))
@@ -597,6 +601,21 @@ def biped_weapon_source_items(_self, _context):
 
     biped_weapon_source_item_cache = items
     return biped_weapon_source_item_cache
+
+IMPORT_OPERATOR_ENUM_DEFAULTS = {
+    "extracted_bitmap_format": "tiff",
+    "biped_weapon_source": BIPED_WEAPON_SOURCE_BIPED_TAG,
+    "tag_state": "default",
+    "tag_model_override_type": "none",
+    "decorator_lod": "1",
+    "import_fp_arms": "NONE",
+    "legacy_type": "auto",
+}
+
+def ensure_import_operator_enum_defaults(keywords):
+    for prop_name, default in IMPORT_OPERATOR_ENUM_DEFAULTS.items():
+        if keywords.get(prop_name) == "":
+            keywords[prop_name] = default
 
 ### Steps for adding a new file type ###
 ########################################
@@ -5340,6 +5359,7 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         if force_no_setup_as_asset:
             keywords["setup_as_asset"] = False
         keywords['files'] = [{'name': f.name} for f in self.files]
+        ensure_import_operator_enum_defaults(keywords)
         bpy.ops.nwo.foundry_import(**keywords)
         return {'FINISHED'}
     
