@@ -383,6 +383,9 @@ def draw_foundry_preferences(layout, prefs, context=None, show_save_button=False
     row = box.row(align=True)
     row.prop(prefs, "allow_tool_patches")
     row = box.row(align=True)
+    row.enabled = prefs.allow_tool_patches
+    row.prop(prefs, "patch_tool_node_depth_sort")
+    row = box.row(align=True)
     row.prop(prefs, "allow_foundation_plugin_install")
     row = box.row(align=True)
     row.prop(prefs, "granny_viewer_path")
@@ -537,6 +540,12 @@ class FoundryPreferences(AddonPreferences):
         name="Allow Tool Patches",
         description="Allow Foundry to patch tool.exe and tool_fast.exe. Disabling this means some features may be fail",
         default=True,
+    )
+
+    patch_tool_node_depth_sort: BoolProperty(
+        name="Ignore Node Depth Sort",
+        description="Patch Reach tool_fast.exe so render and animation nodes sort by Frame ID instead of hierarchy depth first",
+        default=False,
     )
     
     granny_viewer_path: StringProperty(

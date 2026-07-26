@@ -2831,6 +2831,8 @@ class ExportScene:
         tool_path = Path(self.project_root, utils.get_tool_type()).with_suffix(".exe")
         patcher = ToolPatcher(tool_path)
         if not self.corinth:
+            if self.asset_type.supports_animations:
+                patcher.reach_ignore_node_depth_sort()
             if self.asset_type == AssetType.SCENARIO:
                 patcher.reach_plane_builder()
         
