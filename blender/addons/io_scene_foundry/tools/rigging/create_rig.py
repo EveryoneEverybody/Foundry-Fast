@@ -25,11 +25,13 @@ from ...tools.rigging import (
     is_control_bone_name,
     is_finger_ik_chain_source_name,
     is_finger_ik_source_name,
+    is_hand_ik_source_name,
     look_control_name,
     look_child_of_constraint_name,
     misc_control_collection_name,
     neck_assist_constraint_name,
     needs_reach_fp_ik_fix,
+    pedestal_name,
     remove_empty_bone_collection,
     root_child_of_constraint_name,
     settings_control_collection_name,
@@ -418,9 +420,18 @@ def correct_baked_ik_target_actions(context, arm: bpy.types.Object, actions):
                 context.view_layer.update()
 
                 for _prop_name, fkb, ikb, ptb, chain in contexts:
-                    ikb.matrix = fkb.matrix.copy()
-                    pole_position = calculate_pose_pole_position(chain[0], chain[-2], fkb, ptb)
-                    set_pose_bone_matrix_translation(ptb, pole_position)
+                    reach_fp_hand_fix = uses_reach_fp_hand_ik_fix(arm, fkb)
+                    ik_matrix = ik_snap_target_matrix(fkb, ikb, remove_scale=reach_fp_hand_fix)
+                    if reach_fp_hand_fix:
+                        set_pose_bone_visual_matrix(context, arm, ikb, ik_matrix, keep_scale=False)
+                    else:
+                        ikb.matrix = ik_matrix
+
+                    pole_position = pose_pole_position_for_ik_context(arm, fkb, ptb, chain)
+                    if reach_fp_hand_fix:
+                        set_pose_bone_visual_matrix_translation(context, arm, ptb, pole_position, keep_scale=False)
+                    else:
+                        set_pose_bone_matrix_translation(ptb, pole_position)
                     keyframe_pose_bone_transform(ikb, frame)
                     keyframe_pose_bone_transform(ptb, frame)
 
@@ -569,10 +580,14 @@ def correct_baked_pole_target_actions(context, arm: bpy.types.Object, actions):
                 context.scene.frame_set(frame)
                 context.view_layer.update()
                 for fkb, ptb, chain in contexts:
-                    pole_position = calculate_pose_pole_position(chain[0], chain[-2], fkb, ptb)
-                    matrix = ptb.bone.matrix_local.copy()
-                    matrix.translation = pole_position
-                    ptb.matrix = matrix
+                    reach_fp_hand_fix = uses_reach_fp_hand_ik_fix(arm, fkb)
+                    pole_position = pose_pole_position_for_ik_context(arm, fkb, ptb, chain)
+                    if reach_fp_hand_fix:
+                        set_pose_bone_visual_matrix_translation(context, arm, ptb, pole_position, keep_scale=False)
+                    else:
+                        matrix = ptb.bone.matrix_local.copy()
+                        matrix.translation = pole_position
+                        ptb.matrix = matrix
                     keyframe_pose_bone_transform(ptb, frame)
 
             for _fkb, ptb, _chain in contexts:
@@ -957,14 +972,22 @@ def snap_ik_contexts_frame(
         context.view_layer.update()
         targets = []
         for fkb, _ikb, ptb, chain in contexts:
-            ik_matrix = ik_snap_target_matrix(fkb, _ikb)
-            pole_position = calculate_pose_pole_position(chain[0], chain[-2], fkb, ptb) if ptb is not None and len(chain) > 1 else None
-            targets.append((ik_matrix, pole_position))
+            reach_fp_hand_fix = uses_reach_fp_hand_ik_fix(arm, fkb)
+            ik_matrix = ik_snap_target_matrix(fkb, _ikb, remove_scale=reach_fp_hand_fix)
+            pole_position = pose_pole_position_for_ik_context(arm, fkb, ptb, chain) if ptb is not None and len(chain) > 1 else None
+            targets.append((ik_matrix, pole_position, reach_fp_hand_fix))
 
-        for (_fkb, ikb, ptb, _chain), (ik_matrix, pole_position) in zip(contexts, targets):
-            ikb.matrix = ik_matrix
+        for (_fkb, ikb, ptb, _chain), (ik_matrix, pole_position, reach_fp_hand_fix) in zip(contexts, targets):
+            if reach_fp_hand_fix:
+                set_pose_bone_visual_matrix(context, arm, ikb, ik_matrix, keep_scale=False)
+            else:
+                ikb.matrix = ik_matrix
+
             if ptb is not None and pole_position is not None:
-                set_pose_bone_matrix_translation(ptb, pole_position)
+                if reach_fp_hand_fix:
+                    set_pose_bone_visual_matrix_translation(context, arm, ptb, pole_position, keep_scale=False)
+                else:
+                    set_pose_bone_matrix_translation(ptb, pole_position)
         context.view_layer.update()
         set_settings_control_prop_value(settings_bone, prop_name, True)
         context.view_layer.update()
@@ -994,13 +1017,17 @@ def snap_ik_contexts_frame(
                 keyframe_pose_bone_transform(pbone, frame)
         keyframe_settings_prop(settings_bone, prop_name, frame)
 
-def ik_snap_target_matrix(fkb: bpy.types.PoseBone, ikb: bpy.types.PoseBone) -> Matrix:
+def ik_snap_target_matrix(fkb: bpy.types.PoseBone, ikb: bpy.types.PoseBone, remove_scale=False) -> Matrix:
     if is_finger_ik_source_name(fkb.name):
-        matrix = ikb.matrix.copy()
+        matrix = pose_matrix_without_scale(ikb.matrix) if remove_scale else ikb.matrix.copy()
         matrix.translation = fkb.tail.copy()
         return matrix
 
-    return fkb.matrix.copy()
+    return pose_matrix_without_scale(fkb.matrix) if remove_scale else fkb.matrix.copy()
+
+def pose_matrix_without_scale(matrix: Matrix) -> Matrix:
+    loc, rot, _scale = matrix.decompose()
+    return Matrix.LocRotScale(loc, rot, Vector((1.0, 1.0, 1.0)))
 
 def restore_pose_bone_matrices(
     context: bpy.types.Context,
@@ -1152,11 +1179,17 @@ def snap_ik_control_frame(
         set_settings_control_prop_value(settings_bone, prop_name, False)
         context.view_layer.update()
 
-        ik_matrix = ik_snap_target_matrix(fkb, ikb)
-        pole_position = calculate_pose_pole_position(chain[0], chain[-2], fkb, ptb) if len(chain) > 1 else fkb.head.copy()
+        arm = settings_bone.id_data
+        reach_fp_hand_fix = uses_reach_fp_hand_ik_fix(arm, fkb)
+        ik_matrix = ik_snap_target_matrix(fkb, ikb, remove_scale=reach_fp_hand_fix)
+        pole_position = pose_pole_position_for_ik_context(arm, fkb, ptb, chain) if len(chain) > 1 else fkb.head.copy()
 
-        ikb.matrix = ik_matrix
-        set_pose_bone_matrix_translation(ptb, pole_position)
+        if reach_fp_hand_fix:
+            set_pose_bone_visual_matrix(context, arm, ikb, ik_matrix, keep_scale=False)
+            set_pose_bone_visual_matrix_translation(context, arm, ptb, pole_position, keep_scale=False)
+        else:
+            ikb.matrix = ik_matrix
+            set_pose_bone_matrix_translation(ptb, pole_position)
         context.view_layer.update()
         set_settings_control_prop_value(settings_bone, prop_name, True)
         context.view_layer.update()
@@ -1352,6 +1385,90 @@ def calculate_pose_pole_position(root_bone: bpy.types.PoseBone, mid_bone: bpy.ty
     pole_dir.normalize()
     dist = max((b - a).length, (c - b).length) * distance_scale
     return b + pole_dir * dist
+
+def calculate_pose_lateral_pole_position(rig_root: bpy.types.PoseBone, root_bone: bpy.types.PoseBone, mid_bone: bpy.types.PoseBone, end_bone: bpy.types.PoseBone, distance_scale=1.25) -> Vector:
+    chain_axis = end_bone.head - root_bone.head
+    pole_dir = root_bone.head - rig_root.head
+
+    if chain_axis.length >= 1e-6:
+        chain_axis.normalize()
+        pole_dir -= chain_axis * pole_dir.dot(chain_axis)
+
+    if pole_dir.length < 1e-6:
+        return calculate_pose_pole_position(root_bone, mid_bone, end_bone, None, distance_scale)
+
+    pole_dir.normalize()
+    dist = max((mid_bone.head - root_bone.head).length, (end_bone.head - mid_bone.head).length) * distance_scale
+    return mid_bone.head + pole_dir * dist
+
+def pose_pedestal_bone(arm: bpy.types.Object) -> bpy.types.PoseBone | None:
+    for pbone in arm.pose.bones:
+        if pbone.name == pedestal_name or utils.remove_node_prefix(pbone.name).lower() == pedestal_name:
+            return pbone
+
+    return arm.pose.bones[0] if len(arm.pose.bones) else None
+
+def uses_reach_fp_hand_ik_fix(arm: bpy.types.Object | None, fkb: bpy.types.PoseBone) -> bool:
+    return (
+        arm is not None
+        and getattr(arm, "type", None) == 'ARMATURE'
+        and armature_needs_reach_fp_ik_fix(arm)
+        and is_hand_ik_source_name(fkb.name)
+    )
+
+def pose_pole_position_for_ik_context(arm: bpy.types.Object | None, fkb: bpy.types.PoseBone, pole_target: bpy.types.PoseBone | None, chain: list[bpy.types.PoseBone], distance_scale=1.25) -> Vector:
+    if len(chain) < 2:
+        return fkb.head.copy()
+
+    if uses_reach_fp_hand_ik_fix(arm, fkb):
+        rig_root = pose_pedestal_bone(arm)
+        if rig_root is not None:
+            return calculate_pose_lateral_pole_position(rig_root, chain[0], chain[-2], fkb, distance_scale)
+
+    return calculate_pose_pole_position(chain[0], chain[-2], fkb, pole_target, distance_scale)
+
+def active_armature_constraint_follow_targets(arm: bpy.types.Object | None, pbone: bpy.types.PoseBone) -> list[bpy.types.PoseBone]:
+    if arm is None:
+        return []
+
+    targets = []
+    for con in pbone.constraints:
+        if con.type != 'ARMATURE' or con.mute or abs(con.influence) < 1e-6:
+            continue
+
+        for target in con.targets:
+            if target.target != arm or abs(target.weight) < 1e-6:
+                continue
+
+            target_bone = arm.pose.bones.get(target.subtarget)
+            if target_bone is not None:
+                targets.append(target_bone)
+
+    return targets
+
+def compensate_matrix_for_active_armature_follow_targets(arm: bpy.types.Object | None, pbone: bpy.types.PoseBone, matrix: Matrix) -> Matrix:
+    compensated = matrix.copy()
+    for target_bone in active_armature_constraint_follow_targets(arm, pbone):
+        deform = target_bone.matrix @ target_bone.bone.matrix_local.inverted_safe()
+        compensated = deform.inverted_safe() @ compensated
+
+    return compensated
+
+def set_pose_bone_visual_matrix(context: bpy.types.Context, arm: bpy.types.Object | None, pbone: bpy.types.PoseBone, matrix: Matrix, keep_scale=True):
+    matrix = compensate_matrix_for_active_armature_follow_targets(arm, pbone, matrix)
+    if not keep_scale:
+        matrix = pose_matrix_without_scale(matrix)
+
+    pbone.matrix = matrix
+    if not keep_scale:
+        pbone.scale = (1.0, 1.0, 1.0)
+
+    context.view_layer.update()
+
+def set_pose_bone_visual_matrix_translation(context: bpy.types.Context, arm: bpy.types.Object | None, pbone: bpy.types.PoseBone, translation: Vector, keep_scale=True):
+    matrix = pbone.matrix.copy()
+    matrix.translation = translation
+    set_pose_bone_visual_matrix(context, arm, pbone, matrix, keep_scale=keep_scale)
 
 def set_pose_bone_matrix_translation(pbone: bpy.types.PoseBone, translation: Vector):
     matrix = pbone.matrix.copy()
