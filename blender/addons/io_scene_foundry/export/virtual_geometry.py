@@ -1,7 +1,6 @@
 '''Classes to store intermediate geometry data to be passed to granny files'''
 
 from collections import defaultdict
-import csv
 from ctypes import Array, Structure, c_char_p, c_float, c_int, POINTER, c_ubyte, c_void_p, cast, create_string_buffer, memmove, pointer, sizeof
 import logging
 from math import asin, atan2, degrees, inf, nextafter, pi, radians
@@ -249,14 +248,12 @@ def simplify_water_physics_mesh(mesh: bpy.types.Mesh, scene: 'VirtualScene') -> 
 
     print(f"--- Water physics simplification [{mesh.name}]: {before_triangles} -> {mesh_triangle_count(mesh)} triangles")
     
-def read_frame_id_list() -> list:
-    filepath = Path(utils.addon_root(), "export", "frameidlist.csv")
-    frame_ids = []
-    with filepath.open(mode="r") as csv_file:
-        csv_reader = csv.reader(csv_file, delimiter=",")
-        frame_ids = [row for row in csv_reader]
+def frame_id_from_index(index: int) -> tuple[int, int]:
+    # Tool sorts same-depth nodes by frame_ID1 and then frame_ID2, using signed longs.
+    if index < 0 or index >= 0x7FFFFFFE:
+        raise RuntimeError(f"Cannot generate a valid frame ID for node index {index}")
 
-    return frame_ids
+    return index + 1, 0
 
 class VirtualShotAnimation:
     def __init__(self, animation_name, granny_track_group, granny_animation, index: int, is_pca):
@@ -2385,8 +2382,6 @@ class VirtualSkeleton:
             root_bone_found = False
             bone_inverse_matrices = {}
             rotation_matrix = scene.rotation_matrix
-            frame_ids = scene.frame_ids
-            frame_ids_len = len(frame_ids)
             actor_node_order = None
             template_node_order = None
 
@@ -2397,19 +2392,22 @@ class VirtualSkeleton:
             else:
                 template_node_order = scene.template_node_order
 
-            requested_indices = {}
+            node_order = actor_node_order if actor_node_order is not None else template_node_order
+            append_index = len(node_order) if node_order else 0
+            requested_indices = []
             for idx, fb in enumerate(valid_bones):
-                if actor_node_order is not None:
-                    requested_index = actor_node_order.get(fb.name)
-                elif template_node_order is not None:
-                    requested_index = template_node_order.get(fb.name)
+                if node_order:
+                    requested_index = node_order.get(fb.name)
+                    if requested_index is None:
+                        requested_index = append_index
+                        append_index += 1
                 else:
-                    requested_index = None
+                    requested_index = idx
 
-                requested_indices[fb.name] = idx if requested_index is None else requested_index
+                requested_indices.append(requested_index)
 
             used_indices = set()
-            max_needed = max(requested_indices.values()) + len(valid_bones)
+            max_needed = max(requested_indices) + len(valid_bones) if requested_indices else 0
 
             free_indices = iter(i for i in range(max_needed))
             
@@ -2426,13 +2424,13 @@ class VirtualSkeleton:
             for idx, fb in enumerate(valid_bones):
                 b = VirtualBone(fb.bone, fb.name)
 
-                preferred = requested_indices[b.name]
+                preferred = requested_indices[idx]
                 frame_ids_index = allocate_index(preferred)
 
-                if frame_ids_index is None or frame_ids_index >= frame_ids_len:
-                    b.create_bone_props([0, 0])
+                if frame_ids_index is None:
+                    b.create_bone_props((0, 0))
                 else:
-                    b.create_bone_props(frame_ids[frame_ids_index])
+                    b.create_bone_props(frame_id_from_index(frame_ids_index))
                     
                 if fb.parent:
                     # Add one to this since the root is the armature
@@ -2586,7 +2584,6 @@ class VirtualScene:
         self.corinth = corinth
         self.export_info: ExportInfo = None
         self.valid_bones = []
-        self.frame_ids = read_frame_id_list()
         self.structure = set()
         self.design = set()
         self.bsps_with_structure = set()
