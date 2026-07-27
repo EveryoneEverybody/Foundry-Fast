@@ -316,7 +316,7 @@ def render_manifest(version: str, wheel_files: list[str]) -> str:
         "\n"
         'tags = ["Import-Export", "Pipeline"]\n'
         "\n"
-        'blender_version_min = "5.1.0"\n'
+        'blender_version_min = "5.2.0"\n'
         "\n"
         'license = ["SPDX:GPL-3.0-or-later"]\n'
         "\n"

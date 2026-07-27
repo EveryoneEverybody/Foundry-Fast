@@ -449,13 +449,10 @@ def _set_modifier_input(mod: bpy.types.NodesModifier, node_group: bpy.types.Node
     if identifier is None:
         return False
     
-    if bpy.app.version >= (5, 2, 0):
-        modifier_input = _modifier_property_input(mod, identifier)
-        if modifier_input is None:
-            return False
-        modifier_input.value = value
-    else:
-        mod[identifier] = value
+    modifier_input = _modifier_property_input(mod, identifier)
+    if modifier_input is None:
+        return False
+    modifier_input.value = value
     return True
 
 def _set_modifier_attribute_input(mod: bpy.types.NodesModifier, node_group: bpy.types.NodeTree, socket_name: str, attribute_name: str):
@@ -466,22 +463,12 @@ def _set_modifier_attribute_input(mod: bpy.types.NodesModifier, node_group: bpy.
     use_attribute_key = f"{identifier}_use_attribute"
     attribute_name_key = f"{identifier}_attribute_name"
     
-    if bpy.app.version >= (5, 2, 0):
-        modifier_input = _modifier_property_input(mod, identifier)
-        if modifier_input is None:
-            return False
-        if hasattr(modifier_input, "type"):
-            modifier_input.type = "ATTRIBUTE"
-        modifier_input.attribute_name = attribute_name
-    else:
-        modifier_keys = mod.keys()
-        if use_attribute_key in modifier_keys:
-            mod[use_attribute_key] = True
-        if attribute_name_key in modifier_keys:
-            mod[attribute_name_key] = attribute_name
-            return True
-        
-        mod[identifier] = attribute_name
+    modifier_input = _modifier_property_input(mod, identifier)
+    if modifier_input is None:
+        return False
+    if hasattr(modifier_input, "type"):
+        modifier_input.type = "ATTRIBUTE"
+    modifier_input.attribute_name = attribute_name
     return True
 
 def _add_decorator_cloud_instance_nodes(cloud: bpy.types.Object, source: bpy.types.Object):
@@ -492,14 +479,9 @@ def _add_decorator_cloud_instance_nodes(cloud: bpy.types.Object, source: bpy.typ
         return mod
     
     mod.node_group = group
-    if bpy.app.version >= (5, 2, 0):
-        _set_modifier_input(mod, group, "Instance On", "Points")
-        _set_modifier_input(mod, group, "Input Type", "Data-Block")
-        _set_modifier_input(mod, group, "Instance Type", "Object")
-    else:
-        _set_modifier_input(mod, group, "Instance On", 0)
-        _set_modifier_input(mod, group, "Input Type", 1)
-        _set_modifier_input(mod, group, "Instance Type", 0)
+    _set_modifier_input(mod, group, "Instance On", "Points")
+    _set_modifier_input(mod, group, "Input Type", "Data-Block")
+    _set_modifier_input(mod, group, "Instance Type", "Object")
     _set_modifier_input(mod, group, "Object", source)
     _set_modifier_input(mod, group, "Keep Surface", True)
     _set_modifier_input(mod, group, "Align Rotation", True)
