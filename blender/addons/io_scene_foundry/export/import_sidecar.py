@@ -110,7 +110,7 @@ class SidecarImport:
             with open(file, 'w+b') as f:
                 f.write(data)
                 
-    def run(self, empty_region_perms=set()):
+    def run(self, empty_region_perms=set(), tool_patches=None):
         # Run two imports if necessary
         # In the first we only build the render model tag
         # In the second we then build the physics and collision tags
@@ -121,25 +121,25 @@ class SidecarImport:
         
         if empty_import_relevant:
             print("\nImporting Render Geometry & Animation Only\n")
-            render_only_failed, render_only_failed_error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags(render_only=True)], self.export_settings.event_level)
+            render_only_failed, render_only_failed_error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags(render_only=True)], self.export_settings.event_level, tool_patches=tool_patches)
             
             with RenderModelTag() as render_model:
                 render_model.insert_empty_region_perms(empty_region_perms)
             
             if self.export_settings.export_collision or self.export_settings.export_physics:
                 print("\nImporting Collision & Physics Geometry Only\n")
-                self.import_failed, self.error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags(collision_physics_only=True)], self.export_settings.event_level)
+                self.import_failed, self.error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags(collision_physics_only=True)], self.export_settings.event_level, tool_patches=tool_patches)
             else:
                 self.import_failed = render_only_failed
                 self.error = render_only_failed_error
                 
             if render_only_failed:
                 print("\nImporting Render Geometry Only\nIf at first you don't succeed. Try, try, try again...\n")
-                render_only_failed, render_only_failed_error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags(render_only=True, no_animation=True)], self.export_settings.event_level)
+                render_only_failed, render_only_failed_error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags(render_only=True, no_animation=True)], self.export_settings.event_level, tool_patches=tool_patches)
                 self.import_failed = render_only_failed
                 self.error = render_only_failed_error
         else:
-            self.import_failed, self.error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags()], self.export_settings.event_level)
+            self.import_failed, self.error = utils.run_tool_sidecar(["import", self.sidecar_path, *self._get_import_flags()], self.export_settings.event_level, tool_patches=tool_patches)
         
     def _get_import_flags(self, render_only=False, collision_physics_only=False, no_animation=False):
         flags = []

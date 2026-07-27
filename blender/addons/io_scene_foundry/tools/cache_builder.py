@@ -293,9 +293,9 @@ class CacheBuilder:
         print("--- Generating wet mask for all BSPs")
         tool_path = Path(utils.get_project_path(), "tool.exe")
         patcher = ToolPatcher(tool_path)
-        patcher.reach_wetness_data()
+        tool_patches = patcher.reach_wetness_data(return_patches=True)
 
-        utils.run_tool(["wet-mask-generate", str(self.scenario), "all"], force_tool=True)
+        utils.run_tool(["wet-mask-generate", str(self.scenario), "all"], force_tool=True, tool_patches=tool_patches)
     
     def imposters(self):
         print("\n--- Generating imposters. This will launch TagTest")

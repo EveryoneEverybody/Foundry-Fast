@@ -14,9 +14,9 @@ def generate_wetness(scenario_path, bsp="all"):
     
     tool_path = Path(utils.get_project_path(), "tool.exe")
     patcher = ToolPatcher(tool_path)
-    patcher.reach_wetness_data()
+    tool_patches = patcher.reach_wetness_data(return_patches=True)
 
-    utils.run_tool(["wet-mask-generate", scenario_path, bsp], force_tool=True)
+    utils.run_tool(["wet-mask-generate", scenario_path, bsp], force_tool=True, tool_patches=tool_patches)
 
 class NWO_OT_GenerateWetnessData(bpy.types.Operator):
     bl_idname = "nwo.generate_wetness_data"

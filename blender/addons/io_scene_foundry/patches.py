@@ -4,7 +4,7 @@ import bpy
 class ToolPatcher:
     def __init__(self, tool_path: str | Path):
         self.tool_path = str(tool_path)
-        
+
     def _normalise_patch_args(self, offsets: list[int] | int, patches: list[bytes] | bytes, originals: list[bytes] | bytes):
         if not isinstance(offsets, list):
             offsets = [offsets]
@@ -18,13 +18,22 @@ class ToolPatcher:
         assert len(offsets) == len(patches) == len(originals)
         return offsets, patches, originals
 
+    def _patch_records(self, offsets: list[int] | int, patches: list[bytes] | bytes, originals: list[bytes] | bytes):
+        offsets, patches, originals = self._normalise_patch_args(offsets, patches, originals)
+        return list(zip(offsets, patches, originals))
+
+    def _enabled_patch_records(self, offsets: list[int] | int, patches: list[bytes] | bytes, originals: list[bytes] | bytes, enabled: bool):
+        if not bpy.context.preferences.addons[__package__].preferences.allow_tool_patches or not enabled:
+            return []
+        return self._patch_records(offsets, patches, originals)
+
     def _patch(self, offsets: list[int] | int, patches: list[bytes] | bytes, originals: list[bytes] | bytes):
         self._toggle_patch(offsets, patches, originals, True)
 
     def _toggle_patch(self, offsets: list[int] | int, patches: list[bytes] | bytes, originals: list[bytes] | bytes, enabled: bool):
         try:
             if not bpy.context.preferences.addons[__package__].preferences.allow_tool_patches:
-                return
+                enabled = False
 
             offsets, patches, originals = self._normalise_patch_args(offsets, patches, originals)
 
@@ -40,8 +49,8 @@ class ToolPatcher:
                         f.write(replacement)
         except:
             print("Failed to patch Tool")
-        
-    def reach_lightmap_color(self): 
+
+    def reach_lightmap_color(self, return_patches=False):
         original0 = b"\xE8\x4D\x54\x29\x00"
         original1 = b"\xE8\x37\x54\x29\x00"
         original2 = b"\xE8\x1C\x54\x29\x00"
@@ -55,37 +64,53 @@ class ToolPatcher:
         address3 = 0xF2A88
         address4 = 0xF2A9E
         address5 = 0xF2AB9
-            
-        self._patch([address0, address1, address2, address3, address4, address5], patch, [original0, original1, original2, original3, original4, original5])
-        
-    def reach_plane_builder(self):
+        addresses = [address0, address1, address2, address3, address4, address5]
+        originals = [original0, original1, original2, original3, original4, original5]
+
+        if return_patches:
+            return self._enabled_patch_records(addresses, patch, originals, True)
+
+        self._patch(addresses, patch, originals)
+
+    def reach_plane_builder(self, enabled=True, return_patches=False):
         patch = b"\xEB"
         if self.tool_path.lower().endswith("_fast.exe"):
             addresses = [0x19A775, 0x19A789, 0x19A79A, 0x1A0C86]
-            originals = [b"\x77", b"\x77", b"\x77", b"\x73"]
+            originals = [b"\x75", b"\x75", b"\x75", b"\x73"]
         else:
             addresses = [0x220CE5, 0x220D55, 0x220DBB]
             originals = b"\x77"
-            
-        self._patch(addresses, patch, originals)
-        
-    def reach_wetness_data(self):
+
+        if return_patches:
+            return self._enabled_patch_records(addresses, patch, originals, enabled)
+
+        self._toggle_patch(addresses, patch, originals, enabled)
+
+    def reach_wetness_data(self, return_patches=False):
         original0 = b"\x74"
         patch0 = b"\xEB"
         original1 = b"\x25"
         patch1 = b"\x10"
         if self.tool_path.lower().endswith("_fast.exe"):
-            return
+            return [] if return_patches else None
         else:
             address0 = 0xB04F12
             address1 = 0x382557
-            
-        self._patch([address0, address1], [patch0, patch1], [original0, original1])
+        addresses = [address0, address1]
+        patches = [patch0, patch1]
+        originals = [original0, original1]
 
-    def reach_ignore_node_depth_sort(self):
+        if return_patches:
+            return self._enabled_patch_records(addresses, patches, originals, True)
+
+        self._patch(addresses, patches, originals)
+
+    def reach_ignore_node_depth_sort(self, enabled=None, return_patches=False):
         prefs = bpy.context.preferences.addons[__package__].preferences
+        if enabled is None:
+            enabled = prefs.patch_tool_node_depth_sort
         if not self.tool_path.lower().endswith("_fast.exe"):
-            return
+            return [] if return_patches else None
 
         # Reach tool_fast.exe node comparators. These patches skip the depth
         # early-outs so node sorting falls through to frame ID, then name.
@@ -97,9 +122,65 @@ class ToolPatcher:
         animation_original = b"\x8B\x41\x18\x2B\x42\x18\x75\x49\x8B\x81\xF8\x01\x00\x00\x2B\x82"
         animation_patch = b"\x8B\x41\x18\x2B\x42\x18\x90\x90\x8B\x81\xF8\x01\x00\x00\x2B\x82"
 
+        if return_patches:
+            return self._enabled_patch_records(
+                [render_address, animation_address],
+                [render_patch, animation_patch],
+                [render_original, animation_original],
+                enabled,
+            )
+
         self._toggle_patch(
             [render_address, animation_address],
             [render_patch, animation_patch],
             [render_original, animation_original],
-            prefs.patch_tool_node_depth_sort,
+            enabled,
         )
+
+    def reach_uncompressed_vertex_weights(self, enabled=None, return_patches=False):
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        if enabled is None:
+            enabled = prefs.patch_tool_uncompressed_vertex_weights
+        if self.tool_path.lower().endswith("_fast.exe"):
+            address = 0x21FB7F
+            original = b"\x0F\x8E\x5E\x03\x00\x00"
+            patch = b"\x48\xE9\x5E\x03\x00\x00"
+        else:
+            address = 0x2B8E6D
+            original = b"\x0F\x8E\x80\x03\x00\x00"
+            patch = b"\x48\xE9\x80\x03\x00\x00"
+
+        if return_patches:
+            return self._enabled_patch_records(address, patch, original, enabled)
+
+        self._toggle_patch(address, patch, original, enabled)
+
+    def reach_skip_vertex_compression(self, enabled=None, return_patches=False):
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        if enabled is None:
+            enabled = prefs.patch_tool_skip_vertex_compression
+        if self.tool_path.lower().endswith("_fast.exe"):
+            addresses = [0x1B50D0, 0x15D9AD]
+            originals = [
+                b"\x0F\x8E\x74\x05\x00\x00",
+                b"\x0F\x8E\xCE\x06\x00\x00",
+            ]
+            patches = [
+                b"\x48\xE9\x74\x05\x00\x00",
+                b"\x48\xE9\xCE\x06\x00\x00",
+            ]
+        else:
+            addresses = [0x2395EC, 0x1E69FD]
+            originals = [
+                b"\x0F\x8E\x73\x04\x00\x00",
+                b"\x0F\x8E\xD1\x06\x00\x00",
+            ]
+            patches = [
+                b"\x48\xE9\x73\x04\x00\x00",
+                b"\x48\xE9\xD1\x06\x00\x00",
+            ]
+
+        if return_patches:
+            return self._enabled_patch_records(addresses, patches, originals, enabled)
+
+        self._toggle_patch(addresses, patches, originals, enabled)

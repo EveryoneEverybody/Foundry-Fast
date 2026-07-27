@@ -182,6 +182,7 @@ class LightMapper:
         self.light_group = lightmap_region.lower()
         self.thread_count = cpu_threads
         self.bsps = structure_bsps
+        self.tool_patches = []
 
     def bsp_to_lightmap(self, lightmap_all_bsps, lightmap_specific_bsp):
         bsp = "all"
@@ -205,6 +206,8 @@ class LightMapper:
         self.lightmap_message = message
 
     def run_tool_or_abort(self, tool_args, stage, **kwargs):
+        if self.tool_patches and "tool_patches" not in kwargs:
+            kwargs["tool_patches"] = self.tool_patches
         try:
             utils.run_tool(tool_args, **kwargs)
         except CalledProcessError as error:
@@ -227,7 +230,8 @@ class LightMapper:
                     ],
                     True,
                     log_file=log,
-                    force_tool_fast=True)
+                    force_tool_fast=True,
+                    tool_patches=self.tool_patches)
             print(f"--- Spawned Process {thread_index}")
             return (p, log_filename)
 
@@ -272,7 +276,7 @@ class LightMapper:
         
         tool_path = Path(utils.get_project_path(), "tool_fast.exe")
         patcher = ToolPatcher(tool_path)
-        patcher.reach_lightmap_color()
+        self.tool_patches = patcher.reach_lightmap_color(return_patches=True)
 
         print("\n\nFaux Data Sync")
         print(

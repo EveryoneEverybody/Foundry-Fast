@@ -2775,13 +2775,30 @@ class ExportScene:
                 or self.scene_settings.node_usage_weapon_ik
                 )
     
+    def _memory_tool_patches(self):
+        if self.corinth:
+            return []
+
+        tool_path = Path(self.project_root, utils.get_tool_type()).with_suffix(".exe")
+        patcher = ToolPatcher(tool_path)
+        tool_patches = []
+        tool_patches.extend(patcher.reach_uncompressed_vertex_weights(return_patches=True))
+        tool_patches.extend(patcher.reach_skip_vertex_compression(return_patches=True))
+        if self.asset_type.supports_animations:
+            tool_patches.extend(patcher.reach_ignore_node_depth_sort(return_patches=True))
+        if self.asset_type == AssetType.SCENARIO:
+            tool_patches.extend(patcher.reach_plane_builder(return_patches=True))
+
+        return tool_patches
+
     def tool_import_simple(self, sidecar_path):
         import_failed, error = utils.run_tool_sidecar(
             [
                 "import",
                 sidecar_path,
             ],
-            self.export_settings.event_level
+            self.export_settings.event_level,
+            tool_patches=self._memory_tool_patches(),
         )
         
         if import_failed:
@@ -2827,20 +2844,13 @@ class ExportScene:
             sidecar_importer.save_lighting_infos()
         sidecar_importer.setup_templates()
         
-        # Patcher
-        tool_path = Path(self.project_root, utils.get_tool_type()).with_suffix(".exe")
-        patcher = ToolPatcher(tool_path)
-        if not self.corinth:
-            if self.asset_type.supports_animations:
-                patcher.reach_ignore_node_depth_sort()
-            if self.asset_type == AssetType.SCENARIO:
-                patcher.reach_plane_builder()
+        memory_tool_patches = self._memory_tool_patches()
         
         if may_need_empty_region_perms:
             # Only needed for H4+ since Reach is chill with coll/phys only region permutations
-            sidecar_importer.run(empty_region_perms)
+            sidecar_importer.run(empty_region_perms, tool_patches=memory_tool_patches)
         else:
-            sidecar_importer.run()
+            sidecar_importer.run(tool_patches=memory_tool_patches)
         if sidecar_importer.lighting_infos:
             sidecar_importer.restore_lighting_infos()
             

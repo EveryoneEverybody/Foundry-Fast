@@ -10,6 +10,7 @@ from pathlib import Path, PureWindowsPath
 import re
 import shutil
 import subprocess
+import struct
 import sys
 import tempfile
 import time
@@ -25,7 +26,7 @@ import os
 import random
 import xml.etree.ElementTree as ET
 import numpy as np
-from ctypes import c_float, c_int
+from ctypes import c_float, c_int, wintypes
 from subprocess import Popen, check_call, PIPE
 import threading
 import queue
@@ -482,16 +483,19 @@ def set_tool_event_level(event_level):
     except:
         print("Unable to replace bonobo_init.txt to set event level. It is currently read only")
 
-def run_tool(tool_args: list, in_background=False, null_output=False, event_level=None, force_tool=False, log_file=None, force_tool_fast=False):
+def run_tool(tool_args: list, in_background=False, null_output=False, event_level=None, force_tool=False, log_file=None, force_tool_fast=False, tool_patches=None):
     """Runs Tool using the specified function and arguments. Do not include 'tool' in the args passed"""
-    os.chdir(get_project_path())
+    project_dir = get_project_path()
+    os.chdir(project_dir)
     if force_tool:
-        command = f"""tool {' '.join(f'"{arg}"' for arg in tool_args)}"""
+        tool_type = "tool"
     elif force_tool_fast:
-        command = f"""tool_fast {' '.join(f'"{arg}"' for arg in tool_args)}"""
+        tool_type = "tool_fast"
     else:
-        command = f"""{get_tool_type()} {' '.join(f'"{arg}"' for arg in tool_args)}"""
-    # print(command)
+        tool_type = get_tool_type()
+
+    command = [str(Path(project_dir, tool_type).with_suffix(".exe")), *[str(arg) for arg in tool_args]]
+    # print(subprocess.list2cmdline(command))
     
     log_warnings = event_level == 'LOG'
     tmp_log = None
@@ -502,32 +506,464 @@ def run_tool(tool_args: list, in_background=False, null_output=False, event_leve
     
     if in_background:
         if log_file:
-            return Popen(command, stdout=log_file, stderr=log_file)
+            return _popen_tool(command, project_dir, stdout=log_file, stderr=log_file, tool_patches=tool_patches)
         elif null_output:
-            return Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return _popen_tool(command, project_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, tool_patches=tool_patches)
         elif log_warnings:
-            return Popen(command, stderr=str(tmp_log))
+            file = open(tmp_log, "w")
+            try:
+                return _popen_tool(command, project_dir, stderr=file, tool_patches=tool_patches)
+            finally:
+                file.close()
         else:
-            return Popen(command)  # ,stderr=PIPE)
+            return _popen_tool(command, project_dir, tool_patches=tool_patches)
     else:
         if null_output:
-            return check_call(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return _check_call_tool(command, project_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, tool_patches=tool_patches)
         elif log_warnings:
             with open(tmp_log, "w") as file:
-                result = check_call(command, stderr=file)
+                result = _check_call_tool(command, project_dir, stderr=file, tool_patches=tool_patches)
                 
             if tmp_log.exists() and os.path.getsize(tmp_log) > 0:
                 os.startfile(tmp_log)
             return result
         else:
-            return check_call(command)  # ,stderr=PIPE)
+            return _check_call_tool(command, project_dir, tool_patches=tool_patches)
+
+
+def _check_call_tool(command, cwd, stdout=None, stderr=None, tool_patches=None):
+    process = _popen_tool(command, cwd, stdout=stdout, stderr=stderr, tool_patches=tool_patches)
+    returncode = process.wait()
+    if returncode:
+        raise subprocess.CalledProcessError(returncode, command)
+    return 0
         
 def _stderr_reader(pipe, q):
     for line in iter(pipe.readline, b''):
         q.put(line)
     q.put(None)
 
-def run_tool_sidecar(tool_args: list, event_level='WARNING'):
+class _ToolMemoryPatchError(RuntimeError):
+    pass
+
+
+_CREATE_SUSPENDED = 0x00000004
+_DUPLICATE_SAME_ACCESS = 0x00000002
+_HANDLE_FLAG_INHERIT = 0x00000001
+_INFINITE = 0xFFFFFFFF
+_INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+_PAGE_EXECUTE_READWRITE = 0x40
+_STARTF_USESTDHANDLES = 0x00000100
+_STD_INPUT_HANDLE = -10
+_STD_OUTPUT_HANDLE = -11
+_STD_ERROR_HANDLE = -12
+_STILL_ACTIVE = 259
+_WAIT_FAILED = 0xFFFFFFFF
+_WAIT_TIMEOUT = 0x00000102
+
+_windows_kernel32 = None
+_windows_ntdll = None
+
+
+class _SECURITY_ATTRIBUTES(ctypes.Structure):
+    _fields_ = [
+        ("nLength", wintypes.DWORD),
+        ("lpSecurityDescriptor", ctypes.c_void_p),
+        ("bInheritHandle", wintypes.BOOL),
+    ]
+
+
+class _STARTUPINFO(ctypes.Structure):
+    _fields_ = [
+        ("cb", wintypes.DWORD),
+        ("lpReserved", wintypes.LPWSTR),
+        ("lpDesktop", wintypes.LPWSTR),
+        ("lpTitle", wintypes.LPWSTR),
+        ("dwX", wintypes.DWORD),
+        ("dwY", wintypes.DWORD),
+        ("dwXSize", wintypes.DWORD),
+        ("dwYSize", wintypes.DWORD),
+        ("dwXCountChars", wintypes.DWORD),
+        ("dwYCountChars", wintypes.DWORD),
+        ("dwFillAttribute", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("wShowWindow", wintypes.WORD),
+        ("cbReserved2", wintypes.WORD),
+        ("lpReserved2", ctypes.c_void_p),
+        ("hStdInput", wintypes.HANDLE),
+        ("hStdOutput", wintypes.HANDLE),
+        ("hStdError", wintypes.HANDLE),
+    ]
+
+
+class _PROCESS_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("hProcess", wintypes.HANDLE),
+        ("hThread", wintypes.HANDLE),
+        ("dwProcessId", wintypes.DWORD),
+        ("dwThreadId", wintypes.DWORD),
+    ]
+
+
+class _PROCESS_BASIC_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("Reserved1", ctypes.c_void_p),
+        ("PebBaseAddress", ctypes.c_void_p),
+        ("Reserved2_0", ctypes.c_void_p),
+        ("Reserved2_1", ctypes.c_void_p),
+        ("UniqueProcessId", ctypes.c_void_p),
+        ("Reserved3", ctypes.c_void_p),
+    ]
+
+
+class _PatchedToolProcess:
+    def __init__(self, process_handle, pid, stdout_file=None, stderr_file=None):
+        self._process_handle = process_handle
+        self.pid = pid
+        self.stdout = stdout_file
+        self.stderr = stderr_file
+        self.returncode = None
+
+    def poll(self):
+        if self.returncode is not None:
+            return self.returncode
+
+        kernel32, _ntdll = _windows_patch_api()
+        code = wintypes.DWORD()
+        _check_windows_call(kernel32.GetExitCodeProcess(self._process_handle, ctypes.byref(code)))
+        if code.value == _STILL_ACTIVE:
+            return None
+
+        self.returncode = code.value
+        return self.returncode
+
+    def wait(self, timeout=None):
+        kernel32, _ntdll = _windows_patch_api()
+        milliseconds = _INFINITE if timeout is None else max(0, int(timeout * 1000))
+        result = kernel32.WaitForSingleObject(self._process_handle, milliseconds)
+        if result == _WAIT_TIMEOUT:
+            raise subprocess.TimeoutExpired(self.pid, timeout)
+        if result == _WAIT_FAILED:
+            raise ctypes.WinError(ctypes.get_last_error())
+        return self.poll()
+
+    def kill(self):
+        kernel32, _ntdll = _windows_patch_api()
+        kernel32.TerminateProcess(self._process_handle, 1)
+        self.returncode = 1
+
+    def __del__(self):
+        try:
+            if self.stdout is not None:
+                self.stdout.close()
+            if self.stderr is not None:
+                self.stderr.close()
+        except Exception:
+            pass
+        try:
+            if self._process_handle:
+                kernel32, _ntdll = _windows_patch_api()
+                kernel32.CloseHandle(self._process_handle)
+                self._process_handle = None
+        except Exception:
+            pass
+
+
+def _windows_patch_api():
+    global _windows_kernel32, _windows_ntdll
+    if _windows_kernel32 is None:
+        _windows_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        _windows_ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
+        kernel32 = _windows_kernel32
+        ntdll = _windows_ntdll
+
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CreatePipe.argtypes = [ctypes.POINTER(wintypes.HANDLE), ctypes.POINTER(wintypes.HANDLE), ctypes.POINTER(_SECURITY_ATTRIBUTES), wintypes.DWORD]
+        kernel32.CreatePipe.restype = wintypes.BOOL
+        kernel32.CreateProcessW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, ctypes.c_void_p, ctypes.c_void_p, wintypes.BOOL, wintypes.DWORD, ctypes.c_void_p, wintypes.LPCWSTR, ctypes.POINTER(_STARTUPINFO), ctypes.POINTER(_PROCESS_INFORMATION)]
+        kernel32.CreateProcessW.restype = wintypes.BOOL
+        kernel32.DuplicateHandle.argtypes = [wintypes.HANDLE, wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.HANDLE), wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.DuplicateHandle.restype = wintypes.BOOL
+        kernel32.FlushInstructionCache.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t]
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        kernel32.GetStdHandle.argtypes = [wintypes.DWORD]
+        kernel32.GetStdHandle.restype = wintypes.HANDLE
+        kernel32.ReadProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+        kernel32.ReadProcessMemory.restype = wintypes.BOOL
+        kernel32.ResumeThread.argtypes = [wintypes.HANDLE]
+        kernel32.ResumeThread.restype = wintypes.DWORD
+        kernel32.SetHandleInformation.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD]
+        kernel32.SetHandleInformation.restype = wintypes.BOOL
+        kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        kernel32.TerminateProcess.restype = wintypes.BOOL
+        kernel32.VirtualProtectEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.VirtualProtectEx.restype = wintypes.BOOL
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.WriteProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+        kernel32.WriteProcessMemory.restype = wintypes.BOOL
+        ntdll.NtQueryInformationProcess.argtypes = [wintypes.HANDLE, wintypes.ULONG, ctypes.c_void_p, wintypes.ULONG, ctypes.POINTER(wintypes.ULONG)]
+        ntdll.NtQueryInformationProcess.restype = wintypes.LONG
+
+    return _windows_kernel32, _windows_ntdll
+
+
+def _check_windows_call(result):
+    if not result:
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _popen_tool(command, cwd, stdout=None, stderr=None, tool_patches=None):
+    if tool_patches and os.name == "nt":
+        return _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches)
+
+    return Popen(command, stdout=stdout, stderr=stderr, cwd=cwd)
+
+
+def _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches):
+    kernel32, _ntdll = _windows_patch_api()
+    startup = _STARTUPINFO()
+    startup.cb = ctypes.sizeof(startup)
+    process_info = _PROCESS_INFORMATION()
+    stdout_file = None
+    stderr_file = None
+    handles_to_close = []
+    files_to_close = []
+    inherit_handles = False
+
+    try:
+        if stdout is not None or stderr is not None:
+            inherit_handles = True
+            startup.dwFlags |= _STARTF_USESTDHANDLES
+            startup.hStdInput = _stdio_child_handle(None, _STD_INPUT_HANDLE, "rb", handles_to_close, files_to_close)[0]
+            startup.hStdOutput, stdout_file = _stdio_child_handle(stdout, _STD_OUTPUT_HANDLE, "wb", handles_to_close, files_to_close)
+            startup.hStdError, stderr_file = _stdio_child_handle(stderr, _STD_ERROR_HANDLE, "wb", handles_to_close, files_to_close)
+
+        command_line = subprocess.list2cmdline([str(arg) for arg in command])
+        command_line_buffer = ctypes.create_unicode_buffer(command_line)
+        _check_windows_call(kernel32.CreateProcessW(
+            str(command[0]),
+            command_line_buffer,
+            None,
+            None,
+            inherit_handles,
+            _CREATE_SUSPENDED,
+            None,
+            str(cwd),
+            ctypes.byref(startup),
+            ctypes.byref(process_info),
+        ))
+    except Exception:
+        for handle in handles_to_close:
+            if handle:
+                kernel32.CloseHandle(handle)
+        for file in files_to_close:
+            file.close()
+        if stdout_file is not None:
+            stdout_file.close()
+        if stderr_file is not None:
+            stderr_file.close()
+        raise
+
+    for handle in handles_to_close:
+        if handle:
+            kernel32.CloseHandle(handle)
+    for file in files_to_close:
+        file.close()
+
+    try:
+        _apply_tool_memory_patches(process_info.hProcess, Path(command[0]), tool_patches)
+        if kernel32.ResumeThread(process_info.hThread) == 0xFFFFFFFF:
+            raise ctypes.WinError(ctypes.get_last_error())
+    except Exception as e:
+        kernel32.TerminateProcess(process_info.hProcess, 1)
+        kernel32.CloseHandle(process_info.hThread)
+        kernel32.CloseHandle(process_info.hProcess)
+        if stdout_file is not None:
+            stdout_file.close()
+        if stderr_file is not None:
+            stderr_file.close()
+        if isinstance(e, _ToolMemoryPatchError):
+            raise
+        raise _ToolMemoryPatchError(f"Failed to apply in-memory Reach Tool patch: {e}") from e
+
+    kernel32.CloseHandle(process_info.hThread)
+    return _PatchedToolProcess(process_info.hProcess, process_info.dwProcessId, stdout_file, stderr_file)
+
+
+def _stdio_child_handle(stream, std_handle_id, devnull_mode, handles_to_close, files_to_close):
+    import msvcrt
+
+    kernel32, _ntdll = _windows_patch_api()
+    if stream is subprocess.PIPE:
+        read_pipe = wintypes.HANDLE()
+        write_pipe = wintypes.HANDLE()
+        security = _SECURITY_ATTRIBUTES()
+        security.nLength = ctypes.sizeof(security)
+        security.bInheritHandle = True
+        _check_windows_call(kernel32.CreatePipe(ctypes.byref(read_pipe), ctypes.byref(write_pipe), ctypes.byref(security), 0))
+        _check_windows_call(kernel32.SetHandleInformation(read_pipe, _HANDLE_FLAG_INHERIT, 0))
+        fd = msvcrt.open_osfhandle(read_pipe.value, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        handles_to_close.append(write_pipe)
+        return write_pipe, os.fdopen(fd, "rb", buffering=0)
+
+    if stream is subprocess.DEVNULL:
+        file = open(os.devnull, devnull_mode)
+        files_to_close.append(file)
+        handle = _duplicate_inheritable_handle(msvcrt.get_osfhandle(file.fileno()))
+        handles_to_close.append(handle)
+        return handle, None
+
+    if stream is not None:
+        handle = _duplicate_inheritable_handle(msvcrt.get_osfhandle(stream.fileno()))
+        handles_to_close.append(handle)
+        return handle, None
+
+    std_handle = kernel32.GetStdHandle(std_handle_id)
+    if std_handle and std_handle != _INVALID_HANDLE_VALUE:
+        handle = _duplicate_inheritable_handle(std_handle)
+        handles_to_close.append(handle)
+        return handle, None
+
+    file = open(os.devnull, devnull_mode)
+    files_to_close.append(file)
+    handle = _duplicate_inheritable_handle(msvcrt.get_osfhandle(file.fileno()))
+    handles_to_close.append(handle)
+    return handle, None
+
+
+def _duplicate_inheritable_handle(handle):
+    kernel32, _ntdll = _windows_patch_api()
+    if not handle or handle == _INVALID_HANDLE_VALUE:
+        return wintypes.HANDLE()
+
+    current_process = kernel32.GetCurrentProcess()
+    duplicate = wintypes.HANDLE()
+    _check_windows_call(kernel32.DuplicateHandle(
+        current_process,
+        handle,
+        current_process,
+        ctypes.byref(duplicate),
+        0,
+        True,
+        _DUPLICATE_SAME_ACCESS,
+    ))
+    return duplicate
+
+
+def _apply_tool_memory_patches(process_handle, tool_path: Path, tool_patches):
+    image_base = _get_remote_image_base(process_handle)
+    sections = _read_pe_sections(tool_path)
+    for offset, patch, original in tool_patches:
+        _write_tool_memory_patch(process_handle, image_base, sections, offset, patch, original)
+
+
+def _get_remote_image_base(process_handle):
+    kernel32, ntdll = _windows_patch_api()
+    process_info = _PROCESS_BASIC_INFORMATION()
+    returned_length = wintypes.ULONG()
+    status = ntdll.NtQueryInformationProcess(
+        process_handle,
+        0,
+        ctypes.byref(process_info),
+        ctypes.sizeof(process_info),
+        ctypes.byref(returned_length),
+    )
+    if status != 0:
+        raise _ToolMemoryPatchError(f"Failed to query Tool process information: 0x{status & 0xffffffff:X}")
+
+    image_base = ctypes.c_void_p()
+    bytes_read = ctypes.c_size_t()
+    image_base_offset = 0x10 if ctypes.sizeof(ctypes.c_void_p) == 8 else 0x08
+    _check_windows_call(kernel32.ReadProcessMemory(
+        process_handle,
+        ctypes.c_void_p((process_info.PebBaseAddress or 0) + image_base_offset),
+        ctypes.byref(image_base),
+        ctypes.sizeof(image_base),
+        ctypes.byref(bytes_read),
+    ))
+    return image_base.value
+
+
+def _read_pe_sections(tool_path: Path):
+    data = tool_path.read_bytes()
+    pe_offset = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe_offset:pe_offset + 4] != b"PE\0\0":
+        raise _ToolMemoryPatchError(f"Tool executable is not a valid PE file: {tool_path}")
+
+    section_count = struct.unpack_from("<H", data, pe_offset + 6)[0]
+    optional_header_size = struct.unpack_from("<H", data, pe_offset + 20)[0]
+    section_table_offset = pe_offset + 24 + optional_header_size
+    sections = []
+    for section_index in range(section_count):
+        section_offset = section_table_offset + section_index * 40
+        virtual_size, virtual_address, raw_size, raw_pointer = struct.unpack_from("<IIII", data, section_offset + 8)
+        sections.append((raw_pointer, raw_size, virtual_address, virtual_size))
+
+    return sections
+
+
+def _file_offset_to_rva(sections, offset):
+    for raw_pointer, raw_size, virtual_address, _virtual_size in sections:
+        if raw_pointer <= offset < raw_pointer + raw_size:
+            return virtual_address + (offset - raw_pointer)
+
+    raise _ToolMemoryPatchError(f"Tool patch offset 0x{offset:X} is not in a PE section")
+
+
+def _write_tool_memory_patch(process_handle, image_base, sections, offset, patch, original):
+    kernel32, _ntdll = _windows_patch_api()
+    assert len(patch) == len(original)
+    address = image_base + _file_offset_to_rva(sections, offset)
+    current_buffer = (ctypes.c_ubyte * len(original))()
+    bytes_read = ctypes.c_size_t()
+    _check_windows_call(kernel32.ReadProcessMemory(
+        process_handle,
+        ctypes.c_void_p(address),
+        current_buffer,
+        len(original),
+        ctypes.byref(bytes_read),
+    ))
+    current = bytes(current_buffer)
+    if current == patch:
+        return
+    if current != original:
+        raise _ToolMemoryPatchError(
+            f"Tool memory patch at 0x{offset:X} expected {original.hex(' ')} but found {current.hex(' ')}"
+        )
+
+    old_protect = wintypes.DWORD()
+    _check_windows_call(kernel32.VirtualProtectEx(
+        process_handle,
+        ctypes.c_void_p(address),
+        len(patch),
+        _PAGE_EXECUTE_READWRITE,
+        ctypes.byref(old_protect),
+    ))
+    try:
+        patch_buffer = (ctypes.c_ubyte * len(patch)).from_buffer_copy(patch)
+        bytes_written = ctypes.c_size_t()
+        _check_windows_call(kernel32.WriteProcessMemory(
+            process_handle,
+            ctypes.c_void_p(address),
+            patch_buffer,
+            len(patch),
+            ctypes.byref(bytes_written),
+        ))
+        kernel32.FlushInstructionCache(process_handle, ctypes.c_void_p(address), len(patch))
+    finally:
+        restored_protect = wintypes.DWORD()
+        kernel32.VirtualProtectEx(
+            process_handle,
+            ctypes.c_void_p(address),
+            len(patch),
+            old_protect.value,
+            ctypes.byref(restored_protect),
+        )
+
+def run_tool_sidecar(tool_args: list, event_level='WARNING', tool_patches=None):
     """Runs Tool using the specified function and arguments. Do not include 'tool' in the args passed"""
     failed = False
     scene_nwo = get_scene_props()
@@ -535,20 +971,31 @@ def run_tool_sidecar(tool_args: list, event_level='WARNING'):
     project_dir = get_project_path()
     tags_dir = get_tags_path()
     os.chdir(project_dir)
-    command = f"""{get_tool_type()} {' '.join(f'"{arg}"' for arg in tool_args)}"""
-    # print(command)
+    tool_path = Path(project_dir, get_tool_type()).with_suffix(".exe")
+    command = [str(tool_path), *[str(arg) for arg in tool_args]]
+    # print(subprocess.list2cmdline(command))
     error = ""
     cull_warnings = event_level == 'DEFAULT'
     log_warnings = event_level == 'LOG'
     tmp_log = None
-    if cull_warnings:
-        p = Popen(command, stderr=subprocess.PIPE)
-    elif log_warnings:
-        tmp_log = Path(tempfile.gettempdir(), "halo_errors.txt")
-        with open(tmp_log, "w") as file:
-            p = Popen(command, stderr=file)
-    else:
-        p = Popen(command)
+    try:
+        if cull_warnings:
+            p = _popen_tool(command, project_dir, stderr=subprocess.PIPE, tool_patches=tool_patches)
+        elif log_warnings:
+            tmp_log = Path(tempfile.gettempdir(), "halo_errors.txt")
+            with open(tmp_log, "w") as file:
+                p = _popen_tool(command, project_dir, stderr=file, tool_patches=tool_patches)
+        else:
+            p = _popen_tool(command, project_dir, tool_patches=tool_patches)
+    except _ToolMemoryPatchError as e:
+        return True, str(e)
+    except OSError as e:
+        if getattr(e, "winerror", None) == 4551:
+            return True, (
+                "Windows Application Control blocked Reach Tool before Foundry could launch it. "
+                "Restore the original Tool executable and try again."
+            )
+        raise
     # error_log = os.path.join(asset_path, "error.log")
     if not (cull_warnings or log_warnings):
         set_tool_event_level(event_level)
