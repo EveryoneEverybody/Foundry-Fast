@@ -3725,17 +3725,18 @@ class AnimationTag(Tag):
         root_children = [idx for idx, node in enumerate(defaults) if node.parent_index == 0]
         return root_children[0] if len(root_children) == 1 else None
 
-    def _apply_translate_and_scale_root_only(self, animation_data, defaults: list[DefaultAnimationNode], node_usages: dict):
+    def _apply_translate_and_scale_root_only(self, animation_data, defaults: list[DefaultAnimationNode], node_usages: dict, correct_pelvis_position=True):
         if animation_data.frame_count < 1:
             return
 
-        frame_index = 0
-        foot_node_indices = [
-            node_usages[usage]
-            for usage in ("left foot", "right foot")
-            if usage in node_usages
-        ]
-        source_ground_height = self._foot_ground_height(animation_data, defaults, foot_node_indices, frame_index)
+        if correct_pelvis_position:
+            frame_index = 0
+            foot_node_indices = [
+                node_usages[usage]
+                for usage in ("left foot", "right foot")
+                if usage in node_usages
+            ]
+            source_ground_height = self._foot_ground_height(animation_data, defaults, foot_node_indices, frame_index)
 
         node_count = min(animation_data.node_count, len(defaults))
         for node_index in range(1, node_count):
@@ -3745,6 +3746,9 @@ class AnimationTag(Tag):
                 animation_data.scales[node_index][frame_index] = default_node.scale
             animation_data.translation_flags[node_index] = False
             animation_data.scale_flags[node_index] = False
+
+        if not correct_pelvis_position:
+            return
 
         if source_ground_height is None:
             return
@@ -3871,8 +3875,13 @@ class AnimationTag(Tag):
             if reference_object_space_parent_targets and tag_animation.animation_type == AnimationType.OVERLAY:
                 self._apply_object_space_reference_frame_corrections(tag_animation, animation_data, defaults)
 
-        if tag_animation.translate_and_scale_root_only:
-            self._apply_translate_and_scale_root_only(animation_data, defaults, self.get_node_usages())
+        if tag_animation.translate_and_scale_root_only or getattr(self, "force_translate_and_scale_root_only", False):
+            self._apply_translate_and_scale_root_only(
+                animation_data,
+                defaults,
+                self.get_node_usages(),
+                getattr(self, "correct_root_translation_pelvis", True),
+            )
 
         animation_cache[index] = animation_data
         return animation_data
@@ -4185,7 +4194,17 @@ class AnimationTag(Tag):
         self.tag.SelectField("Struct:definitions[0]/ShortEnum:force compression setting").Value = value
         self.tag_has_changes = True
     
-    def to_blender(self, render_model: str, armature, filter: str, import_pca=False):
+    def to_blender(
+        self,
+        render_model: str,
+        armature,
+        filter: str,
+        import_pca=False,
+        force_translate_and_scale_root_only=False,
+        correct_root_translation_pelvis=True,
+    ):
+        self.force_translate_and_scale_root_only = force_translate_and_scale_root_only
+        self.correct_root_translation_pelvis = correct_root_translation_pelvis
         actions = []
         animations = []
         if self.block_animations.Elements.Count < 1:

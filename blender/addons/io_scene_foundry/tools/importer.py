@@ -239,6 +239,12 @@ def draw_animation_graph_import_options(operator, layout, corinth, include_gener
     col.enabled = operator.tag_animation
     col.prop(operator, "tag_animation_filter")
     col.prop(operator, "graph_import_animations")
+    row = col.row()
+    row.enabled = operator.tag_animation and operator.graph_import_animations
+    row.prop(operator, "graph_translate_and_scale_root_only")
+    row = col.row()
+    row.enabled = operator.tag_animation and operator.graph_import_animations
+    row.prop(operator, "graph_correct_root_translation_pelvis")
     if corinth:
         row = col.row()
         row.enabled = operator.tag_animation and operator.graph_import_animations
@@ -252,6 +258,12 @@ def draw_animation_graph_import_options(operator, layout, corinth, include_gener
 def draw_graph_import_options(operator, layout, corinth):
     layout.prop(operator, "tag_animation_filter")
     layout.prop(operator, "graph_import_animations")
+    row = layout.row()
+    row.enabled = operator.graph_import_animations
+    row.prop(operator, "graph_translate_and_scale_root_only")
+    row = layout.row()
+    row.enabled = operator.graph_import_animations
+    row.prop(operator, "graph_correct_root_translation_pelvis")
     if corinth:
         row = layout.row()
         row.enabled = operator.graph_import_animations
@@ -1222,6 +1234,16 @@ class NWO_Import(bpy.types.Operator):
         default=True,
         description="Imports animations from the graph. Currently the root movement element of base movement animations is unsupported and overlay rotations do not import correctly"
     )
+    graph_translate_and_scale_root_only: bpy.props.BoolProperty(
+        name="Force Root Translation/Scale Only",
+        default=False,
+        description="Applies translate and scale root only to every imported animation without enabling that animation flag"
+    )
+    graph_correct_root_translation_pelvis: bpy.props.BoolProperty(
+        name="Correct Pelvis Position",
+        default=True,
+        description="Automatically offsets the pelvis/root child to keep foot height aligned when root translation/scale only is applied"
+    )
     graph_import_pca_data: bpy.props.BoolProperty(
         name="Import PCA Data",
         default=True,
@@ -1471,8 +1493,10 @@ class NWO_Import(bpy.types.Operator):
                     importer.graph_import_pca_data = self.graph_import_pca_data
                     importer.graph_generate_renames = self.graph_generate_renames
                     importer.graph_import_events = self.graph_import_events
+                    importer.graph_correct_root_translation_pelvis = self.graph_correct_root_translation_pelvis
                     importer.graph_import_ik_chains = self.graph_import_ik_chains
                     importer.import_variant_children = self.import_variant_children
+                    importer.graph_translate_and_scale_root_only = self.graph_translate_and_scale_root_only
                     importer.setup_as_asset = self.setup_as_asset
                     importer.tag_import_lights = self.tag_import_lights
                     importer.build_control_rig = self.build_control_rig
@@ -1548,8 +1572,10 @@ class NWO_Import(bpy.types.Operator):
                         importer.graph_import_pca_data = self.graph_import_pca_data
                         importer.graph_generate_renames = self.graph_generate_renames
                         importer.graph_import_events = self.graph_import_events
+                        importer.graph_correct_root_translation_pelvis = self.graph_correct_root_translation_pelvis
                         importer.graph_import_ik_chains = self.graph_import_ik_chains
                         importer.import_variant_children = self.import_variant_children
+                        importer.graph_translate_and_scale_root_only = self.graph_translate_and_scale_root_only
                         importer.import_biped_weapon = self.import_biped_weapon
                         importer.biped_weapon_source = self.biped_weapon_source
                         importer.setup_as_asset = self.setup_as_asset
@@ -1601,8 +1627,10 @@ class NWO_Import(bpy.types.Operator):
                     importer.graph_import_pca_data = self.graph_import_pca_data
                     importer.graph_generate_renames = self.graph_generate_renames
                     importer.graph_import_events = self.graph_import_events
+                    importer.graph_correct_root_translation_pelvis = self.graph_correct_root_translation_pelvis
                     importer.graph_import_ik_chains = self.graph_import_ik_chains
                     animation_files = importer.sorted_filepaths['animation']
+                    importer.graph_translate_and_scale_root_only = self.graph_translate_and_scale_root_only
                     if context.object and context.object.type == 'ARMATURE':
                         existing_armature = context.object
                     else:
@@ -1823,8 +1851,10 @@ class NWO_Import(bpy.types.Operator):
                     
                     importer.tag_render = True
                     importer.tag_markers = True
+                    importer.graph_correct_root_translation_pelvis = self.graph_correct_root_translation_pelvis
                     importer.tag_state = State["default"].value
                     importer.import_variant_children = True
+                    importer.graph_translate_and_scale_root_only = self.graph_translate_and_scale_root_only
                     importer.graph_import_animations = True
                     
                     for file in cinematic_files:
@@ -2606,8 +2636,10 @@ class NWOImporter:
         self.tag_markers = False
         self.tag_collision = False
         self.tag_physics = False
+        self.graph_correct_root_translation_pelvis = True
         self.tag_animation = False
         self.graph_import_animations = False
+        self.graph_translate_and_scale_root_only = False
         self.graph_import_pca_data = False
         self.graph_generate_renames = False
         self.graph_import_events = False
@@ -3720,7 +3752,14 @@ class NWOImporter:
                 if self.graph_import_animations:
                     utils.print_bullet("Importing Animations")
                     if self.corinth and self.graph_import_pca_data:
-                        result = graph.to_blender(render, armature, filter, True)
+                        result = graph.to_blender(
+                            render,
+                            armature,
+                            filter,
+                            import_pca=True,
+                            force_translate_and_scale_root_only=self.graph_translate_and_scale_root_only,
+                            correct_root_translation_pelvis=self.graph_correct_root_translation_pelvis,
+                        )
                         if result is not None:
                             actions, animations, pca_animations, pca_groups, pca_path = result
                             if pca_animations and pca_groups and pca_path is not None:
@@ -3731,7 +3770,14 @@ class NWOImporter:
                                 pca_info.pca_path = pca_path
                                 self.pca_info.append(pca_info)
                     else:
-                        result = graph.to_blender(render, armature, filter, False)
+                        result = graph.to_blender(
+                            render,
+                            armature,
+                            filter,
+                            import_pca=False,
+                            force_translate_and_scale_root_only=self.graph_translate_and_scale_root_only,
+                            correct_root_translation_pelvis=self.graph_correct_root_translation_pelvis,
+                        )
                         if result is not None:
                             actions, animations = result
 
@@ -5248,6 +5294,16 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         default=True,
         description="Imports animations from the graph. Currently the root movement element of base movement animations is unsupported and overlay rotations do not import correctly"
     )
+    graph_translate_and_scale_root_only: bpy.props.BoolProperty(
+        name="Force Root Translation/Scale Only",
+        default=False,
+        description="Applies translate and scale root only to every imported animation without enabling that animation flag"
+    )
+    graph_correct_root_translation_pelvis: bpy.props.BoolProperty(
+        name="Correct Pelvis Position",
+        default=True,
+        description="Automatically offsets the pelvis/root child to keep foot height aligned when root translation/scale only is applied"
+    )
     graph_import_pca_data: bpy.props.BoolProperty(
         name="Import PCA Data",
         description="Imports animations with their PCA (face animation) data",
@@ -5452,7 +5508,7 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
             if self.place_at_mouse:
                 return self.execute(context)
             else:
-                return context.window_manager.invoke_props_dialog(self, width=300)
+                return context.window_manager.invoke_props_dialog(self, width=500)
         else:
             return self.execute(context)
     
