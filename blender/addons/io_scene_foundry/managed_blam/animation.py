@@ -3507,11 +3507,11 @@ class AnimationTag(Tag):
         if touched_node_indices:
             self._write_animation_data_frame_channels(animation_data, 0, reference_frame, sorted(touched_node_indices))
 
-    def _seek_best_matching_base_animation(self, animation: Animation, name: utils.AnimationName, all_tag_animations):
+    def _seek_best_matching_base_animation(self, animation: Animation, name: utils.AnimationName, all_tag_animations, allow_self=False):
         def find_for_mode(mode: str):
             animations = {}
             for next_animation in all_tag_animations:
-                if next_animation.index == animation.index:
+                if not allow_self and next_animation.index == animation.index:
                     continue
                 if next_animation.animation_type not in (AnimationType.NONE, AnimationType.BASE):
                     continue
@@ -3535,6 +3535,70 @@ class AnimationTag(Tag):
             return priority_animations[0]
 
         return find_for_mode(name.mode) or find_for_mode("any")
+
+    def _is_vehicle_animation_mode(self, mode: str) -> bool:
+        mode = (mode or "").strip()
+        return len(mode) > 2 and mode[-2] == "_" and mode[-1] != "_"
+
+    def _grounding_scope_name(self, tag_animation: Animation, graph: dict | None = None) -> utils.AnimationName | None:
+        if graph:
+            for path in self._graph_animation_paths(graph, tag_animation):
+                path_name = utils.AnimationName(path)
+                if path_name.valid and not path_name.custom and not self._is_vehicle_animation_mode(path_name.mode):
+                    return path_name
+
+        name = getattr(tag_animation, "name", None)
+        if name is not None and getattr(name, "valid", False) and not getattr(name, "custom", False) and not self._is_vehicle_animation_mode(name.mode):
+            return name
+
+        return None
+
+    def _grounding_mode_key(self, tag_animation: Animation, graph: dict | None = None) -> str | None:
+        scope_name = self._grounding_scope_name(tag_animation, graph)
+        if scope_name is None:
+            return None
+
+        mode = (scope_name.mode or "").strip()
+        return mode or None
+
+    def _pelvis_offset_node_index(self, defaults: list[DefaultAnimationNode], node_usages: dict | None) -> int | None:
+        node_usages = node_usages or {}
+        root_indices = {0}
+        pedestal_index = node_usages.get("pedestal")
+        if pedestal_index is not None:
+            root_indices.add(pedestal_index)
+
+        pelvis_index = node_usages.get("pelvis")
+        if pelvis_index is not None and 0 < pelvis_index < len(defaults):
+            node_index = pelvis_index
+            while defaults[node_index].parent_index not in {-1, *root_indices}:
+                parent_index = defaults[node_index].parent_index
+                if parent_index < 0 or parent_index >= len(defaults):
+                    break
+                node_index = parent_index
+            return node_index
+
+        root_children = [idx for idx, node in enumerate(defaults) if node.parent_index in root_indices]
+        return root_children[0] if len(root_children) == 1 else None
+
+    def _best_grounding_idle_animation(self, animation: Animation, graph: dict, all_tag_animations) -> Animation | None:
+        scope_name = self._grounding_scope_name(animation, graph)
+        if scope_name is None:
+            return None
+
+        candidates = self._get_base_animation_candidates(graph, self._base_animation_candidate_names(graph, animation), AnimationType.NONE)
+        for candidate in self._resolved_base_candidates(candidates, all_tag_animations):
+            candidate_scope = self._grounding_scope_name(candidate, graph)
+            if candidate_scope is not None and candidate_scope.mode in {scope_name.mode, "any"}:
+                return candidate
+
+        idle_name = scope_name.copy()
+        idle_name.state = "idle"
+        idle_name.destination_mode = ""
+        idle_name.destination_state = ""
+        idle_name.direction = ""
+        idle_name.region = ""
+        return self._seek_best_matching_base_animation(animation, idle_name, all_tag_animations, allow_self=True)
 
     def _soft_transition_final_frame_source(self, animation: Animation, name: utils.AnimationName, all_tag_animations):
         next_animation = None
@@ -4166,6 +4230,7 @@ class AnimationTag(Tag):
             shared_static_codec = self._read_shared_static_codec()
             native_resource_cache = {}
             native_animation_cache = {}
+            grounding_source_animation_cache = {}
             nodes_count = len(node_names)
             
             self.nodes_count = nodes_count
@@ -4175,6 +4240,7 @@ class AnimationTag(Tag):
                 
             tag_animations = self.get_animations()
             graph = self.to_dict(tag_animations)
+            grounding_offset_cache = {}
 
             for tag_animation in tag_animations:
                 if not (filter in tag_animation.name.tag_name or filter.replace(" ", ":") in tag_animation.name.tag_name):
@@ -4285,6 +4351,29 @@ class AnimationTag(Tag):
                 transforms = self._animation_transforms(tag_animation, defaults, overlay_defaults, native_nodes, graph, shared_static_codec, native_resource_cache,native_animation_cache, tag_animations)
                 if transforms:
                     blender_animation.frame_end = max(blender_animation.frame_end, max(transforms))
+
+                scale_animations_to_skeleton = getattr(self, "scale_animations_to_skeleton", False)
+                grounding_context = None
+                if scale_animations_to_skeleton:
+                    mode_key = self._grounding_mode_key(tag_animation, graph)
+                    if mode_key is not None:
+                        idle_transforms = None
+                        source_idle_transforms = None
+                        idle_animation = self._best_grounding_idle_animation(tag_animation, graph, tag_animations)
+                        if idle_animation is not None:
+                            if idle_animation.index == tag_animation.index:
+                                idle_transforms = transforms
+                            else:
+                                idle_transforms = self._animation_transforms(idle_animation, defaults, overlay_defaults, native_nodes, graph, shared_static_codec, native_resource_cache, native_animation_cache, tag_animations)
+                            source_idle_transforms = self._animation_transforms(idle_animation, overlay_defaults, overlay_defaults, native_nodes, graph, shared_static_codec, native_resource_cache, grounding_source_animation_cache, tag_animations)
+                        grounding_context = {
+                            "mode_key": mode_key,
+                            "cache": grounding_offset_cache,
+                            "idle_transforms": idle_transforms,
+                            "source_idle_transforms": source_idle_transforms,
+                            "node_usages": node_usages,
+                        }
+
                 self._to_armature_action(
                     transforms,
                     armature,
@@ -4295,7 +4384,9 @@ class AnimationTag(Tag):
                     {},
                     set(),
                     blender_animation.pose_overlay,
-                    getattr(self, "scale_animations_to_skeleton", False),
+                    scale_animations_to_skeleton,
+                    node_usages,
+                    grounding_context,
                 )
                 actions.append(action)
                 action.frame_end = blender_animation.frame_end
@@ -4337,6 +4428,8 @@ class AnimationTag(Tag):
         nodes_with_animations,
         pose_overlay=False,
         scale_animations_to_skeleton=False,
+        node_usages: dict | None = None,
+        grounding_context: dict | None = None,
     ):
         fcurves = utils.get_fcurves(action, armature.animation_data.last_slot_identifier)
         fcurves.clear()
@@ -4406,14 +4499,20 @@ class AnimationTag(Tag):
                 return sorted_values[middle]
             return (sorted_values[middle - 1] + sorted_values[middle]) * 0.5
 
+        node_indices = {node: index for index, node in enumerate(nodes)}
+        node_usages = node_usages or {}
+        root_motion_node_indices = {0}
+        pedestal_index = node_usages.get("pedestal")
+        if pedestal_index is not None:
+            root_motion_node_indices.add(pedestal_index)
+
         skeleton_scale_adjustments = {}
         if scale_animations_to_skeleton and source_defaults and target_defaults:
-            node_indices = {node: index for index, node in enumerate(nodes)}
             rest_ratios = []
             pending_adjustments = []
             for node in valid_nodes:
                 node_index = node_indices.get(node)
-                if node_index is None or node_index >= len(source_defaults) or node_index >= len(target_defaults):
+                if node_index is None or node_index in root_motion_node_indices or node_index >= len(source_defaults) or node_index >= len(target_defaults):
                     continue
 
                 source_rest_matrix = default_rest_local_matrix(source_defaults, node_index)
@@ -4434,6 +4533,98 @@ class AnimationTag(Tag):
 
         base_repeats = 0
         identity_scale = Vector((1.0, 1.0, 1.0))
+        valid_node_set = set(valid_nodes)
+
+        def apply_skeleton_scale(node: Node, loc: Vector, sca: Vector) -> tuple[Vector, Vector]:
+            scale_adjustment = skeleton_scale_adjustments.get(node)
+            if scale_adjustment is None:
+                return loc, sca
+
+            loc = loc * scale_adjustment
+            sca = identity_scale + ((sca - identity_scale) * scale_adjustment)
+            if sca.length <= tolerance:
+                sca = identity_scale.copy()
+            return loc, sca
+
+        def final_local_matrix(node: Node, frame_transforms: dict, scale_animation=True) -> Matrix | None:
+            node_transform = frame_transforms.get(node)
+            if node_transform is None:
+                return None
+            if not scale_animation:
+                return node_transform
+
+            bind_inv = bone_base_matrices[node.pose_bone].inverted_safe()
+            loc, rot, sca = (bind_inv @ node_transform).decompose()
+            loc, sca = apply_skeleton_scale(node, loc, sca)
+            return bone_base_matrices[node.pose_bone] @ Matrix.LocRotScale(loc, rot, sca)
+
+        def frame_world_matrices(frame_transforms: dict, scale_animation=True) -> dict:
+            local_cache = {}
+            world_cache = {}
+
+            def node_world_matrix(node: Node):
+                cached = world_cache.get(node)
+                if cached is not None:
+                    return cached
+
+                local_matrix = local_cache.get(node)
+                if local_matrix is None:
+                    local_matrix = final_local_matrix(node, frame_transforms, scale_animation)
+                    local_cache[node] = local_matrix
+                if local_matrix is None:
+                    return None
+
+                parent_matrix = node_world_matrix(node.parent) if node.parent in valid_node_set else None
+                world_matrix = parent_matrix @ local_matrix if parent_matrix is not None else local_matrix
+                world_cache[node] = world_matrix
+                return world_matrix
+
+            for world_node in valid_nodes:
+                node_world_matrix(world_node)
+
+            return world_cache
+
+        def foot_ground_height(frame_transforms: dict, foot_nodes: list[Node], scale_animation=True) -> float | None:
+            world_matrices = frame_world_matrices(frame_transforms, scale_animation)
+            foot_heights = [world_matrices[foot].translation.z for foot in foot_nodes if foot in world_matrices]
+            return min(foot_heights) if foot_heights else None
+
+        grounding_node = None
+        grounding_offset = 0.0
+        if grounding_context is not None:
+            grounding_node_index = self._pelvis_offset_node_index(source_defaults, grounding_context.get("node_usages"))
+            if grounding_node_index is not None and 0 <= grounding_node_index < len(nodes):
+                candidate_node = nodes[grounding_node_index]
+                if candidate_node in valid_node_set:
+                    grounding_node = candidate_node
+
+            mode_key = grounding_context.get("mode_key")
+            offset_cache = grounding_context.get("cache")
+            if grounding_node is not None and mode_key and offset_cache is not None:
+                if mode_key not in offset_cache:
+                    offset = 0.0
+                    idle_transforms = grounding_context.get("idle_transforms")
+                    foot_nodes = []
+                    for usage in ("left foot", "right foot"):
+                        foot_index = node_usages.get(usage)
+                        if foot_index is not None and 0 <= foot_index < len(nodes) and nodes[foot_index] in valid_node_set:
+                            foot_nodes.append(nodes[foot_index])
+
+                    source_idle_transforms = grounding_context.get("source_idle_transforms")
+                    if idle_transforms and foot_nodes:
+                        first_frame_index = min(idle_transforms)
+                        target_height = foot_ground_height(idle_transforms[first_frame_index], foot_nodes, scale_animation=True)
+                        source_height = None
+                        if source_idle_transforms and first_frame_index in source_idle_transforms:
+                            source_height = foot_ground_height(source_idle_transforms[first_frame_index], foot_nodes, scale_animation=False)
+                        if target_height is not None:
+                            offset = (source_height if source_height is not None else 0.0) - target_height
+
+                    offset_cache[mode_key] = offset if math.isfinite(offset) else 0.0
+
+                grounding_offset = offset_cache.get(mode_key, 0.0)
+                if not math.isfinite(grounding_offset):
+                    grounding_offset = 0.0
         
         for frame_idx, nodes_transforms in transforms.items():
             for node in valid_nodes:
@@ -4455,12 +4646,14 @@ class AnimationTag(Tag):
                             transform_matrix = delta_base @ transform_matrix
 
                 loc, rot, sca = transform_matrix.decompose()
-                scale_adjustment = skeleton_scale_adjustments.get(node)
-                if scale_adjustment is not None:
-                    loc *= scale_adjustment
-                    sca = identity_scale + ((sca - identity_scale) * scale_adjustment)
-                    if sca.length <= tolerance:
-                        sca = identity_scale.copy()
+                loc, sca = apply_skeleton_scale(node, loc, sca)
+                if node is grounding_node and abs(grounding_offset) > tolerance:
+                    local_matrix = bone_base_matrices[node.pose_bone] @ Matrix.LocRotScale(loc, rot, sca)
+                    parent_world_matrix = Matrix.Identity(4)
+                    if node.parent in valid_node_set:
+                        parent_world_matrix = frame_world_matrices(nodes_transforms).get(node.parent, parent_world_matrix)
+                    local_offset_matrix = parent_world_matrix.inverted_safe() @ Matrix.Translation(Vector((0.0, 0.0, grounding_offset))) @ parent_world_matrix
+                    loc, rot, sca = (bind_inv @ (local_offset_matrix @ local_matrix)).decompose()
 
                 node.fc_loc_x.keyframe_points.insert(frame_idx, loc.x, options=key_options)
                 node.fc_loc_y.keyframe_points.insert(frame_idx, loc.y, options=key_options)
