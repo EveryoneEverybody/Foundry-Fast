@@ -557,6 +557,41 @@ class AnimationTag(Tag):
         if shared_block is not None and shared_block.Elements.Count:
             return shared_block.Elements[0]
 
+    def _resolve_render_model_path(self, render_model: str | Path | None, armature=None) -> Path | None:
+        candidates = []
+        seen = set()
+
+        def add_candidate(candidate):
+            if not candidate:
+                return
+            candidate_text = str(candidate).strip()
+            if not candidate_text or candidate_text in seen:
+                return
+            seen.add(candidate_text)
+            candidates.append(candidate)
+
+        def add_armature_node_order_source(armature_object):
+            if armature_object is None:
+                return
+            armature_nwo = getattr(armature_object, "nwo", None)
+            add_candidate(getattr(armature_nwo, "node_order_source", "") if armature_nwo is not None else "")
+
+        add_armature_node_order_source(bpy.data.objects.get("Armature"))
+        if armature is not bpy.data.objects.get("Armature"):
+            add_armature_node_order_source(armature)
+
+        add_candidate(utils.get_asset_render_model(full=True))
+        add_candidate(render_model)
+
+        for candidate in candidates:
+            path = Path(candidate)
+            if not path.is_absolute():
+                path = Path(utils.get_tags_path(), utils.relative_path(path))
+            if path.exists():
+                return path
+
+        return None
+
     def _build_default_animation_nodes(self, graph_node_names: list[str], model: RenderModelTag | None = None):
         identity_translation = Vector((0.0, 0.0, 0.0))
         identity_rotation = Quaternion((1.0, 0.0, 0.0, 0.0))
@@ -3681,93 +3716,6 @@ class AnimationTag(Tag):
             ],
         )
 
-    def _frame_world_matrix(self, animation_data, defaults: list[DefaultAnimationNode], frame_index: int, node_index: int, world_cache: dict):
-        cached = world_cache.get(node_index)
-        if cached is not None:
-            return cached
-
-        local_matrix = Matrix.LocRotScale(
-            animation_data.translations[node_index][frame_index],
-            animation_data.rotations[node_index][frame_index],
-            Vector.Fill(3, animation_data.scales[node_index][frame_index]),
-        )
-
-        parent_index = defaults[node_index].parent_index
-        if parent_index > -1 and parent_index < animation_data.node_count:
-            world_matrix = self._frame_world_matrix(animation_data, defaults, frame_index, parent_index, world_cache) @ local_matrix
-        else:
-            world_matrix = local_matrix
-
-        world_cache[node_index] = world_matrix
-        return world_matrix
-
-    def _foot_ground_height(self, animation_data, defaults: list[DefaultAnimationNode], foot_node_indices: list[int], frame_index: int) -> float | None:
-        heights = []
-        world_cache = {}
-        for node_index in foot_node_indices:
-            if node_index < 0 or node_index >= animation_data.node_count or node_index >= len(defaults):
-                continue
-            heights.append(self._frame_world_matrix(animation_data, defaults, frame_index, node_index, world_cache).translation.z)
-
-        return min(heights) if heights else None
-
-    def _root_child_for_body_offset(self, defaults: list[DefaultAnimationNode], node_usages: dict) -> int | None:
-        pelvis_index = node_usages.get("pelvis")
-        if pelvis_index is not None and 0 < pelvis_index < len(defaults):
-            node_index = pelvis_index
-            while defaults[node_index].parent_index not in {-1, 0}:
-                parent_index = defaults[node_index].parent_index
-                if parent_index < 0 or parent_index >= len(defaults):
-                    break
-                node_index = parent_index
-            return node_index
-
-        root_children = [idx for idx, node in enumerate(defaults) if node.parent_index == 0]
-        return root_children[0] if len(root_children) == 1 else None
-
-    def _apply_translate_and_scale_root_only(self, animation_data, defaults: list[DefaultAnimationNode], node_usages: dict, correct_pelvis_position=True):
-        if animation_data.frame_count < 1:
-            return
-
-        if correct_pelvis_position:
-            frame_index = 0
-            foot_node_indices = [
-                node_usages[usage]
-                for usage in ("left foot", "right foot")
-                if usage in node_usages
-            ]
-            source_ground_height = self._foot_ground_height(animation_data, defaults, foot_node_indices, frame_index)
-
-        node_count = min(animation_data.node_count, len(defaults))
-        for node_index in range(1, node_count):
-            default_node = defaults[node_index]
-            for frame_index in range(animation_data.frame_count):
-                animation_data.translations[node_index][frame_index] = default_node.translation.copy()
-                animation_data.scales[node_index][frame_index] = default_node.scale
-            animation_data.translation_flags[node_index] = False
-            animation_data.scale_flags[node_index] = False
-
-        if not correct_pelvis_position:
-            return
-
-        if source_ground_height is None:
-            return
-
-        retargeted_ground_height = self._foot_ground_height(animation_data, defaults, foot_node_indices, 0)
-        if retargeted_ground_height is None:
-            return
-
-        body_offset_node_index = self._root_child_for_body_offset(defaults, node_usages)
-        if body_offset_node_index is None or body_offset_node_index >= node_count:
-            return
-
-        ground_offset = source_ground_height - retargeted_ground_height
-        if abs(ground_offset) < tolerance:
-            return
-
-        for frame_index in range(animation_data.frame_count):
-            animation_data.translations[body_offset_node_index][frame_index].z += ground_offset
-        animation_data.translation_flags[body_offset_node_index] = True
 
     def _build_animation(self, tag_animation: Animation, defaults, overlay_defaults, graph, shared_static_codec, resource_cache, animation_cache, all_tag_animations, final_frame_stack=None):
         index = tag_animation.index
@@ -3875,13 +3823,6 @@ class AnimationTag(Tag):
             if reference_object_space_parent_targets and tag_animation.animation_type == AnimationType.OVERLAY:
                 self._apply_object_space_reference_frame_corrections(tag_animation, animation_data, defaults)
 
-        if tag_animation.translate_and_scale_root_only or getattr(self, "force_translate_and_scale_root_only", False):
-            self._apply_translate_and_scale_root_only(
-                animation_data,
-                defaults,
-                self.get_node_usages(),
-                getattr(self, "correct_root_translation_pelvis", True),
-            )
 
         animation_cache[index] = animation_data
         return animation_data
@@ -4200,11 +4141,9 @@ class AnimationTag(Tag):
         armature,
         filter: str,
         import_pca=False,
-        force_translate_and_scale_root_only=False,
-        correct_root_translation_pelvis=True,
+        scale_animations_to_skeleton=False,
     ):
-        self.force_translate_and_scale_root_only = force_translate_and_scale_root_only
-        self.correct_root_translation_pelvis = correct_root_translation_pelvis
+        self.scale_animations_to_skeleton = scale_animations_to_skeleton
         actions = []
         animations = []
         if self.block_animations.Elements.Count < 1:
@@ -4216,12 +4155,11 @@ class AnimationTag(Tag):
         node_usages = self.get_node_usages()
 
         model_context = nullcontext(None)
-        if render_model:
-            render_model_path = Path(render_model)
-            if render_model_path.exists():
-                model_context = RenderModelTag(path=render_model_path)
-            else:
-                utils.print_warning(f"Render model [{render_model_path}] was not found. Falling back to animation graph additional node data for native defaults.")
+        render_model_path = self._resolve_render_model_path(render_model, armature)
+        if render_model_path is not None:
+            model_context = RenderModelTag(path=render_model_path)
+        elif render_model:
+            utils.print_warning(f"Render model [{render_model}] was not found. Falling back to animation graph additional node data for native defaults.")
 
         with model_context as model:
             defaults, native_nodes, overlay_defaults = self._build_default_animation_nodes(node_names, model)
@@ -4347,7 +4285,18 @@ class AnimationTag(Tag):
                 transforms = self._animation_transforms(tag_animation, defaults, overlay_defaults, native_nodes, graph, shared_static_codec, native_resource_cache,native_animation_cache, tag_animations)
                 if transforms:
                     blender_animation.frame_end = max(blender_animation.frame_end, max(transforms))
-                self._to_armature_action(transforms, armature, action, native_nodes, {}, set(), blender_animation.pose_overlay)
+                self._to_armature_action(
+                    transforms,
+                    armature,
+                    action,
+                    native_nodes,
+                    overlay_defaults,
+                    defaults if model is not None else None,
+                    {},
+                    set(),
+                    blender_animation.pose_overlay,
+                    getattr(self, "scale_animations_to_skeleton", False),
+                )
                 actions.append(action)
                 action.frame_end = blender_animation.frame_end
                 self._apply_regular_animation_events(tag_animation, blender_animation, armature, actions)
@@ -4376,7 +4325,19 @@ class AnimationTag(Tag):
         
         return actions, animations
     
-    def _to_armature_action(self, transforms, armature: bpy.types.Object, action: bpy.types.Action, nodes: list[Node], base_transforms: dict, nodes_with_animations, pose_overlay=False):
+    def _to_armature_action(
+        self,
+        transforms,
+        armature: bpy.types.Object,
+        action: bpy.types.Action,
+        nodes: list[Node],
+        source_defaults: list[DefaultAnimationNode],
+        target_defaults: list[DefaultAnimationNode] | None,
+        base_transforms: dict,
+        nodes_with_animations,
+        pose_overlay=False,
+        scale_animations_to_skeleton=False,
+    ):
         fcurves = utils.get_fcurves(action, armature.animation_data.last_slot_identifier)
         fcurves.clear()
         
@@ -4421,14 +4382,63 @@ class AnimationTag(Tag):
                 bone_base_matrices[bone] = bone.parent.matrix.inverted_safe() @ bone.matrix
             else:
                 bone_base_matrices[bone] = bone.matrix
-        
+
+        def default_rest_local_matrix(default_nodes: list[DefaultAnimationNode], node_index: int):
+            if node_index < 0 or node_index >= len(default_nodes):
+                return Matrix.Identity(4)
+
+            default_node = default_nodes[node_index]
+            return import_transform.armature_bone_matrix(
+                Matrix.LocRotScale(
+                    default_node.translation,
+                    default_node.rotation,
+                    Vector.Fill(3, default_node.scale),
+                ),
+                root=default_node.parent_index < 0,
+            )
+
+        def median(values: list[float]) -> float:
+            if not values:
+                return 1.0
+            sorted_values = sorted(values)
+            middle = len(sorted_values) // 2
+            if len(sorted_values) % 2:
+                return sorted_values[middle]
+            return (sorted_values[middle - 1] + sorted_values[middle]) * 0.5
+
+        skeleton_scale_adjustments = {}
+        if scale_animations_to_skeleton and source_defaults and target_defaults:
+            node_indices = {node: index for index, node in enumerate(nodes)}
+            rest_ratios = []
+            pending_adjustments = []
+            for node in valid_nodes:
+                node_index = node_indices.get(node)
+                if node_index is None or node_index >= len(source_defaults) or node_index >= len(target_defaults):
+                    continue
+
+                source_rest_matrix = default_rest_local_matrix(source_defaults, node_index)
+                ratio_target_rest_matrix = default_rest_local_matrix(target_defaults, node_index)
+                source_rest_loc, _, _ = source_rest_matrix.decompose()
+                ratio_target_rest_loc, _, _ = ratio_target_rest_matrix.decompose()
+                source_length = source_rest_loc.length
+                target_length = ratio_target_rest_loc.length
+                node_ratio = target_length / source_length if source_length > tolerance else None
+                if node_ratio is not None and math.isfinite(node_ratio) and 0.05 <= node_ratio <= 20.0 and target_length > tolerance:
+                    rest_ratios.append(node_ratio)
+
+                pending_adjustments.append((node, node_ratio))
+
+            global_ratio = median(rest_ratios)
+            for node, node_ratio in pending_adjustments:
+                skeleton_scale_adjustments[node] = node_ratio if node_ratio is not None and math.isfinite(node_ratio) and 0.05 <= node_ratio <= 20.0 else global_ratio
+
         base_repeats = 0
+        identity_scale = Vector((1.0, 1.0, 1.0))
         
         for frame_idx, nodes_transforms in transforms.items():
             for node in valid_nodes:
                 bind_inv = bone_base_matrices[node.pose_bone].inverted_safe()
-                repl_matrix = nodes_transforms[node]
-                transform_matrix = bind_inv @ repl_matrix
+                transform_matrix = bind_inv @ nodes_transforms[node]
                 base_matrix = Matrix.Identity(4)
                 if base_transforms:
                     base_frame_idx = frame_idx - (len(base_transforms) * base_repeats)
@@ -4439,12 +4449,18 @@ class AnimationTag(Tag):
                     if base_nodes_transforms is not None:
                         if node not in nodes_with_animations:
                             base_matrix = base_nodes_transforms[node]
-                            
+
                             delta_base = bind_inv @ base_matrix
 
                             transform_matrix = delta_base @ transform_matrix
 
                 loc, rot, sca = transform_matrix.decompose()
+                scale_adjustment = skeleton_scale_adjustments.get(node)
+                if scale_adjustment is not None:
+                    loc *= scale_adjustment
+                    sca = identity_scale + ((sca - identity_scale) * scale_adjustment)
+                    if sca.length <= tolerance:
+                        sca = identity_scale.copy()
 
                 node.fc_loc_x.keyframe_points.insert(frame_idx, loc.x, options=key_options)
                 node.fc_loc_y.keyframe_points.insert(frame_idx, loc.y, options=key_options)
