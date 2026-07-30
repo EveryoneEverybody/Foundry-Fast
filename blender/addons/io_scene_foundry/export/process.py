@@ -1913,6 +1913,7 @@ class ExportScene:
                             path = Path(self.data_dir, rel_path)
                             if path.exists():
                                 self.external_animations[animation] = Path(rel_path)
+                                self.has_animations = True
                             else:
                                 self.warnings.append(f"{animation.name} has invalid GR2 path: {str(path)}")
                         else:
