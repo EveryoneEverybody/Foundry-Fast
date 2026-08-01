@@ -216,7 +216,7 @@ def _sun_air_mass(sun_theta: float) -> float:
     zenith_degrees = float(np.clip(math.degrees(sun_theta), 0.0, MAX_SUN_AIRMASS_ZENITH_DEGREES))
     zenith_radians = math.radians(zenith_degrees)
     denominator = math.cos(zenith_radians) + 0.15 * pow(93.885 - zenith_degrees, -1.253)
-    return 1.0 / max(denominator, EPSILON)
+    return 1.0 / denominator
 
 
 def linear_color_luminance(colors):

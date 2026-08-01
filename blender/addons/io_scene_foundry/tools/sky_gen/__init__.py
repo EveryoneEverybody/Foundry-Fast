@@ -436,7 +436,7 @@ class NWO_OT_SkyGenerate(bpy.types.Operator):
         name="Sun Zenith",
         description="Angle from straight up in degrees",
         default=45.0,
-        min=0.0,
+        min=-180.0,
         max=180.0,
     )
     sun_phi: bpy.props.FloatProperty(

@@ -3996,7 +3996,7 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
     sky_gen_longitude_slices: bpy.props.IntProperty(default=48, min=2, max=512, options={'HIDDEN'})
     sky_gen_horizontal_fov: bpy.props.FloatProperty(default=360.0, min=1.0, max=360.0, options={'HIDDEN'})
     sky_gen_vertical_fov: bpy.props.FloatProperty(default=180.0, min=1.0, max=180.0, options={'HIDDEN'})
-    sky_gen_sun_theta: bpy.props.FloatProperty(default=45.0, min=0.0, max=180.0, options={'HIDDEN'})
+    sky_gen_sun_theta: bpy.props.FloatProperty(default=45.0, min=-180.0, max=180.0, options={'HIDDEN'})
     sky_gen_sun_phi: bpy.props.FloatProperty(default=0.0, min=0.0, max=360.0, options={'HIDDEN'})
     sky_gen_turpidity: bpy.props.FloatProperty(default=3.0, min=2.0, max=6.0, options={'HIDDEN'})
     sky_gen_sky_type: bpy.props.EnumProperty(
