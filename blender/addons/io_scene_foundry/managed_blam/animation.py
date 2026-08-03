@@ -2922,10 +2922,35 @@ class AnimationTag(Tag):
 
     def _base_animation_candidate_names(self, graph: dict, tag_animation: Animation) -> list[str]:
         graph_paths = self._graph_animation_paths(graph, tag_animation)
-        if graph_paths:
-            return graph_paths
+        tag_name = getattr(tag_animation, "name", None)
+        canonical_name = ""
+        canonical_state = ""
+        if tag_name is not None and getattr(tag_name, "valid", False) and not getattr(tag_name, "custom", False):
+            canonical_name = tag_name.tag_name
+            canonical_state = tag_name.state
 
-        return [] if tag_animation.name.custom else [tag_animation.name.tag_name]
+        if graph_paths:
+            ordered_paths = []
+            used_paths = set()
+
+            def add_path(path: str):
+                if path and path not in used_paths:
+                    ordered_paths.append(path)
+                    used_paths.add(path)
+
+            if canonical_state:
+                for path in graph_paths:
+                    path_name = utils.AnimationName(path)
+                    if path_name.valid and not path_name.custom and path_name.state == canonical_state:
+                        add_path(path)
+                add_path(canonical_name)
+
+            for path in graph_paths:
+                add_path(path)
+
+            return ordered_paths
+
+        return [] if not canonical_name else [canonical_name]
 
     def _get_base_animation_candidates(self, graph: dict, names, animation_type: AnimationType = AnimationType.NONE):
         if isinstance(names, str):
