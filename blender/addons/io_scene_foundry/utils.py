@@ -2817,7 +2817,7 @@ material_shader_fallbacks = {
     "srf_char_skin_tension_detail_normal": "srf_char_blinn_detailnormal"
 }
 
-def add_node_from_resources(blend_name, name, link=True, check_multiple=False) -> bpy.types.NodeGroup | None:
+def add_node_from_resources(blend_name, name, check_multiple=False) -> bpy.types.NodeGroup | None:
     node_group = bpy.data.node_groups.get(name)
     if node_group is not None:
         return node_group
@@ -2828,7 +2828,7 @@ def add_node_from_resources(blend_name, name, link=True, check_multiple=False) -
         return
     
     found = False
-    with bpy.data.libraries.load(str(lib_blend), link=link) as (data_from, data_to):
+    with bpy.data.libraries.load(str(lib_blend), link=get_prefs().link_resource_nodes) as (data_from, data_to):
         from_node_groups = frozenset(data_from.node_groups)
         if name in from_node_groups:
             data_to.node_groups = [name]

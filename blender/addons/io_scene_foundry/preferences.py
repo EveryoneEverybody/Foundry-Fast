@@ -404,6 +404,8 @@ def draw_foundry_preferences(layout, prefs, context=None, show_save_button=False
     row = box.row(align=True)
     row.prop(prefs, "import_shaders_with_time_period")
     row = box.row(align=True)
+    row.prop(prefs, "link_resource_nodes")
+    row = box.row(align=True)
     row.prop(prefs, "bitmap_color_space_conversion")
     row.operator("nwo.install_xrgb_colorspace", text="Install xRGB")
 
@@ -527,6 +529,12 @@ class FoundryPreferences(AddonPreferences):
         name="Import Game Shader/Materials with Animated Functions",
         default=True,
         description="Allows importing of animated functions when importing a Halo shader or material tag into Blender. Animated shaders can be taxing on Blender when the timeline is playing"
+    )
+
+    link_resource_nodes: BoolProperty(
+        name="Link Resource Nodes",
+        default=True,
+        description="Link Foundry node groups from bundled resource blend files instead of appending them"
     )
 
     bitmap_color_space_conversion: BoolProperty(
