@@ -160,6 +160,8 @@ def _event_influence_is_keyed_for_event_ui(action: bpy.types.Action, slot_identi
 def _ensure_event_influence_pose_bone_property(pose_bone: bpy.types.PoseBone, property_name: str, default_value: float) -> None:
     if property_name not in pose_bone:
         pose_bone[property_name] = _round_event_influence_value(default_value)
+    property_path = f'["{bpy.utils.escape_identifier(property_name)}"]'
+    pose_bone.property_overridable_library_set(property_path, True)
     pose_bone.id_properties_ui(property_name).update(
         min=0.0,
         max=1.0,
