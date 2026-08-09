@@ -215,6 +215,19 @@ class ShaderTag(Tag):
     category_parameters = None
     group_node_name = "foundry_reach.shader"
     group_option_start_input = 8
+    palette_vector_node_name = "palettized_plasma - palette_vector"
+    palette_vector_parameters = frozenset({
+        "noise_map_a",
+        "noise_map_b",
+        "alpha_mask_map",
+        "alpha_modulation_factor",
+        "v_coordinate",
+    })
+    palette_vector_self_illumination_options = frozenset({
+        "palettized_plasma",
+        "palettized_plasma_change_color",
+        "palettized_depth_fade",
+    })
     # (category_name, enum_type, option_index, group_socket_index|None)
     group_option_specs = (
         ("albedo", Albedo, 0, 0),
@@ -406,6 +419,47 @@ class ShaderTag(Tag):
     def _group_option_key(self, category_name: str, enum_member: Enum) -> str:
         return utils.game_str(enum_member.name)
 
+    def _self_illumination_uses_palette_vector(self, self_illumination) -> bool:
+        if isinstance(self_illumination, Enum):
+            self_illumination = self_illumination.name
+        return utils.game_str(str(self_illumination)) in self.palette_vector_self_illumination_options
+
+    def _find_palette_vector_node(self) -> bpy.types.Node | None:
+        if self.group_node is None:
+            return None
+
+        palette_input = self.group_node.inputs.get("palette.rgb")
+        if palette_input is None:
+            palette_input = self.group_node.inputs.get("palette")
+        if palette_input is None:
+            return None
+
+        palette_node = utils.find_linked_node(self.group_node, palette_input.name.lower(), "TEX_IMAGE")
+        if palette_node is None:
+            return None
+
+        vector_input = palette_node.inputs.get("Vector")
+        if vector_input is None:
+            return None
+
+        wanted_name = self._normalize_group_name(self.palette_vector_node_name)
+        pending = [link.from_node for link in vector_input.links]
+        visited = set()
+        while pending:
+            node = pending.pop(0)
+            if node is None or id(node) in visited:
+                continue
+            visited.add(id(node))
+
+            if node.type == "GROUP" and getattr(node, "node_tree", None):
+                if self._normalize_group_name(node.node_tree.name) == wanted_name:
+                    return node
+
+            for input_socket in node.inputs:
+                pending.extend(link.from_node for link in input_socket.links)
+
+        return None
+
     def _apply_group_options_from_node(self) -> dict[str, str]:
         selected = {}
         inputs = list(self.group_node.inputs)
@@ -513,33 +567,47 @@ class ShaderTag(Tag):
                 key = utils.remove_chars(alias.lower(), cull_chars)
                 if key and key not in alias_map:
                     alias_map[key] = (parameter_name, parameter)
+        palette_vector_node = None
+
+        parameter_nodes = []
+        if self._self_illumination_uses_palette_vector(selected_options.get("self_illumination", "")):
+            palette_vector_node = self._find_palette_vector_node()
+            if palette_vector_node is not None:
+                parameter_nodes.append((palette_vector_node, list(palette_vector_node.inputs)))
+
+        inputs = list(self.group_node.inputs)
+        parameter_nodes.append((self.group_node, inputs[self.group_option_start_input:]))
 
         seen_parameters = set()
-        inputs = list(self.group_node.inputs)
-        for input_socket in inputs[self.group_option_start_input:]:
-            input_base_name = input_socket.name.partition(".")[0]
-            key = utils.remove_chars(input_base_name.lower(), cull_chars)
-            match = alias_map.get(key)
-            if match is None:
-                continue
+        for source_node, input_sockets in parameter_nodes:
+            for input_socket in input_sockets:
+                input_base_name = input_socket.name.partition(".")[0]
+                if (source_node is self.group_node and palette_vector_node is not None
+                        and input_base_name.lower() in self.palette_vector_parameters):
+                    continue
 
-            parameter_name, parameter = match
-            if parameter_name in seen_parameters:
-                continue
+                key = utils.remove_chars(input_base_name.lower(), cull_chars)
+                match = alias_map.get(key)
+                if match is None:
+                    continue
 
-            type_tokens = self._parameter_type_tokens(parameter)
-            if type_tokens is None:
-                continue
-            source_type, tag_type = type_tokens
+                parameter_name, parameter = match
+                if parameter_name in seen_parameters:
+                    continue
 
-            source = self._source_from_input_and_parameter_type(input_socket, source_type)
-            if source is None:
-                continue
+                type_tokens = self._parameter_type_tokens(parameter)
+                if type_tokens is None:
+                    continue
+                source_type, tag_type = type_tokens
 
-            element = self._setup_parameter(source, parameter_name, tag_type)
-            if element:
-                self._setup_function_parameters(source, element, source_type)
-                seen_parameters.add(parameter_name)
+                source = self._source_from_input_and_parameter_type(input_socket, source_type, source_node)
+                if source is None:
+                    continue
+
+                element = self._setup_parameter(source, parameter_name, tag_type)
+                if element:
+                    self._setup_function_parameters(source, element, source_type)
+                    seen_parameters.add(parameter_name)
 
         return True
     
@@ -1245,13 +1313,15 @@ class ShaderTag(Tag):
                 
         return mapping
     
-    def _source_from_input_and_parameter_type(self, input, parameter_type):
+    def _source_from_input_and_parameter_type(self, input, parameter_type, source_node=None):
+        if source_node is None:
+            source_node = self.group_node
         input_name = input.name.lower()
         match parameter_type:
             case 'bitmap':
-                linked = utils.find_linked_node(self.group_node, input_name, 'TEX_IMAGE')
+                linked = utils.find_linked_node(source_node, input_name, 'TEX_IMAGE')
                 if linked is None:
-                    linked = utils.find_linked_node(self.group_node, input_name, 'TEX_ENVIRONMENT')
+                    linked = utils.find_linked_node(source_node, input_name, 'TEX_ENVIRONMENT')
                 return linked
             case 'real':
                 return float(input.default_value)
@@ -1260,7 +1330,7 @@ class ShaderTag(Tag):
             case 'bool':
                 return int(bool(input.default_value))
             case 'color':
-                return utils.get_material_albedo(self.group_node, input)
+                return utils.get_material_albedo(source_node, input)
             
             
     # READING
@@ -1759,6 +1829,31 @@ class ShaderTag(Tag):
         node = nodes.new(type='ShaderNodeGroup')
         node.node_tree = utils.add_node_from_resources("reach_nodes", name)
         return node
+
+    def _setup_palette_vector_node(self, tree: bpy.types.NodeTree, group_node: bpy.types.Node) -> bpy.types.Node | None:
+        palette_vector_node = self._add_group_node(tree, tree.nodes, self.palette_vector_node_name)
+        if palette_vector_node.node_tree is None:
+            tree.nodes.remove(palette_vector_node)
+            return None
+
+        self.populate_chiefster_node(tree, palette_vector_node)
+
+        palette_input = group_node.inputs.get("palette.rgb")
+        if palette_input is None:
+            palette_input = group_node.inputs.get("palette")
+        if palette_input is None:
+            return palette_vector_node
+
+        palette_node = utils.find_linked_node(group_node, palette_input.name.lower(), "TEX_IMAGE")
+        if palette_node is None:
+            return palette_vector_node
+
+        vector_input = palette_node.inputs.get("Vector")
+        vector_output = palette_vector_node.outputs.get("Vector")
+        if vector_input is not None and vector_output is not None:
+            tree.links.new(input=vector_input, output=vector_output)
+
+        return palette_vector_node
     
     def get_model_material_spec(self, node_material_model, uses_spec_exponent_min_max: bool):
         for element in self.block_parameters.Elements:
@@ -1886,7 +1981,11 @@ class ShaderTag(Tag):
         group_node.inputs[6].default_value = e_self_illumination.name.lower().strip('_')
         group_node.inputs[7].default_value = e_blend_mode.name.lower().strip('_')
         
-        self.populate_chiefster_node(tree, group_node, 8)
+        uses_palette_vector = self._self_illumination_uses_palette_vector(e_self_illumination)
+        excluded_parameters = self.palette_vector_parameters if uses_palette_vector else frozenset()
+        self.populate_chiefster_node(tree, group_node, 8, excluded_parameters)
+        if uses_palette_vector:
+            self._setup_palette_vector_node(tree, group_node)
         
         if has_albedo and e_albedo in {Albedo.FOUR_CHANGE_COLOR, Albedo.FOUR_CHANGE_COLOR_APPLYING_TO_SPECULAR, Albedo.TWO_CHANGE_COLOR}:
             node_cc_primary = nodes.new(type="ShaderNodeAttribute")
@@ -1971,7 +2070,7 @@ class ShaderTag(Tag):
             else:
                 self.game_functions.add(data.range)
     
-    def populate_chiefster_node(self, tree: bpy.types.NodeTree, node: bpy.types.Node, start_input=0):
+    def populate_chiefster_node(self, tree: bpy.types.NodeTree, node: bpy.types.Node, start_input=0, excluded_parameters=frozenset()):
         last_parameter_name = None
         last_input_node = None
         
@@ -1993,6 +2092,10 @@ class ShaderTag(Tag):
                 last_parameter_name = None
                 continue
             input: bpy.types.NodeGroupInput
+            if parameter_name_ui in excluded_parameters:
+                last_parameter_name = None
+                last_input_node = None
+                continue
             if parameter_name_ui == last_parameter_name and last_input_node is not None:
                 # plug in alpha
                 alpha_input = node.inputs.get(f"{parameter_name_ui}.a")

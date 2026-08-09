@@ -120,7 +120,11 @@ class ShaderHalogramTag(ShaderTag):
         group_node.inputs[3].default_value = e_overlay.name.lower().strip('_')
         group_node.inputs[4].default_value = e_edge_fade.name.lower().strip('_')
         
-        self.populate_chiefster_node(tree, group_node, 5)
+        uses_palette_vector = self._self_illumination_uses_palette_vector(e_self_illumination)
+        excluded_parameters = self.palette_vector_parameters if uses_palette_vector else frozenset()
+        self.populate_chiefster_node(tree, group_node, 5, excluded_parameters)
+        if uses_palette_vector:
+            self._setup_palette_vector_node(tree, group_node)
         
         illum_uses_diffuse = e_self_illumination in {SelfIllumination.FROM_DIFFUSE, SelfIllumination.SELF_ILLUM_TIMES_DIFFUSE}
         has_illum = e_self_illumination != SelfIllumination.OFF
