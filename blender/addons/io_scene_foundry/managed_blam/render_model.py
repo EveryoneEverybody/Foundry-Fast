@@ -412,7 +412,12 @@ class RenderModelTag(Tag):
 
                 ob.nwo.marker_uses_regions = True
                 utils.set_region(ob, region_name, utils.SetType.MODEL)
-                if len(permutations) != len(region.permutations):
+                if len(region.permutations) == 1:
+                    # Keep the sole real region permutation explicit rather than
+                    # representing it as an empty exclude list.
+                    ob.nwo.marker_permutation_type = "include"
+                    utils.set_marker_permutations(ob, permutations)
+                elif len(permutations) != len(region.permutations):
                     # Pick if this is include or exclude type depending on whichever means less permutation entries need to be added
                     # If a tie prefer exclude
                     exclude_permutations = [p.name for p in region.permutations if p.name not in permutations]
