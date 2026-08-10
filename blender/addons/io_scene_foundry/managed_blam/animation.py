@@ -4450,7 +4450,10 @@ class AnimationTag(Tag):
                 if transforms:
                     blender_animation.frame_end = max(blender_animation.frame_end, max(transforms))
 
-                scale_animations_to_skeleton = getattr(self, "scale_animations_to_skeleton", False)
+                scale_animations_to_skeleton = (
+                    getattr(self, "scale_animations_to_skeleton", False)
+                    or tag_animation.translate_and_scale_root_only
+                )
                 grounding_context = None
                 if scale_animations_to_skeleton:
                     mode_key = self._grounding_mode_key(tag_animation, graph)

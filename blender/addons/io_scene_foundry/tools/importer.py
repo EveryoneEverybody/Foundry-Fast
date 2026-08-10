@@ -1213,7 +1213,7 @@ class NWO_Import(bpy.types.Operator):
     graph_scale_animations_to_skeleton: bpy.props.BoolProperty(
         name="Root Translation / Scale Only",
         default=False,
-        description="Imports translation and scale only on the root/pedestal bones; other bones keep rotation only, with idle-based foot height correction"
+        description="Applies root/pedestal translation and scale only; tagged animations always use this, and the option applies it globally with idle-based foot height correction"
     )
     graph_import_pca_data: bpy.props.BoolProperty(
         name="Import PCA Data",
@@ -5261,7 +5261,7 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
     graph_scale_animations_to_skeleton: bpy.props.BoolProperty(
         name="Root Translation / Scale Only",
         default=False,
-        description="Imports translation and scale only on the root/pedestal bones; other bones keep rotation only, with idle-based foot height correction"
+        description="Applies root/pedestal translation and scale only; tagged animations always use this, and the option applies it globally with idle-based foot height correction"
     )
     graph_import_pca_data: bpy.props.BoolProperty(
         name="Import PCA Data",
