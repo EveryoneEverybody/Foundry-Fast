@@ -2920,8 +2920,64 @@ class AnimationTag(Tag):
         walk([], graph)
         return paths
 
-    def _base_animation_candidate_names(self, graph: dict, tag_animation: Animation) -> list[str]:
-        graph_paths = self._graph_animation_paths(graph, tag_animation)
+    def _graph_animation_rename_map(self, graph: dict) -> dict[str, set[str]]:
+        rename_map = getattr(self, "_cached_graph_animation_rename_map", None)
+        graph_id = getattr(self, "_cached_graph_animation_rename_graph_id", None)
+        if rename_map is None or graph_id != id(graph):
+            rename_map = animation_rename_map(graph)
+            self._cached_graph_animation_rename_map = rename_map
+            self._cached_graph_animation_rename_graph_id = id(graph)
+        return rename_map
+
+    def _graph_animation_rename_paths(self, graph: dict, tag_animation: Animation) -> set[str]:
+        tag_name = getattr(tag_animation, "name", None)
+        if tag_name is None:
+            return set()
+        return self._graph_animation_rename_map(graph).get(tag_name.tag_name, set())
+
+    def _graph_animation_path_groups(self, graph: dict, tag_animation: Animation) -> tuple[list[str], list[str]]:
+        primary_paths = []
+        rename_paths = []
+        known_rename_paths = self._graph_animation_rename_paths(graph, tag_animation)
+
+        for path in self._graph_animation_paths(graph, tag_animation):
+            if normalized_animation_graph_path(path) in known_rename_paths:
+                rename_paths.append(path)
+            else:
+                primary_paths.append(path)
+
+        return primary_paths, rename_paths
+
+    def _ordered_base_candidate_names(
+        self,
+        graph_paths: list[str],
+        canonical_name: str,
+        canonical_state: str,
+        include_canonical_name: bool,
+    ) -> list[str]:
+        ordered_paths = []
+        used_paths = set()
+
+        def add_path(path: str):
+            if path and path not in used_paths:
+                ordered_paths.append(path)
+                used_paths.add(path)
+
+        if canonical_state:
+            for path in graph_paths:
+                path_name = utils.AnimationName(path)
+                if path_name.valid and not path_name.custom and path_name.state == canonical_state:
+                    add_path(path)
+
+        if include_canonical_name:
+            add_path(canonical_name)
+
+        for path in graph_paths:
+            add_path(path)
+
+        return ordered_paths
+
+    def _base_animation_candidate_name_groups(self, graph: dict, tag_animation: Animation) -> list[list[str]]:
         tag_name = getattr(tag_animation, "name", None)
         canonical_name = ""
         canonical_state = ""
@@ -2929,28 +2985,31 @@ class AnimationTag(Tag):
             canonical_name = tag_name.tag_name
             canonical_state = tag_name.state
 
-        if graph_paths:
-            ordered_paths = []
-            used_paths = set()
+        primary_paths, rename_paths = self._graph_animation_path_groups(graph, tag_animation)
+        groups = []
 
-            def add_path(path: str):
-                if path and path not in used_paths:
-                    ordered_paths.append(path)
-                    used_paths.add(path)
+        primary_names = self._ordered_base_candidate_names(
+            primary_paths,
+            canonical_name,
+            canonical_state,
+            include_canonical_name=bool(canonical_name),
+        )
+        if primary_names:
+            groups.append(primary_names)
 
-            if canonical_state:
-                for path in graph_paths:
-                    path_name = utils.AnimationName(path)
-                    if path_name.valid and not path_name.custom and path_name.state == canonical_state:
-                        add_path(path)
-                add_path(canonical_name)
+        rename_names = self._ordered_base_candidate_names(
+            rename_paths,
+            canonical_name,
+            canonical_state,
+            include_canonical_name=False,
+        )
+        if rename_names:
+            groups.append(rename_names)
 
-            for path in graph_paths:
-                add_path(path)
+        return groups
 
-            return ordered_paths
-
-        return [] if not canonical_name else [canonical_name]
+    def _base_animation_candidate_names(self, graph: dict, tag_animation: Animation) -> list[str]:
+        return [name for group in self._base_animation_candidate_name_groups(graph, tag_animation) for name in group]
 
     def _get_base_animation_candidates(self, graph: dict, names, animation_type: AnimationType = AnimationType.NONE):
         if isinstance(names, str):
@@ -3566,8 +3625,10 @@ class AnimationTag(Tag):
         return len(mode) > 2 and mode[-2] == "_" and mode[-1] != "_"
 
     def _grounding_scope_name(self, tag_animation: Animation, graph: dict | None = None) -> utils.AnimationName | None:
+        rename_paths = []
         if graph:
-            for path in self._graph_animation_paths(graph, tag_animation):
+            primary_paths, rename_paths = self._graph_animation_path_groups(graph, tag_animation)
+            for path in primary_paths:
                 path_name = utils.AnimationName(path)
                 if path_name.valid and not path_name.custom and not self._is_vehicle_animation_mode(path_name.mode):
                     return path_name
@@ -3575,6 +3636,11 @@ class AnimationTag(Tag):
         name = getattr(tag_animation, "name", None)
         if name is not None and getattr(name, "valid", False) and not getattr(name, "custom", False) and not self._is_vehicle_animation_mode(name.mode):
             return name
+
+        for path in rename_paths:
+            path_name = utils.AnimationName(path)
+            if path_name.valid and not path_name.custom and not self._is_vehicle_animation_mode(path_name.mode):
+                return path_name
 
         return None
 
@@ -3611,11 +3677,12 @@ class AnimationTag(Tag):
         if scope_name is None:
             return None
 
-        candidates = self._get_base_animation_candidates(graph, self._base_animation_candidate_names(graph, animation), AnimationType.NONE)
-        for candidate in self._resolved_base_candidates(candidates, all_tag_animations):
-            candidate_scope = self._grounding_scope_name(candidate, graph)
-            if candidate_scope is not None and candidate_scope.mode in {scope_name.mode, "any"}:
-                return candidate
+        for candidate_names in self._base_animation_candidate_name_groups(graph, animation):
+            candidates = self._get_base_animation_candidates(graph, candidate_names, AnimationType.NONE)
+            for candidate in self._resolved_base_candidates(candidates, all_tag_animations):
+                candidate_scope = self._grounding_scope_name(candidate, graph)
+                if candidate_scope is not None and candidate_scope.mode in {scope_name.mode, "any"}:
+                    return candidate
 
         idle_name = scope_name.copy()
         idle_name.state = "idle"
@@ -3836,7 +3903,8 @@ class AnimationTag(Tag):
                     self._movement_data_from_second_frame(resource_data.movement_data, animation_data.frame_count),
                 )
         if tag_animation.animation_type in (AnimationType.OVERLAY, AnimationType.REPLACEMENT):
-            base_candidate_names = self._base_animation_candidate_names(graph, tag_animation)
+            base_candidate_name_groups = self._base_animation_candidate_name_groups(graph, tag_animation)
+            base_candidate_names = [name for group in base_candidate_name_groups for name in group]
             base_candidates = []
             base_tag_animations = []
             use_rest_base = tag_animation.is_pose_overlay and tag_animation.name.state in POSE_OVERLAY_REST_BASE_STATES
@@ -3846,12 +3914,15 @@ class AnimationTag(Tag):
             elif not base_candidate_names:
                 skipped_base_candidate_reason = "custom animation name not found in graph"
             else:
-                base_candidates = self._get_base_animation_candidates(
-                    graph,
-                    base_candidate_names,
-                    tag_animation.animation_type,
-                )
-                base_tag_animations = self._resolved_base_candidates(base_candidates, all_tag_animations)
+                for candidate_names in base_candidate_name_groups:
+                    base_candidates = self._get_base_animation_candidates(
+                        graph,
+                        candidate_names,
+                        tag_animation.animation_type,
+                    )
+                    base_tag_animations = self._resolved_base_candidates(base_candidates, all_tag_animations)
+                    if base_tag_animations:
+                        break
             self._debug_print_base_animation_candidates(
                 tag_animation,
                 base_candidate_names,
@@ -4265,6 +4336,8 @@ class AnimationTag(Tag):
                 
             tag_animations = self.get_animations()
             graph = self.to_dict(tag_animations)
+            self._cached_graph_animation_rename_map = animation_rename_map(graph)
+            self._cached_graph_animation_rename_graph_id = id(graph)
             grounding_offset_cache = {}
 
             for tag_animation in tag_animations:
@@ -5360,6 +5433,20 @@ class AnimationTag(Tag):
             
         return event_count
 
+def normalized_animation_graph_path(path: str) -> str:
+    tokens = [token for token in (path or "").replace(" ", ":").split(":") if token]
+    if not tokens:
+        return ""
+    return ":".join(minimal_path(tokens))
+
+def animation_rename_map(graph: dict) -> dict[str, set[str]]:
+    renames_by_name = defaultdict(set)
+    for source_name, rename in detect_renames(graph):
+        normalized_rename = normalized_animation_graph_path(rename)
+        if normalized_rename:
+            renames_by_name[source_name].add(normalized_rename)
+    return dict(renames_by_name)
+
 def detect_renames(graph):
     name_to_paths = defaultdict(list)
 
@@ -5401,9 +5488,9 @@ def detect_renames(graph):
     for anim_name, paths in name_to_paths.items():
         if len(paths) < 2:
             continue
-        canonical_src = ":".join(minimal_path(anim_name.split(":")))
+        canonical_src = normalized_animation_graph_path(anim_name)
         for p in paths:
-            short_p = ":".join(minimal_path(p.split(":")))
+            short_p = normalized_animation_graph_path(p)
             if short_p != canonical_src:
                 renames.append((anim_name, short_p))
     return renames
