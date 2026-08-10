@@ -1211,9 +1211,9 @@ class NWO_Import(bpy.types.Operator):
         description="Imports animations from the graph. Currently the root movement element of base movement animations is unsupported and overlay rotations do not import correctly"
     )
     graph_scale_animations_to_skeleton: bpy.props.BoolProperty(
-        name="Scale Animations To Skeleton",
+        name="Root Translation / Scale Only",
         default=False,
-        description="Scales imported bone translation and scale channels using the linked or current render_model rest pose compared to the animation graph skeleton"
+        description="Imports translation and scale only on the root/pedestal bones; other bones keep rotation only, with idle-based foot height correction"
     )
     graph_import_pca_data: bpy.props.BoolProperty(
         name="Import PCA Data",
@@ -5259,9 +5259,9 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         description="Imports animations from the graph. Currently the root movement element of base movement animations is unsupported and overlay rotations do not import correctly"
     )
     graph_scale_animations_to_skeleton: bpy.props.BoolProperty(
-        name="Scale Animations To Skeleton",
+        name="Root Translation / Scale Only",
         default=False,
-        description="Scales imported bone translation and scale channels using the linked or current render_model rest pose compared to the animation graph skeleton"
+        description="Imports translation and scale only on the root/pedestal bones; other bones keep rotation only, with idle-based foot height correction"
     )
     graph_import_pca_data: bpy.props.BoolProperty(
         name="Import PCA Data",

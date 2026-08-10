@@ -4574,29 +4574,6 @@ class AnimationTag(Tag):
             else:
                 bone_base_matrices[bone] = bone.matrix
 
-        def default_rest_local_matrix(default_nodes: list[DefaultAnimationNode], node_index: int):
-            if node_index < 0 or node_index >= len(default_nodes):
-                return Matrix.Identity(4)
-
-            default_node = default_nodes[node_index]
-            return import_transform.armature_bone_matrix(
-                Matrix.LocRotScale(
-                    default_node.translation,
-                    default_node.rotation,
-                    Vector.Fill(3, default_node.scale),
-                ),
-                root=default_node.parent_index < 0,
-            )
-
-        def median(values: list[float]) -> float:
-            if not values:
-                return 1.0
-            sorted_values = sorted(values)
-            middle = len(sorted_values) // 2
-            if len(sorted_values) % 2:
-                return sorted_values[middle]
-            return (sorted_values[middle - 1] + sorted_values[middle]) * 0.5
-
         node_indices = {node: index for index, node in enumerate(nodes)}
         node_usages = node_usages or {}
         root_motion_node_indices = {0}
@@ -4604,45 +4581,18 @@ class AnimationTag(Tag):
         if pedestal_index is not None:
             root_motion_node_indices.add(pedestal_index)
 
-        skeleton_scale_adjustments = {}
-        if scale_animations_to_skeleton and source_defaults and target_defaults:
-            rest_ratios = []
-            pending_adjustments = []
-            for node in valid_nodes:
-                node_index = node_indices.get(node)
-                if node_index is None or node_index in root_motion_node_indices or node_index >= len(source_defaults) or node_index >= len(target_defaults):
-                    continue
-
-                source_rest_matrix = default_rest_local_matrix(source_defaults, node_index)
-                ratio_target_rest_matrix = default_rest_local_matrix(target_defaults, node_index)
-                source_rest_loc, _, _ = source_rest_matrix.decompose()
-                ratio_target_rest_loc, _, _ = ratio_target_rest_matrix.decompose()
-                source_length = source_rest_loc.length
-                target_length = ratio_target_rest_loc.length
-                node_ratio = target_length / source_length if source_length > tolerance else None
-                if node_ratio is not None and math.isfinite(node_ratio) and 0.05 <= node_ratio <= 20.0 and target_length > tolerance:
-                    rest_ratios.append(node_ratio)
-
-                pending_adjustments.append((node, node_ratio))
-
-            global_ratio = median(rest_ratios)
-            for node, node_ratio in pending_adjustments:
-                skeleton_scale_adjustments[node] = node_ratio if node_ratio is not None and math.isfinite(node_ratio) and 0.05 <= node_ratio <= 20.0 else global_ratio
-
         base_repeats = 0
         identity_scale = Vector((1.0, 1.0, 1.0))
         valid_node_set = set(valid_nodes)
+        root_translation_scale_nodes = {
+            node for node in valid_nodes if node_indices.get(node) in root_motion_node_indices
+        }
 
-        def apply_skeleton_scale(node: Node, loc: Vector, sca: Vector) -> tuple[Vector, Vector]:
-            scale_adjustment = skeleton_scale_adjustments.get(node)
-            if scale_adjustment is None:
+        def apply_root_only_translation_scale(node: Node, loc: Vector, sca: Vector) -> tuple[Vector, Vector]:
+            if not scale_animations_to_skeleton or node in root_translation_scale_nodes:
                 return loc, sca
 
-            loc = loc * scale_adjustment
-            sca = identity_scale + ((sca - identity_scale) * scale_adjustment)
-            if sca.length <= tolerance:
-                sca = identity_scale.copy()
-            return loc, sca
+            return Vector((0.0, 0.0, 0.0)), identity_scale.copy()
 
         def final_local_matrix(node: Node, frame_transforms: dict, scale_animation=True) -> Matrix | None:
             node_transform = frame_transforms.get(node)
@@ -4653,7 +4603,7 @@ class AnimationTag(Tag):
 
             bind_inv = bone_base_matrices[node.pose_bone].inverted_safe()
             loc, rot, sca = (bind_inv @ node_transform).decompose()
-            loc, sca = apply_skeleton_scale(node, loc, sca)
+            loc, sca = apply_root_only_translation_scale(node, loc, sca)
             return bone_base_matrices[node.pose_bone] @ Matrix.LocRotScale(loc, rot, sca)
 
         def frame_world_matrices(frame_transforms: dict, scale_animation=True) -> dict:
@@ -4744,7 +4694,7 @@ class AnimationTag(Tag):
                             transform_matrix = delta_base @ transform_matrix
 
                 loc, rot, sca = transform_matrix.decompose()
-                loc, sca = apply_skeleton_scale(node, loc, sca)
+                loc, sca = apply_root_only_translation_scale(node, loc, sca)
                 if node is grounding_node and abs(grounding_offset) > tolerance:
                     local_matrix = bone_base_matrices[node.pose_bone] @ Matrix.LocRotScale(loc, rot, sca)
                     parent_world_matrix = Matrix.Identity(4)
