@@ -4584,11 +4584,17 @@ class AnimationTag(Tag):
         if pedestal_index is not None:
             root_motion_node_indices.add(pedestal_index)
 
+        root_translation_scale_node_indices = set(root_motion_node_indices)
+        for node in nodes:
+            node_index = node_indices.get(node)
+            if node_index is not None and node.parent_index in root_motion_node_indices:
+                root_translation_scale_node_indices.add(node_index)
+
         base_repeats = 0
         identity_scale = Vector((1.0, 1.0, 1.0))
         valid_node_set = set(valid_nodes)
         root_translation_scale_nodes = {
-            node for node in valid_nodes if node_indices.get(node) in root_motion_node_indices
+            node for node in valid_nodes if node_indices.get(node) in root_translation_scale_node_indices
         }
 
         def apply_root_only_translation_scale(node: Node, loc: Vector, sca: Vector) -> tuple[Vector, Vector]:
