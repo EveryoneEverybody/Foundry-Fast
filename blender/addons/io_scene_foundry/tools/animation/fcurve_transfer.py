@@ -1,11 +1,10 @@
 
 
 import math
-import os
 import time
 from typing import cast
 import bpy
-from mathutils import Euler, Matrix, Quaternion
+from mathutils import Euler, Matrix
 from ... import utils
 
 list_source_bones = []
@@ -157,42 +156,51 @@ class NWO_OT_MovementDataToPedestal(bpy.types.Operator):
         default=False,
     )
     
-    def find_armature_ob(self, context):
+    def find_armature_ob(self, context) -> bool:
         ob = None
         if context.object and context.object.type == "ARMATURE":
             ob = context.object
         else:
             ob = utils.get_rig(context)
-            
+
         if ob is None:
             self.report({'WARNING'}, "No armature in scene")
-            return {'CANCELLED'}
-        
-        
+            return False
+
         global list_root_bones
         list_root_bones = []
         for bone in ob.pose.bones:
             if not bone.parent:
                 list_root_bones.append((bone.name, bone.name, ""))
-                
+
+        if not list_root_bones:
+            self.report({'WARNING'}, "Armature has no root bone")
+            return False
+
         global list_source_bones
         list_source_bones = []
         for bone in ob.pose.bones:
             if bone.parent:
                 list_source_bones.append((bone.name, bone.name, ""))
-                
-        list_source_bones.sort(key=lambda x: "aim" in x[0]) # so aim pitch / aim_yaw don't get sorted first
-                
+
+        if not list_source_bones:
+            self.report({'WARNING'}, "Armature has no child bone to use as a movement source")
+            return False
+
+        list_source_bones.sort(key=lambda x: "aim" in x[0])  # so aim pitch / aim_yaw don't get sorted first
+
         self.ob = ob
+        return True
     
     def invoke(self, context, event):
-        self.find_armature_ob(context)
+        if not self.find_armature_ob(context):
+            return {'CANCELLED'}
         for bone in self.ob.pose.bones:
             if bone.name == last_source_bone:
                 self.source_bone = last_source_bone
             elif bone.name == last_root_bone:
                 self.root_bone = last_root_bone
-                
+
         return context.window_manager.invoke_props_dialog(self, width=600)
     
     def draw(self, context):
@@ -237,193 +245,447 @@ class NWO_OT_MovementDataToPedestal(bpy.types.Operator):
     def execute(self, context):
         global last_source_bone
         global last_root_bone
-        last_source_bone = self.source_bone
-        last_root_bone = self.root_bone
-        
+
         scene_nwo = utils.get_scene_props()
         if not scene_nwo.animations:
             self.report({'WARNING'}, "No animations in scene")
             return {'CANCELLED'}
-        
-        if not self.all_animations and scene_nwo.active_animation_index == -1:
+
+        current_animation_index = scene_nwo.active_animation_index
+        current_animation = (
+            scene_nwo.animations[current_animation_index]
+            if 0 <= current_animation_index < len(scene_nwo.animations)
+            else None
+        )
+        if not self.all_animations and current_animation is None:
             self.report({'WARNING'}, "No active animation")
             return {'CANCELLED'}
-        
-        self.find_armature_ob(context)
-        
+
+        if not self.find_armature_ob(context):
+            return {'CANCELLED'}
+        if self.source_bone not in self.ob.pose.bones or self.root_bone not in self.ob.pose.bones:
+            self.report({'WARNING'}, "The selected source or root bone no longer exists")
+            return {'CANCELLED'}
+
+        last_source_bone = self.source_bone
+        last_root_bone = self.root_bone
+
         current_frame = context.scene.frame_current
-        current_animation_index = scene_nwo.active_animation_index
-        current_animation = scene_nwo.animations[scene_nwo.active_animation_index]
         current_pose = self.ob.data.pose_position
         current_object = context.object
         current_mode = context.mode
-        
+
         settings_dict = {}
         root_matrix = None
-        if self.movement_type == 'MANUAL':
-            settings_dict["use_x_loc"] = self.use_x_loc
-            settings_dict["use_y_loc"] = self.use_y_loc
-            settings_dict["use_z_loc"] = self.use_z_loc
-            settings_dict["use_x_rot"] = self.use_x_rot
-            settings_dict["use_y_rot"] = self.use_y_rot
-            settings_dict["use_z_rot"] = self.use_z_rot
-            settings_dict["use_x_scale"] = self.use_x_scale
-            settings_dict["use_y_scale"] = self.use_y_scale
-            settings_dict["use_z_scale"] = self.use_z_scale
-        elif self.movement_type == 'POSE':
-            if self.pose_type == 'CURRENT':
-                root_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
-            else:
-                root_matrix = get_bone_matrices(context, current_animation_index, current_animation, self.ob.pose.bones[self.root_bone])
-        elif self.movement_type == 'RESET':
-            root_matrix = Matrix.Identity(4)
-        elif self.movement_type == 'ANIMATION':
-            if not self.animation:
-                self.report({'WARNING'}, "No animation specified")
-                return {'CANCELLED'}
-            for idx, animation in enumerate(scene_nwo.animations):
-                if animation.name == self.animation:
-                    scene_nwo.active_animation_index = idx
-                    if self.start_end == 'START':
-                        context.scene.frame_set(animation.frame_start)
-                        root_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
-                    elif self.start_end == 'END':
-                        context.scene.frame_set(animation.frame_end)
-                        root_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
-                    else:
-                        root_matrix = get_bone_matrices(context, idx, animation, self.ob.pose.bones[self.root_bone], current_animation.frame_end + 1 - current_animation.frame_start)
-                    break
-                
-            scene_nwo.active_animation_index = current_animation_index
+        try:
+            if self.movement_type == 'MANUAL':
+                settings_dict = {
+                    "use_x_loc": self.use_x_loc,
+                    "use_y_loc": self.use_y_loc,
+                    "use_z_loc": self.use_z_loc,
+                    "use_x_rot": self.use_x_rot,
+                    "use_y_rot": self.use_y_rot,
+                    "use_z_rot": self.use_z_rot,
+                    "use_x_scale": self.use_x_scale,
+                    "use_y_scale": self.use_y_scale,
+                    "use_z_scale": self.use_z_scale,
+                }
+                if not any(settings_dict.values()):
+                    self.report({'WARNING'}, "No movement channels selected")
+                    return {'CANCELLED'}
+            elif self.movement_type == 'POSE':
+                if self.pose_type == 'CURRENT':
+                    root_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
+                else:
+                    if current_animation is None or _get_animation_action(current_animation, self.ob) is None:
+                        self.report({'WARNING'}, "An active armature animation is required for animated poses")
+                        return {'CANCELLED'}
+                    root_matrix = get_bone_matrices(
+                        context,
+                        current_animation_index,
+                        current_animation,
+                        self.ob.pose.bones[self.root_bone],
+                    )
+            elif self.movement_type == 'RESET':
+                root_matrix = Matrix.Identity(4)
+            elif self.movement_type == 'ANIMATION':
+                if not self.animation:
+                    self.report({'WARNING'}, "No animation specified")
+                    return {'CANCELLED'}
+                reference_index = next(
+                    (idx for idx, animation in enumerate(scene_nwo.animations) if animation.name == self.animation),
+                    None,
+                )
+                if reference_index is None:
+                    self.report({'WARNING'}, f"Animation not found: {self.animation}")
+                    return {'CANCELLED'}
+                reference_animation = scene_nwo.animations[reference_index]
+                if _get_animation_action(reference_animation, self.ob) is None:
+                    self.report({'WARNING'}, f"Animation has no action for {self.ob.name}: {self.animation}")
+                    return {'CANCELLED'}
+                _activate_animation(scene_nwo, reference_index)
+                if self.start_end == 'START':
+                    context.scene.frame_set(reference_animation.frame_start)
+                    root_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
+                elif self.start_end == 'END':
+                    context.scene.frame_set(reference_animation.frame_end)
+                    root_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
+                else:
+                    root_matrix = get_bone_matrices(
+                        context,
+                        reference_index,
+                        reference_animation,
+                        self.ob.pose.bones[self.root_bone],
+                    )
+        finally:
+            if scene_nwo.active_animation_index != current_animation_index:
+                scene_nwo.active_animation_index = current_animation_index
             context.scene.frame_set(current_frame)
-        
-        if not self.all_animations and not self.has_movement_data(current_animation) and not settings_dict and root_matrix is None:
-            self.report({'WARNING'}, "Active animation has no movement data")
+
+        candidate_indices = (
+            range(len(scene_nwo.animations))
+            if self.all_animations
+            else (current_animation_index,)
+        )
+        target_indices = []
+        for idx in candidate_indices:
+            animation = scene_nwo.animations[idx]
+            if self.movement_type == 'AUTOMATIC' and not self.has_movement_data(animation):
+                continue
+            if _get_animation_action(animation, self.ob) is None:
+                if self.all_animations:
+                    print(f"Skipping {animation.name}: no action for {self.ob.name}")
+                continue
+            target_indices.append(idx)
+
+        if not target_indices:
+            self.report({'WARNING'}, "No eligible armature animations found")
             return {'CANCELLED'}
 
         utils.set_object_mode(context)
         utils.set_active_object(self.ob)
-        
-        if self.all_animations:
-            os.system("cls")
-            start = time.perf_counter()
-            scene_nwo_export = utils.get_export_props()
-            if scene_nwo_export.show_output:
-                bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
-                scene_nwo_export.show_output = False
-                
-            export_title = f"►►► MOVEMENT DATA TRANSFER ◄◄◄\n"
-            print(export_title)
-        
-        source_bone_anim_matrices = {}
-        source_bone = self.ob.pose.bones[self.source_bone]
-        
-        if not self.relative:
-            if self.all_animations:
-                print("Getting existing source bone poses")
-                for i in range(len(scene_nwo.animations)):
-                    animation = scene_nwo.animations[i]
-                    print(f"--- {animation.name}")
-                    source_bone_anim_matrices[i] = get_bone_matrices(context, i, animation, source_bone)
-            else:
-                print(f"Getting existing source bone poses for {current_animation.name}")
-                source_bone_anim_matrices[current_animation_index] = get_bone_matrices(context, current_animation_index, current_animation, source_bone)
-        
-        self.ob.data.pose_position = 'REST'
-        context.view_layer.update()
-        root_rest_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
-        bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-        self.ob.data.edit_bones[self.source_bone].parent = None
-        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-        self.ob.data.pose_position = 'POSE'
-        context.view_layer.update()
-        
-        if self.movement_type == 'RESET':
-            root_matrix = root_rest_matrix
-            
-        if self.relative:
-            if self.all_animations:
-                print("Getting existing source bone poses")
-                for i in range(len(scene_nwo.animations)):
-                    animation = scene_nwo.animations[i]
-                    print(f"--- {animation.name}")
-                    source_bone_anim_matrices[i] = get_bone_matrices(context, i, animation, source_bone)
-            else:
-                print(f"Getting existing source bone poses for {current_animation.name}")
-                source_bone_anim_matrices[current_animation_index] = get_bone_matrices(context, current_animation_index, current_animation, source_bone)
 
+        start = time.perf_counter()
         if self.all_animations:
-            print("Calculating new root movement for all animations")
-            for idx, animation in enumerate(scene_nwo.animations):
-                if root_matrix is not None or settings_dict or self.has_movement_data(animation):
+            print("MOVEMENT DATA TRANSFER\n")
+
+        source_bone = self.ob.pose.bones[self.source_bone]
+        source_data_bone = self.ob.data.bones[self.source_bone]
+        original_parent_name = source_data_bone.parent.name if source_data_bone.parent else None
+        original_use_connect = source_data_bone.use_connect
+        source_bone_anim_matrices = {}
+        transfer_masks = {}
+        hierarchy_changed = False
+
+        try:
+            if not self.relative:
+                print("Getting existing source bone poses")
+                for idx in target_indices:
+                    animation = scene_nwo.animations[idx]
                     print(f"--- {animation.name}")
-                    transfer_movement(context, animation, idx, self.ob, self.source_bone, self.root_bone, root_rest_matrix, root_matrix, settings_dict, source_bone_anim_matrices.get(idx), self.relative_to_root_start)
-        else:
-            print(f"Calculating new root movement for {current_animation.name}")
-            transfer_movement(context, current_animation, current_animation_index, self.ob, self.source_bone, self.root_bone, root_rest_matrix, root_matrix, settings_dict, source_bone_anim_matrices.get(current_animation_index), self.relative_to_root_start)
-            
-        bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-        self.ob.data.edit_bones[self.source_bone].parent = self.ob.data.edit_bones[self.root_bone]
-        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-        
-        print(f"\nSetting new source bone keyframes")
-        for idx, source_bone_matrices in source_bone_anim_matrices.items():
-            animation = scene_nwo.animations[idx]
-            print(f"--- {animation.name}")
-            fix_source_movement(context, animation, idx, self.ob, self.source_bone, source_bone_matrices)
-        
-        self.ob.data.pose_position = current_pose
-        scene_nwo.active_animation_index = current_animation_index
-        context.scene.frame_set(current_frame)
-        context.view_layer.objects.active = current_object
-        utils.restore_mode(current_mode)
-        
+                    source_bone_anim_matrices[idx] = get_bone_matrices(context, idx, animation, source_bone)
+
+            self.ob.data.pose_position = 'REST'
+            context.view_layer.update()
+            root_rest_matrix = self.ob.pose.bones[self.root_bone].matrix.copy()
+
+            hierarchy_changed = True
+            _set_source_parent(self.ob, self.source_bone, None, False)
+            self.ob.data.pose_position = 'POSE'
+            context.view_layer.update()
+
+            if self.movement_type == 'RESET':
+                root_matrix = root_rest_matrix
+
+            if self.relative:
+                print("Getting existing source bone poses")
+                for idx in target_indices:
+                    animation = scene_nwo.animations[idx]
+                    print(f"--- {animation.name}")
+                    source_bone_anim_matrices[idx] = get_bone_matrices(context, idx, animation, source_bone)
+
+            print("Calculating new root movement")
+            for idx in target_indices:
+                animation = scene_nwo.animations[idx]
+                print(f"--- {animation.name}")
+                transfer_masks[idx] = transfer_movement(
+                    context,
+                    animation,
+                    idx,
+                    self.ob,
+                    self.source_bone,
+                    self.root_bone,
+                    root_rest_matrix,
+                    root_matrix,
+                    settings_dict,
+                    source_bone_anim_matrices[idx],
+                    self.relative_to_root_start,
+                )
+
+            _set_source_parent(
+                self.ob,
+                self.source_bone,
+                original_parent_name,
+                original_use_connect,
+            )
+            hierarchy_changed = False
+            self.ob.data.pose_position = 'POSE'
+            context.view_layer.update()
+
+            print("\nSetting new source bone keyframes")
+            for idx in target_indices:
+                animation = scene_nwo.animations[idx]
+                print(f"--- {animation.name}")
+                use_loc, use_rot, use_scale = transfer_masks[idx]
+                fix_source_movement(
+                    context,
+                    animation,
+                    idx,
+                    self.ob,
+                    self.source_bone,
+                    source_bone_anim_matrices[idx],
+                    key_location=any(use_loc) or any(use_rot) or any(use_scale),
+                    key_rotation=any(use_rot) or any(use_scale),
+                    key_scale=any(use_scale),
+                )
+        finally:
+            if hierarchy_changed:
+                utils.set_object_mode(context)
+                utils.set_active_object(self.ob)
+                _set_source_parent(
+                    self.ob,
+                    self.source_bone,
+                    original_parent_name,
+                    original_use_connect,
+                )
+
+            self.ob.data.pose_position = current_pose
+            if scene_nwo.active_animation_index != current_animation_index:
+                scene_nwo.active_animation_index = current_animation_index
+            context.scene.frame_set(current_frame)
+            active_object = context.view_layer.objects.get(current_object.name) if current_object else None
+            context.view_layer.objects.active = active_object
+            if active_object is not None:
+                utils.restore_mode(current_mode)
+
         if self.all_animations:
             print("\n-----------------------------------------------------------------------")
             print(f"Completed in {utils.human_time(time.perf_counter() - start, True)}")
             print("-----------------------------------------------------------------------\n")
-        
+
         return {'FINISHED'}
     
-def get_bone_matrices(context: bpy.types.Context, animation_index: int, animation, bone: bpy.types.PoseBone, frame_count=None):
+def _get_animation_action(animation, ob: bpy.types.Object) -> bpy.types.Action | None:
+    actions = [
+        track.action
+        for track in animation.action_tracks
+        if track.object == ob and track.action is not None and not track.is_shape_key_action
+    ]
+    if not actions:
+        return None
+
+    active_action = ob.animation_data.action if ob.animation_data else None
+    return active_action if active_action in actions else actions[0]
+
+
+def _activate_animation(scene_nwo, animation_index: int):
+    if scene_nwo.active_animation_index != animation_index:
+        scene_nwo.active_animation_index = animation_index
+
+
+def _set_source_parent(
+    ob: bpy.types.Object,
+    source_bone_name: str,
+    parent_bone_name: str | None,
+    use_connect: bool,
+):
+    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+    try:
+        source_bone = ob.data.edit_bones[source_bone_name]
+        source_bone.use_connect = False
+        source_bone.parent = ob.data.edit_bones.get(parent_bone_name) if parent_bone_name else None
+        source_bone.use_connect = bool(parent_bone_name and use_connect)
+    finally:
+        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+
+
+def _fit_matrix_sequence(matrices: list[Matrix], frame_count: int) -> list[Matrix]:
+    if frame_count <= 0:
+        return []
+    if not matrices:
+        raise ValueError("Cannot fit an empty matrix sequence")
+    if len(matrices) >= frame_count:
+        return list(matrices[:frame_count])
+    return list(matrices) + [matrices[-1]] * (frame_count - len(matrices))
+
+
+def get_bone_matrices(
+    context: bpy.types.Context,
+    animation_index: int,
+    animation,
+    bone: bpy.types.PoseBone,
+) -> list[Matrix]:
     scene_nwo = utils.get_scene_props()
-    scene_nwo.active_animation_index = animation_index
-    scene = context.scene
+    _activate_animation(scene_nwo, animation_index)
     bone_matrices = []
-    for i in range(animation.frame_start, animation.frame_end + 1):
-        scene.frame_set(i)
+    for frame in range(animation.frame_start, animation.frame_end + 1):
+        context.scene.frame_set(frame)
         bone_matrices.append(bone.matrix.copy())
-        
-    if frame_count is not None and len(bone_matrices) != frame_count:
-        if frame_count > len(bone_matrices):
-            return bone_matrices + [bone_matrices[-1]] * (frame_count - len(bone_matrices))
-        else:
-            return bone_matrices[:frame_count - 1]
-        
     return bone_matrices
-    
-def fix_source_movement(context: bpy.types.Context, animation, animation_index: int, ob: bpy.types.Object, source_bone_name: str, source_bone_matrices: list[Matrix]):
+
+
+def _transform_sample_from_pose_matrix(
+    ob: bpy.types.Object,
+    bone: bpy.types.PoseBone,
+    frame: int,
+    pose_matrix: Matrix,
+    previous_rotation: tuple[float, float, float, float] | None,
+):
+    local_matrix = ob.convert_space(
+        pose_bone=bone,
+        matrix=pose_matrix,
+        from_space='POSE',
+        to_space='LOCAL',
+    )
+    location, rotation, scale = local_matrix.decompose()
+    rotation_values = (rotation.w, rotation.x, rotation.y, rotation.z)
+    if previous_rotation is not None:
+        dot = sum(a * b for a, b in zip(rotation_values, previous_rotation))
+        if dot < 0:
+            rotation_values = tuple(-value for value in rotation_values)
+
+    sample = (
+        frame,
+        (location.x, location.y, location.z),
+        rotation_values,
+        (scale.x, scale.y, scale.z),
+    )
+    return sample, rotation_values
+
+
+def _transform_samples_from_pose_matrices(
+    ob: bpy.types.Object,
+    bone: bpy.types.PoseBone,
+    frames: range,
+    pose_matrices: list[Matrix],
+):
+    samples = []
+    previous_rotation = None
+    for frame, pose_matrix in zip(frames, pose_matrices):
+        sample, previous_rotation = _transform_sample_from_pose_matrix(
+            ob,
+            bone,
+            frame,
+            pose_matrix,
+            previous_rotation,
+        )
+        samples.append(sample)
+    return samples
+
+
+def _write_transform_samples(
+    animation,
+    ob: bpy.types.Object,
+    bone: bpy.types.PoseBone,
+    samples,
+    key_location: bool,
+    key_rotation: bool,
+    key_scale: bool,
+):
+    if not samples or not (key_location or key_rotation or key_scale):
+        return
+
+    action = _get_animation_action(animation, ob)
+    if action is None:
+        raise RuntimeError(f"Animation {animation.name} has no action for {ob.name}")
+
+    fcurves = utils.get_fcurves(action, ob)
+    if fcurves is None:
+        raise RuntimeError(f"Could not find the action slot for {action.name}")
+
+    curve_map = {(fcurve.data_path, fcurve.array_index): fcurve for fcurve in fcurves}
+    channels = []
+    if key_location:
+        channels.append(("location", 3, 1))
+    if key_rotation:
+        channels.append(("rotation_quaternion", 4, 2))
+    if key_scale:
+        channels.append(("scale", 3, 3))
+
+    for channel, component_count, sample_index in channels:
+        data_path = f'pose.bones["{bone.name}"].{channel}'
+        for component in range(component_count):
+            key = (data_path, component)
+            fcurve = curve_map.get(key)
+            if fcurve is None:
+                fcurve = fcurves.new(data_path=data_path, index=component)
+                curve_map[key] = fcurve
+
+            points_by_frame = {float(point.co[0]): point for point in fcurve.keyframe_points}
+            for sample in samples:
+                frame = float(sample[0])
+                value = sample[sample_index][component]
+                point = points_by_frame.get(frame)
+                if point is None:
+                    point = fcurve.keyframe_points.insert(frame, value, options={'FAST'})
+                    points_by_frame[frame] = point
+                else:
+                    point.co_ui[1] = value
+                # These are baked per-frame samples. Linear interpolation prevents
+                # Bezier handles from introducing motion that was never sampled.
+                point.interpolation = 'LINEAR'
+            fcurve.update()
+
+    action.update_tag()
+
+
+def fix_source_movement(
+    context: bpy.types.Context,
+    animation,
+    animation_index: int,
+    ob: bpy.types.Object,
+    source_bone_name: str,
+    source_bone_matrices: list[Matrix],
+    key_location: bool,
+    key_rotation: bool,
+    key_scale: bool,
+):
     scene_nwo = utils.get_scene_props()
-    scene_nwo.active_animation_index = animation_index
+    _activate_animation(scene_nwo, animation_index)
     source_bone = ob.pose.bones[source_bone_name]
-    for idx, i in enumerate(range(animation.frame_start, animation.frame_end + 1)):
-        context.scene.frame_set(i)
-        source_bone.matrix = source_bone_matrices[idx]
-        context.view_layer.update()
-        source_bone.keyframe_insert(data_path='location', frame=i, options={'INSERTKEY_VISUAL'})
-        source_bone.keyframe_insert(data_path='rotation_quaternion', frame=i, options={'INSERTKEY_VISUAL'})
-        source_bone.keyframe_insert(data_path='scale', frame=i, options={'INSERTKEY_VISUAL'})
-        
+    frames = range(animation.frame_start, animation.frame_end + 1)
+    fitted_matrices = _fit_matrix_sequence(source_bone_matrices, len(frames))
 
-def _safe_scale_ratio(value: float, base: float) -> float:
-    if abs(base) < 1e-8:
-        return 1.0
-    return value / base
+    samples = []
+    previous_rotation = None
+    for frame, pose_matrix in zip(frames, fitted_matrices):
+        context.scene.frame_set(frame)
+        sample, previous_rotation = _transform_sample_from_pose_matrix(
+            ob,
+            source_bone,
+            frame,
+            pose_matrix,
+            previous_rotation,
+        )
+        samples.append(sample)
+
+    _write_transform_samples(
+        animation,
+        ob,
+        source_bone,
+        samples,
+        key_location,
+        key_rotation,
+        key_scale,
+    )
 
 
-def _movement_channel_masks(animation, custom_settings: dict, root_matrix: Matrix | list[Matrix] | None):
+def _movement_channel_masks(
+    animation,
+    custom_settings: dict | None,
+    root_matrix: Matrix | list[Matrix] | None,
+):
     """Returns (use_loc, use_rot, use_scale, special_turn, final_token)."""
-    use_root_transform = root_matrix is not None
     special_turn = False
     final_token = ""
 
@@ -448,18 +710,16 @@ def _movement_channel_masks(animation, custom_settings: dict, root_matrix: Matri
             final_token,
         )
 
-    if use_root_transform:
+    if root_matrix is not None:
         return (True, True, True), (True, True, True), (True, True, True), False, final_token
 
     if animation.animation_type == 'world':
         return (True, True, True), (True, True, True), (False, False, False), False, final_token
 
     use_loc, use_rot, use_scale = _AUTOMATIC_MOVEMENT_CHANNELS[animation.animation_movement_data]
-    # A named turn changes how yaw is generated, not whether the movement type includes yaw.
-    if use_rot[2]:
-        final_token = animation.name.rpartition(" ")[2].lower()
-        if turn_rots.get(final_token) is not None:
-            special_turn = True
+    if use_rot == (False, False, True):
+        final_token = utils.space_partition(animation.name.replace(":", " "), True).lower()
+        special_turn = final_token in turn_rots
 
     return use_loc, use_rot, use_scale, special_turn, final_token
 
@@ -472,20 +732,6 @@ def _compose_selected_delta_matrix(
     use_rot: tuple[bool, bool, bool],
     use_scale: tuple[bool, bool, bool],
 ) -> Matrix:
-    """
-    Builds a new root matrix where frame 1 is root_start_matrix, and later frames
-    are driven by the source bone while preserving the frame-1 source->root offset.
-
-    Important matrix order:
-        root frame N = source frame N @ inverse(source frame 1) @ root frame 1
-
-    This means the root starts exactly where it already was on frame 1, then follows
-    the source/pelvis motion with the same initial offset, instead of applying a
-    source delta in root-start space and drifting away from the source.
-
-    Selected transform masks are then applied from that wanted follow matrix onto the
-    root's frame-1 matrix, so disabled channels remain unchanged.
-    """
     wanted_follow_matrix = source_matrix @ source_start_matrix.inverted_safe() @ root_start_matrix
     return _compose_selected_absolute_matrix(
         root_start_matrix,
@@ -532,19 +778,62 @@ def _compose_selected_absolute_matrix(
     return Matrix.LocRotScale(loc, rot, scale)
 
 
-def _insert_selected_root_keyframes(
+def _special_turn_angles(source_matrices: list[Matrix], final_token: str) -> list[float]:
+    turn_start, turn_end = turn_rots[final_token]
+    frame_count = len(source_matrices)
+    if frame_count <= 1:
+        return [math.radians(turn_start)] * frame_count
+
+    # Old turn animations are not guaranteed to rotate cleanly in one direction.
+    # Drive the requested turn from accumulated yaw travel so reversals, overshoot,
+    # and a source endpoint near its start cannot reverse or amplify the pedestal.
+    yaw_travel = [0.0]
+    previous_rotation = source_matrices[0].to_quaternion()
+    for matrix in source_matrices[1:]:
+        current_rotation = matrix.to_quaternion()
+        delta_rotation = current_rotation @ previous_rotation.inverted()
+        _, twist_angle = delta_rotation.to_swing_twist('Z')
+        yaw_travel.append(yaw_travel[-1] + abs(twist_angle))
+        previous_rotation = current_rotation
+
+    total_travel = yaw_travel[-1]
+    if total_travel < 1e-8:
+        factors = [index / (frame_count - 1) for index in range(frame_count)]
+    else:
+        factors = [travel / total_travel for travel in yaw_travel]
+
+    turn_delta = turn_end - turn_start
+    return [math.radians(turn_start + turn_delta * factor) for factor in factors]
+
+
+def _apply_special_turn(
+    matrix: Matrix,
+    base_rotation: Euler,
+    turn_angle: float,
+) -> Matrix:
+    location, _, scale = matrix.decompose()
+    rotation = Euler((0, 0, turn_angle))
+    rotation.rotate(base_rotation)
+    return Matrix.LocRotScale(location, rotation, scale)
+
+
+def _add_copy_constraint(
     root_bone: bpy.types.PoseBone,
-    frame: int,
-    use_loc: tuple[bool, bool, bool],
-    use_rot: tuple[bool, bool, bool],
-    use_scale: tuple[bool, bool, bool],
+    ob: bpy.types.Object,
+    source_bone_name: str,
+    constraint_type: str,
+    axes: tuple[bool, bool, bool],
 ):
-    if any(use_loc):
-        root_bone.keyframe_insert(data_path='location', frame=frame, options={'INSERTKEY_VISUAL'})
-    if any(use_rot):
-        root_bone.keyframe_insert(data_path='rotation_quaternion', frame=frame, options={'INSERTKEY_VISUAL'})
-    if any(use_scale):
-        root_bone.keyframe_insert(data_path='scale', frame=frame, options={'INSERTKEY_VISUAL'})
+    if not any(axes):
+        return None
+
+    constraint = root_bone.constraints.new(type=constraint_type)
+    constraint.target = ob
+    constraint.subtarget = source_bone_name
+    constraint.target_space = 'LOCAL_OWNER_ORIENT'
+    constraint.owner_space = 'LOCAL'
+    constraint.use_x, constraint.use_y, constraint.use_z = axes
+    return constraint
 
 
 def transfer_movement(
@@ -556,158 +845,174 @@ def transfer_movement(
     root_bone_name: str,
     root_rest_matrix: Matrix,
     root_matrix: Matrix | list[Matrix] | None,
-    custom_settings: dict = {},
+    custom_settings: dict | None = None,
     source_bone_matrices: list[Matrix] | None = None,
     relative_to_root_start: bool = True,
 ):
     scene_nwo = utils.get_scene_props()
-    scene_nwo.active_animation_index = animation_index
-    scene = context.scene
+    _activate_animation(scene_nwo, animation_index)
 
     root_bone = ob.pose.bones[root_bone_name]
-    root_bone: bpy.types.PoseBone
-
-    use_loc, use_rot, use_scale, special_turn, final_token = _movement_channel_masks(animation, custom_settings, root_matrix)
+    use_loc, use_rot, use_scale, special_turn, final_token = _movement_channel_masks(
+        animation,
+        custom_settings,
+        root_matrix,
+    )
+    masks = (use_loc, use_rot, use_scale)
     use_root_transform = root_matrix is not None
+    frames = range(animation.frame_start, animation.frame_end + 1)
+    frame_count = len(frames)
+    fitted_source_matrices = _fit_matrix_sequence(source_bone_matrices or [], frame_count)
 
-    # New path: root frame 1 remains where it already is. Later frames receive the
-    # selected source deltas. The source bone is restored/counter-keyed later by
-    # fix_source_movement(), so the visible skeleton animation stays the same.
-    if relative_to_root_start and source_bone_matrices:
-        scene.frame_set(animation.frame_start)
-        context.view_layer.update()
+    if relative_to_root_start and not use_root_transform:
+        context.scene.frame_set(animation.frame_start)
         root_start_matrix = root_bone.matrix.copy()
-        source_start_matrix = source_bone_matrices[0].copy()
-
-        for idx, frame in enumerate(range(animation.frame_start, animation.frame_end + 1)):
-            scene.frame_set(frame)
-            source_matrix = source_bone_matrices[min(idx, len(source_bone_matrices) - 1)]
-            root_bone.matrix = _compose_selected_delta_matrix(
+        source_start_matrix = fitted_source_matrices[0]
+        source_rotation_mask = (
+            (use_rot[0], use_rot[1], False)
+            if special_turn
+            else use_rot
+        )
+        target_matrices = [
+            _compose_selected_delta_matrix(
                 source_matrix,
                 source_start_matrix,
                 root_start_matrix,
                 use_loc,
-                use_rot,
+                source_rotation_mask,
                 use_scale,
             )
-            context.view_layer.update()
-            _insert_selected_root_keyframes(root_bone, frame, use_loc, use_rot, use_scale)
-        return
+            for source_matrix in fitted_source_matrices
+        ]
 
-    # Original absolute/special-turn behaviour below.
-    if not custom_settings and not use_root_transform and special_turn:
-        root_rest_rot = root_rest_matrix.to_euler()
-        turn_start, turn_end = turn_rots.get(final_token)
-        scene.frame_set(animation.frame_start)
-        euler_rot = Euler((0, 0, math.radians(turn_start)))
-        euler_rot.rotate(root_rest_rot)
-        loc, _, sca = root_bone.matrix.decompose()
-        root_bone.matrix = Matrix.LocRotScale(loc, euler_rot, sca)
-        root_bone.keyframe_insert(data_path='rotation_quaternion', frame=animation.frame_start, options={'INSERTKEY_VISUAL'})
-        scene.frame_set(animation.frame_end)
-        euler_rot = Euler((0, 0, math.radians(turn_end)))
-        euler_rot.rotate(root_rest_rot)
-        loc, _, sca = root_bone.matrix.decompose()
-        root_bone.matrix = Matrix.LocRotScale(loc, euler_rot, sca)
-        root_bone.keyframe_insert(data_path='rotation_quaternion', frame=animation.frame_end, options={'INSERTKEY_VISUAL'})
+        if special_turn:
+            base_rotation = root_start_matrix.to_euler()
+            target_matrices = [
+                _apply_special_turn(matrix, base_rotation, angle)
+                for matrix, angle in zip(
+                    target_matrices,
+                    _special_turn_angles(fitted_source_matrices, final_token),
+                )
+            ]
 
-        for i in range(animation.frame_start, animation.frame_end + 1):
-            scene.frame_set(i)
-            root_bone.keyframe_insert(data_path='rotation_quaternion', frame=i, options={'INSERTKEY_VISUAL'})
-        return
+        samples = _transform_samples_from_pose_matrices(
+            ob,
+            root_bone,
+            frames,
+            target_matrices,
+        )
+        _write_transform_samples(
+            animation,
+            ob,
+            root_bone,
+            samples,
+            any(use_loc),
+            any(use_rot),
+            any(use_scale),
+        )
+        return masks
 
     if use_root_transform:
         if isinstance(root_matrix, Matrix):
-            for frame in range(animation.frame_start, animation.frame_end + 1):
-                scene.frame_set(frame)
-                root_bone.matrix = _compose_selected_absolute_matrix(root_bone.matrix.copy(), root_matrix, use_loc, use_rot, use_scale)
-                context.view_layer.update()
-                _insert_selected_root_keyframes(root_bone, frame, use_loc, use_rot, use_scale)
+            incoming_matrices = [root_matrix] * frame_count
         else:
-            for idx, frame in enumerate(range(animation.frame_start, animation.frame_end + 1)):
-                scene.frame_set(frame)
-                root_bone.matrix = _compose_selected_absolute_matrix(root_bone.matrix.copy(), root_matrix[idx], use_loc, use_rot, use_scale)
-                context.view_layer.update()
-                _insert_selected_root_keyframes(root_bone, frame, use_loc, use_rot, use_scale)
-        return
+            incoming_matrices = _fit_matrix_sequence(root_matrix, frame_count)
 
-    con_rot = None
-    con_loc = None
-    con_limit_rot = None
-    con_limit_loc = None
+        if all(use_loc) and all(use_rot) and all(use_scale):
+            target_matrices = list(incoming_matrices)
+        else:
+            target_matrices = []
+            for frame, incoming_matrix in zip(frames, incoming_matrices):
+                context.scene.frame_set(frame)
+                target_matrices.append(
+                    _compose_selected_absolute_matrix(
+                        root_bone.matrix.copy(),
+                        incoming_matrix,
+                        use_loc,
+                        use_rot,
+                        use_scale,
+                    )
+                )
 
-    if custom_settings:
-        con_rot = root_bone.constraints.new(type='COPY_ROTATION')
-        con_rot.target = ob
-        con_rot.subtarget = source_bone_name
-        con_rot.target_space = 'LOCAL_OWNER_ORIENT'
-        con_rot.owner_space = 'LOCAL'
+        samples = _transform_samples_from_pose_matrices(
+            ob,
+            root_bone,
+            frames,
+            target_matrices,
+        )
+        _write_transform_samples(
+            animation,
+            ob,
+            root_bone,
+            samples,
+            any(use_loc),
+            any(use_rot),
+            any(use_scale),
+        )
+        return masks
 
-        con_loc = root_bone.constraints.new(type='COPY_LOCATION')
-        con_loc.target = ob
-        con_loc.subtarget = source_bone_name
-        con_loc.target_space = 'LOCAL_OWNER_ORIENT'
-        con_loc.owner_space = 'LOCAL'
+    constraints = []
+    source_rotation_mask = (
+        (use_rot[0], use_rot[1], False)
+        if special_turn
+        else use_rot
+    )
+    try:
+        for constraint_type, axes in (
+            ('COPY_LOCATION', use_loc),
+            ('COPY_ROTATION', source_rotation_mask),
+            ('COPY_SCALE', use_scale),
+        ):
+            constraint = _add_copy_constraint(
+                root_bone,
+                ob,
+                source_bone_name,
+                constraint_type,
+                axes,
+            )
+            if constraint is not None:
+                constraints.append(constraint)
 
-        con_limit_rot = root_bone.constraints.new(type='LIMIT_ROTATION')
-        con_limit_rot.use_limit_x = not custom_settings.get("use_x_rot")
-        con_limit_rot.use_limit_y = not custom_settings.get("use_y_rot")
-        con_limit_rot.use_limit_z = not custom_settings.get("use_z_rot")
-        con_limit_rot.owner_space = 'LOCAL'
+        special_angles = (
+            _special_turn_angles(fitted_source_matrices, final_token)
+            if special_turn
+            else None
+        )
+        base_rotation = root_rest_matrix.to_euler()
+        samples = []
+        previous_rotation = None
+        for index, frame in enumerate(frames):
+            context.scene.frame_set(frame)
+            pose_matrix = root_bone.matrix.copy()
+            if special_angles is not None:
+                pose_matrix = _apply_special_turn(
+                    pose_matrix,
+                    base_rotation,
+                    special_angles[index],
+                )
+            sample, previous_rotation = _transform_sample_from_pose_matrix(
+                ob,
+                root_bone,
+                frame,
+                pose_matrix,
+                previous_rotation,
+            )
+            samples.append(sample)
+    finally:
+        for constraint in reversed(constraints):
+            root_bone.constraints.remove(constraint)
 
-        con_limit_loc = root_bone.constraints.new(type='LIMIT_LOCATION')
-        con_limit_loc.use_min_x = not custom_settings.get("use_x_loc")
-        con_limit_loc.use_max_x = not custom_settings.get("use_x_loc")
-        con_limit_loc.use_min_y = not custom_settings.get("use_y_loc")
-        con_limit_loc.use_max_y = not custom_settings.get("use_y_loc")
-        con_limit_loc.use_min_z = not custom_settings.get("use_z_loc")
-        con_limit_loc.use_max_z = not custom_settings.get("use_z_loc")
-        con_limit_loc.owner_space = 'LOCAL'
-    else:
-        if any(use_rot):
-            con_rot = root_bone.constraints.new(type='COPY_ROTATION')
-            con_rot.target = ob
-            con_rot.subtarget = source_bone_name
-            con_rot.target_space = 'LOCAL_OWNER_ORIENT'
-            con_rot.owner_space = 'LOCAL'
+    _write_transform_samples(
+        animation,
+        ob,
+        root_bone,
+        samples,
+        any(use_loc),
+        any(use_rot),
+        any(use_scale),
+    )
+    return masks
 
-            if use_rot != (True, True, True):
-                con_limit_rot = root_bone.constraints.new(type='LIMIT_ROTATION')
-                con_limit_rot.use_limit_x = not use_rot[0]
-                con_limit_rot.use_limit_y = not use_rot[1]
-                con_limit_rot.use_limit_z = not use_rot[2]
-                con_limit_rot.owner_space = 'LOCAL'
-
-        if any(use_loc):
-            con_loc = root_bone.constraints.new(type='COPY_LOCATION')
-            con_loc.target = ob
-            con_loc.subtarget = source_bone_name
-            con_loc.target_space = 'LOCAL_OWNER_ORIENT'
-            con_loc.owner_space = 'LOCAL'
-
-            if use_loc != (True, True, True):
-                con_limit_loc = root_bone.constraints.new(type='LIMIT_LOCATION')
-                con_limit_loc.use_min_x = not use_loc[0]
-                con_limit_loc.use_max_x = not use_loc[0]
-                con_limit_loc.use_min_y = not use_loc[1]
-                con_limit_loc.use_max_y = not use_loc[1]
-                con_limit_loc.use_min_z = not use_loc[2]
-                con_limit_loc.use_max_z = not use_loc[2]
-                con_limit_loc.owner_space = 'LOCAL'
-
-    for frame in range(animation.frame_start, animation.frame_end + 1):
-        scene.frame_set(frame)
-        context.view_layer.update()
-        _insert_selected_root_keyframes(root_bone, frame, use_loc, use_rot, use_scale)
-
-    if con_loc is not None:
-        root_bone.constraints.remove(con_loc)
-        if con_limit_loc is not None:
-            root_bone.constraints.remove(con_limit_loc)
-    if con_rot is not None:
-        root_bone.constraints.remove(con_rot)
-        if con_limit_rot is not None:
-            root_bone.constraints.remove(con_limit_rot)
 
 class FCurveTransfer:
     source_fcurve: bpy.types.FCurve
