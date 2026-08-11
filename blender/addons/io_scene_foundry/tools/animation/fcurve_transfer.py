@@ -20,6 +20,15 @@ turn_rots = {
     "turn_right_fast": (0, -360),
 }
 
+_AUTOMATIC_MOVEMENT_CHANNELS = {
+    # movement type: (location XYZ, rotation XYZ, scale XYZ)
+    "none": ((True, True, False), (False, False, True), (False, False, False)),
+    "xy": ((True, True, False), (False, False, False), (False, False, False)),
+    "xyyaw": ((True, True, False), (False, False, True), (False, False, False)),
+    "xyzyaw": ((True, True, True), (False, False, True), (False, False, False)),
+    "full": ((True, True, True), (True, True, True), (False, False, False)),
+}
+
 last_source_bone = ""
 last_root_bone = ""
 
@@ -442,27 +451,16 @@ def _movement_channel_masks(animation, custom_settings: dict, root_matrix: Matri
     if use_root_transform:
         return (True, True, True), (True, True, True), (True, True, True), False, final_token
 
-    movement = animation.animation_movement_data
     if animation.animation_type == 'world':
         return (True, True, True), (True, True, True), (False, False, False), False, final_token
 
-    if movement == "none":
-        return (True, True, False), (False, False, True), (False, False, False), False, final_token
-
-    horizontal = "xy" in movement
-    vertical = "z" in movement
-    yaw = "yaw" in movement
-    full = movement == "full"
-
-    if yaw:
+    use_loc, use_rot, use_scale = _AUTOMATIC_MOVEMENT_CHANNELS[animation.animation_movement_data]
+    # A named turn changes how yaw is generated, not whether the movement type includes yaw.
+    if use_rot[2]:
         final_token = animation.name.rpartition(" ")[2].lower()
         if turn_rots.get(final_token) is not None:
             special_turn = True
-            yaw = False
 
-    use_loc = (horizontal or full, horizontal or full, vertical or full)
-    use_rot = (full, full, yaw or full)
-    use_scale = (False, False, False)
     return use_loc, use_rot, use_scale, special_turn, final_token
 
 
