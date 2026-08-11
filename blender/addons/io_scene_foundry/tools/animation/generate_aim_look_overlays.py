@@ -1,4 +1,6 @@
+import random
 import re
+from math import degrees
 
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
@@ -23,6 +25,7 @@ _BONE_TRANSFORM_PROPERTIES = (
 _LOWER_BODY_NAME_TOKENS = (
     "thigh", "leg", "calf", "shin", "knee", "ankle", "foot", "toe", "tarsal",
 )
+_WRAP_EVENT_TYPE = "_connected_geometry_animation_event_type_import"
 _SOURCE_STATE_PATTERN = re.compile(r"^(aim|look)_still(?P<suffix>(?:_.*)?)$")
 
 
@@ -568,6 +571,68 @@ def _generated_action(
     return action
 
 
+def _rebuild_wrap_events(
+    animation,
+    action: bpy.types.Action,
+    armature: bpy.types.Object,
+    pedestal_name: str,
+    yaw_name: str | None,
+) -> int:
+    """Replace copied wrap events using the generated pose-screen transforms."""
+    for index in range(len(animation.animation_events) - 1, -1, -1):
+        if animation.animation_events[index].event_type == _WRAP_EVENT_TYPE:
+            animation.animation_events.remove(index)
+
+    if not yaw_name:
+        return 0
+
+    curves, _slot_identifier = _fcurve_map(action, armature)
+    pedestal = armature.pose.bones.get(pedestal_name)
+    yaw = armature.pose.bones.get(yaw_name)
+    if not curves or pedestal is None or yaw is None:
+        return 0
+
+    rest_matrices = {bone.name: _rest_local_matrix(bone) for bone in armature.pose.bones}
+    event_ids = {event.event_id for event in animation.animation_events}
+    reset = True
+    current_name = ""
+    added = 0
+
+    for frame in range(animation.frame_start + 1, animation.frame_end + 1):
+        local_matrices = _sample_local_matrices(armature, curves, frame, rest_matrices)
+        world_matrices = _world_matrices(armature, local_matrices)
+        relative = (
+            world_matrices[pedestal.name].inverted_safe()
+            @ world_matrices[yaw.name]
+        )
+        raw_yaw = degrees(relative.to_euler('XYZ').z)
+
+        if abs(raw_yaw) <= 90.0 + 1e-3:
+            reset = True
+            continue
+
+        if reset:
+            current_name = "Wrapped Left" if raw_yaw > 0.0 else "Wrapped Right"
+            reset = False
+
+        event_id = random.randint(0, 2147483647)
+        while event_id in event_ids:
+            event_id = random.randint(0, 2147483647)
+        event_ids.add(event_id)
+
+        event = animation.animation_events.add()
+        event.event_type = _WRAP_EVENT_TYPE
+        event.event_id = event_id
+        event.frame_frame = frame
+        event.import_name = current_name
+        added += 1
+
+    animation.active_animation_event_index = min(
+        animation.active_animation_event_index, len(animation.animation_events) - 1
+    ) if animation.animation_events else 0
+    return added
+
+
 def _populate_target_animation(
     target,
     source,
@@ -636,7 +701,8 @@ class NWO_OT_GenerateAimLookOverlays(bpy.types.Operator):
     bl_idname = "nwo.generate_aim_look_overlays"
     bl_label = "Generate Aim / Look Overlays"
     bl_description = (
-        "Generate movement pose overlays from the active aim_still or look_still pose overlay"
+        "Generate movement pose overlays from the active aim_still or look_still pose overlay, "
+        "including Reach-style conversion of legacy turn bases"
     )
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -721,6 +787,9 @@ class NWO_OT_GenerateAimLookOverlays(bpy.types.Operator):
         pedestal = _pose_bone_from_usage(
             armature, scene_nwo.node_usage_pedestal, ("pedestal",)
         )
+        aim_yaw = _pose_bone_from_usage(
+            armature, scene_nwo.node_usage_pose_blend_yaw, ("aim_yaw",)
+        )
         aim_bone_names = _aim_bone_names(armature, scene_nwo)
         if pedestal is None:
             self.report({'WARNING'}, "The armature has no valid pedestal bone usage")
@@ -785,6 +854,13 @@ class NWO_OT_GenerateAimLookOverlays(bpy.types.Operator):
                     target_state,
                     base_state,
                     armature,
+                )
+                _rebuild_wrap_events(
+                    target,
+                    action,
+                    armature,
+                    pedestal.name,
+                    aim_yaw.name if aim_yaw is not None else None,
                 )
                 existing_by_name[normalized_target_name] = target
                 generated_count += 1
