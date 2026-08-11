@@ -4278,6 +4278,7 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         col.use_property_split = True
         col.operator("nwo.movement_data_transfer", icon='GRAPH')
         col.operator("nwo.convert_legacy_pose_overlays", icon='GRAPH', text="Convert Legacy Pose Overlays")
+        col.operator("nwo.generate_aim_look_overlays", icon='GRAPH')
         self.draw_expandable_box(box.box(), nwo, "game_animation_copy_settings")
         
     def draw_game_animation_copy_settings(self, box, nwo):

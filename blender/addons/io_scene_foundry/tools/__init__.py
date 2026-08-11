@@ -29,6 +29,7 @@ from .cubemap import NWO_OT_Cubemap
 from .scale_models import NWO_OT_AddScaleModel
 from .sky_gen import NWO_OT_SkyGenerate
 from .animation.automate_pose_overlay import NWO_OT_GeneratePoses, NWO_OT_ConvertLegacyPoseOverlays
+from .animation.generate_aim_look_overlays import NWO_OT_GenerateAimLookOverlays
 from .animation.generate_frames import NWO_OT_GenerateFrames
 from .rigging.convert_to_halo_rig import NWO_OT_ConvertToHaloRig
 from .rigging.create_rig import NWO_OT_AddRig, NWO_OT_BakeIKControl, NWO_OT_BakeToControl, NWO_OT_BuildControlRig, NWO_OT_ClearControlRig, NWO_OT_InvertAimControl, NWO_OT_InvertControlRig, NWO_OT_KeyframeControlRigSettings, NWO_OT_SelectArmature
@@ -156,6 +157,7 @@ classes = (
     NWO_FixArmatureTransforms,
     NWO_OT_GeneratePoses,
     NWO_OT_ConvertLegacyPoseOverlays,
+    NWO_OT_GenerateAimLookOverlays,
     NWO_OT_GenerateFrames,
     NWO_ImportGameInstanceTag,
     NWO_MeshToMarker,
