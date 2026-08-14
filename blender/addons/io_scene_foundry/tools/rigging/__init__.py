@@ -79,7 +79,8 @@ look_follow_head_prop_name = "Look follows head"
 head_track_prop_name = "Head Track"
 eye_track_prop_name = "Eye Track"
 gun_control_prop_name = "gun_control"
-hands_follow_gun_prop_name = "Hands follow gun"
+hands_ignore_gun_prop_name = "Hands ignore gun"
+legacy_hands_follow_gun_prop_name = "Hands follow gun"
 legacy_pole_target_follow_ik_prop_name = "Pole Target Follow IK"
 
 reach_fp_ik_fix_render_models = frozenset({
@@ -858,7 +859,8 @@ class HaloRig:
             if settings_control is not None:
                 ensure_gun_control_props(settings_control)
         elif settings_control is not None:
-            remove_settings_prop(settings_control, hands_follow_gun_prop_name)
+            remove_settings_prop(settings_control, hands_ignore_gun_prop_name)
+            remove_settings_prop(settings_control, legacy_hands_follow_gun_prop_name)
 
         if head_driver_name and head_control is not None:
             head_driver = self.rig_pose.bones.get(head_driver_name)
@@ -1330,7 +1332,7 @@ class HaloRig:
 
         root_control = self.rig_pose.bones[0] if len(self.rig_pose.bones) else None
         gun_control = self.rig_pose.bones.get(gun_control_name)
-        hand_gun_description = f"Whether hand controls follow {gun_control_name}"
+        hand_gun_description = f"Whether hand controls ignore {gun_control_name}"
             
         for fkb_name, (ikb_name, pt_name, angle) in fk_ik_mapping.items():
             fkb = self.rig_pose.bones[fkb_name]
@@ -1439,8 +1441,9 @@ class HaloRig:
                     if gun_control is not None and is_hand_ik_source_name(fkb_name):
                         ik_target_specs.append(armature_target_spec(
                             gun_control_name,
-                            hands_follow_gun_prop_name,
+                            hands_ignore_gun_prop_name,
                             hand_gun_description,
+                            invert=True,
                         ))
 
             if foot_rollb is not None:
@@ -2789,6 +2792,7 @@ def ensure_look_control_props(
         remove_settings_prop(settings_bone, eye_track_prop_name)
 
 def ensure_gun_control_props(settings_bone: bpy.types.PoseBone):
+    remove_settings_prop(settings_bone, legacy_hands_follow_gun_prop_name)
     ensure_settings_float_prop(
         settings_bone,
         gun_control_prop_name,
@@ -2796,9 +2800,8 @@ def ensure_gun_control_props(settings_bone: bpy.types.PoseBone):
     )
     ensure_settings_bool_prop(
         settings_bone,
-        hands_follow_gun_prop_name,
-        f"Whether hand controls follow {gun_control_name}",
-        default=True,
+        hands_ignore_gun_prop_name,
+        f"Whether hand controls ignore {gun_control_name}",
     )
 
 def ik_root_follow_property_name(fkb_name: str) -> str:

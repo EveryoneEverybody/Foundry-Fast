@@ -241,6 +241,9 @@ def draw_animation_graph_import_options(operator, layout, corinth, include_gener
     col.prop(operator, "graph_import_animations")
     row = col.row()
     row.enabled = operator.tag_animation and operator.graph_import_animations
+    row.prop(operator, "graph_bake_to_control_rig")
+    row = col.row()
+    row.enabled = operator.tag_animation and operator.graph_import_animations
     row.prop(operator, "graph_scale_animations_to_skeleton")
     if corinth:
         row = col.row()
@@ -255,6 +258,9 @@ def draw_animation_graph_import_options(operator, layout, corinth, include_gener
 def draw_graph_import_options(operator, layout, corinth):
     layout.prop(operator, "tag_animation_filter")
     layout.prop(operator, "graph_import_animations")
+    row = layout.row()
+    row.enabled = operator.graph_import_animations
+    row.prop(operator, "graph_bake_to_control_rig")
     row = layout.row()
     row.enabled = operator.graph_import_animations
     row.prop(operator, "graph_scale_animations_to_skeleton")
@@ -1210,6 +1216,11 @@ class NWO_Import(bpy.types.Operator):
         default=True,
         description="Imports animations from the graph. Currently the root movement element of base movement animations is unsupported and overlay rotations do not import correctly"
     )
+    graph_bake_to_control_rig: bpy.props.BoolProperty(
+        name="Bake to Control Rig",
+        default=True,
+        description="Bakes imported animations to an existing or newly built control rig",
+    )
     graph_scale_animations_to_skeleton: bpy.props.BoolProperty(
         name="Root Translation / Scale Only",
         default=False,
@@ -1356,6 +1367,7 @@ class NWO_Import(bpy.types.Operator):
                     scope_list = self.scope.split(',')
                     
                 importer = NWOImporter(context, filepaths, scope_list)
+                importer.graph_bake_to_control_rig = self.graph_bake_to_control_rig
                 switch_blender_scene = None
                 
                 mouse_matrix = utils.matrix_from_mouse(self.mouse_x, self.mouse_y)
@@ -2606,6 +2618,7 @@ class NWOImporter:
         self.graph_scale_animations_to_skeleton = False
         self.tag_animation = False
         self.graph_import_animations = False
+        self.graph_bake_to_control_rig = True
         self.graph_import_pca_data = False
         self.graph_generate_renames = False
         self.graph_import_events = False
@@ -2764,6 +2777,9 @@ class NWOImporter:
         return camera
 
     def bake_imported_control_rig_actions(self):
+        if not self.graph_bake_to_control_rig:
+            return 0
+
         baked_count = 0
         for armature, actions in self.control_rig_action_batches:
             if armature.name not in bpy.data.objects:
@@ -5259,6 +5275,11 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         name="Import Animations",
         default=True,
         description="Imports animations from the graph. Currently the root movement element of base movement animations is unsupported and overlay rotations do not import correctly"
+    )
+    graph_bake_to_control_rig: bpy.props.BoolProperty(
+        name="Bake to Control Rig",
+        default=True,
+        description="Bakes imported animations to an existing or newly built control rig",
     )
     graph_scale_animations_to_skeleton: bpy.props.BoolProperty(
         name="Root Translation / Scale Only",

@@ -212,16 +212,24 @@ def bake_control_rig_actions(context, arm: bpy.types.Object, actions):
 
 
 def bake_imported_actions_to_control_rig(context, arm: bpy.types.Object, actions):
+    actions = list(dict.fromkeys(action for action in actions if action is not None))
     if not actions or not armature_has_control_rig(arm):
         return 0
 
+    for action in actions:
+        remove_control_rig_settings_fcurves(action, arm)
+
+    utils.reset_control_rig_props(arm)
+
     baked_count = 0
     set_control_rig_inverted(context, arm, True)
+    utils.reset_control_rig_props(arm)
     context.view_layer.update()
     try:
         baked_count = bake_control_rig_actions(context, arm, actions)
     finally:
         set_control_rig_inverted(context, arm, False)
+        utils.reset_control_rig_props(arm)
         context.view_layer.update()
 
     if baked_count:
@@ -361,6 +369,17 @@ def ik_target_bake_contexts(arm: bpy.types.Object) -> list[tuple[str, bpy.types.
         contexts.append((ik_blend_property_name(fkb.name), fkb, ikb, ptb, chain))
 
     return contexts
+
+
+def remove_control_rig_settings_fcurves(action: bpy.types.Action, arm: bpy.types.Object):
+    fcurves = utils.get_fcurves(action, arm)
+    if not fcurves:
+        return
+
+    data_path_prefix = f'pose.bones["{settings_control_name}"]["'
+    for fcurve in list(fcurves):
+        if fcurve.data_path.startswith(data_path_prefix):
+            fcurves.remove(fcurve)
 
 
 def remove_settings_prop_fcurve(action: bpy.types.Action, arm: bpy.types.Object, prop_name: str):
