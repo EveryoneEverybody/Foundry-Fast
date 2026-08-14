@@ -61,6 +61,7 @@ DEBUG_PRINT_BASE_ANIMATION_CANDIDATES = False
 DEBUG_BASE_ANIMATION_CANDIDATE_LIMIT = 8
 DEBUG_PRINT_APPLIED_BASE_ANIMATION = False
 FORCE_OVERLAY_STATIC_CHANNELS_TO_BASE_FRAME = True
+APPLY_POSITION_OFFSET_TO_OVERLAYS_AND_REPLACEMENTS = True
 APPLY_OBJECT_SPACE_PARENT_CORRECTION_TO_FULL_ANIMATION = False
 PRESERVE_OVERLAY_OBJECT_SPACE_PARENT_FRAME = True
 PRESERVE_REPLACEMENT_OBJECT_SPACE_PARENT_FRAME = True
@@ -144,6 +145,8 @@ FINAL_FRAME_LOOPERS = (
 POSE_OVERLAY_REST_BASE_STATES = {
     "aim_spine",
 }
+
+POSITION_OFFSET_STATE = "position_offset"
 
 WRINKLE_FACE_REGION_MAP = [
     "upper_brow",
@@ -3011,6 +3014,103 @@ class AnimationTag(Tag):
     def _base_animation_candidate_names(self, graph: dict, tag_animation: Animation) -> list[str]:
         return [name for group in self._base_animation_candidate_name_groups(graph, tag_animation) for name in group]
 
+    def _position_offset_overlay(self, graph: dict, tag_animation: Animation) -> Animation | None:
+        """Find the position offset assigned beside an animation in the mode graph."""
+        target_key = self._animation_identity_key(tag_animation)
+        primary_paths, rename_paths = self._graph_animation_path_groups(graph, tag_animation)
+
+        for path in primary_paths + rename_paths:
+            path_name = utils.AnimationName(path)
+            if not path_name.valid or path_name.custom:
+                continue
+
+            branch = graph
+            for token in (path_name.mode, path_name.weapon_class, path_name.weapon_type, path_name.set):
+                branch = branch.get(token)
+                if not isinstance(branch, dict):
+                    break
+            else:
+                overlays = branch.get("overlay_animations", {})
+                for state, animation in overlays.items():
+                    state_key = state.replace(" ", "_").lower()
+                    if state_key != POSITION_OFFSET_STATE or animation is None:
+                        continue
+                    if self._animation_identity_key(animation) == target_key:
+                        return None
+                    if animation.animation_type == AnimationType.OVERLAY and animation.frame_count > 0:
+                        return animation
+
+        return None
+
+    def _base_frame_with_position_offset(
+        self,
+        tag_animation: Animation,
+        base_frame: FrameChannels,
+        defaults: list[DefaultAnimationNode],
+        overlay_defaults: list[DefaultAnimationNode],
+        graph: dict,
+        shared_static_codec,
+        resource_cache: dict,
+        animation_cache: dict,
+        all_tag_animations: list[Animation],
+        final_frame_stack: set,
+    ) -> FrameChannels:
+        if (
+            not APPLY_POSITION_OFFSET_TO_OVERLAYS_AND_REPLACEMENTS
+            or tag_animation.animation_type not in (AnimationType.OVERLAY, AnimationType.REPLACEMENT)
+        ):
+            return base_frame
+
+        position_offset = self._position_offset_overlay(graph, tag_animation)
+        if position_offset is None:
+            return base_frame
+
+        position_offset_data = self._build_animation(
+            position_offset,
+            defaults,
+            overlay_defaults,
+            graph,
+            shared_static_codec,
+            resource_cache,
+            animation_cache,
+            all_tag_animations,
+            final_frame_stack,
+        )
+        if position_offset_data.frame_count < 2:
+            return base_frame
+
+        # Imported overlays contain their generated base at frame 0 and their
+        # first actual sample at frame 1. Transfer only that frame-to-frame delta;
+        # the stored static/reference channels are not themselves an offset.
+        reference_frame = self._animation_data_frame_channels(position_offset_data, 0)
+        offset_frame = self._animation_data_frame_channels(position_offset_data, 1)
+        result = FrameChannels(
+            [translation.copy() for translation in base_frame.translations],
+            [rotation.copy() for rotation in base_frame.rotations],
+            base_frame.scales[:],
+        )
+
+        for node_index in range(min(len(result.rotations), position_offset_data.node_count)):
+            translation_delta = offset_frame.translations[node_index] - reference_frame.translations[node_index]
+            if translation_delta.length_squared > tolerance * tolerance:
+                result.translations[node_index] += translation_delta
+
+            reference_rotation = reference_frame.rotations[node_index]
+            offset_rotation = offset_frame.rotations[node_index].copy()
+            if reference_rotation.dot(offset_rotation) < 0.0:
+                offset_rotation.negate()
+            rotation_delta = reference_rotation.rotation_difference(offset_rotation)
+            if abs(rotation_delta.angle) > tolerance:
+                result.rotations[node_index] = (result.rotations[node_index] @ rotation_delta).normalized()
+
+            reference_scale = reference_frame.scales[node_index]
+            if abs(reference_scale) > tolerance:
+                scale_ratio = offset_frame.scales[node_index] / reference_scale
+                if abs(scale_ratio - 1.0) > tolerance:
+                    result.scales[node_index] *= scale_ratio
+
+        return result
+
     def _get_base_animation_candidates(self, graph: dict, names, animation_type: AnimationType = AnimationType.NONE):
         if isinstance(names, str):
             names = (names,)
@@ -3950,6 +4050,19 @@ class AnimationTag(Tag):
                 base_frame = base_animation.first_frame()
             else:
                 base_frame = default_frame_channels(defaults)
+
+            base_frame = self._base_frame_with_position_offset(
+                tag_animation,
+                base_frame,
+                defaults,
+                overlay_defaults,
+                graph,
+                shared_static_codec,
+                resource_cache,
+                animation_cache,
+                all_tag_animations,
+                final_frame_stack,
+            )
 
             self._debug_print_applied_base_animation(
                 tag_animation,
