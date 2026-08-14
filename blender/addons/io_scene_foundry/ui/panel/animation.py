@@ -966,6 +966,8 @@ class NWO_OT_AnimationsFromBlend(bpy.types.Operator):
                     new_anim = current_animations.add()
                     new_anim_count += 1
                     for key, value in anim.items():
+                        if key == "animation_events":
+                            continue
                         new_anim[key] = value
                         
                     if self.use_external_gr2 and export_animations_path is not None and not anim.external:
@@ -978,8 +980,10 @@ class NWO_OT_AnimationsFromBlend(bpy.types.Operator):
                             
                     keep_events = (not new_anim.external) and self.import_events
                     keep_tracks = (not new_anim.external) or self.linked_gr2_keep_actions
-                        
-                    if not keep_events:
+
+                    if keep_events:
+                        _copy_property_collection(anim.animation_events, new_anim.animation_events)
+                    else:
                         new_anim.animation_events.clear()
                         
                     if not self.import_renames:

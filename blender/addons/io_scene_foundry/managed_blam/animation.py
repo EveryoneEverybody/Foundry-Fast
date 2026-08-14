@@ -5322,8 +5322,11 @@ class AnimationTag(Tag):
                 event_list_tag_ref.Path = events.tag_path
                 self.tag_has_changes = True
         
-    def events_to_blender(self) -> int:
-        '''Create AnimationEvents from legacy graph events'''
+    def events_to_blender(self, imported_animations) -> int:
+        '''Create AnimationEvents from legacy graph events for newly imported animations'''
+        if not imported_animations:
+            return 0
+
         event_list_events = {}
         frame_event_list_path = self.get_frame_event_list()
         if not frame_event_list_path:
@@ -5346,7 +5349,7 @@ class AnimationTag(Tag):
             ref.from_element(element, self.corinth)
             unique_effects.append(ref)
         
-        blender_animations = {a.name.replace(":", " "): a for a in self.scene_nwo.animations if a.export_this}
+        blender_animations = {a.name.replace(":", " "): a for a in imported_animations if a.export_this}
         blender_markers = {ob.nwo.marker_model_group: ob for ob in bpy.data.objects if ob.type == 'EMPTY'}
         event_count = 0
         

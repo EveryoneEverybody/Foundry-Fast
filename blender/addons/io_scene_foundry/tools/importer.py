@@ -3690,6 +3690,7 @@ class NWOImporter:
     def import_animation_graph(self, file, armature, render, return_animations=False):
         actions = []
         animations = []
+        imported_animation_start = len(self.scene_nwo.animations)
         filter = self.tag_animation_filter.replace(" ", ":")
         self.context.scene.render.fps = 30
         self.context.scene.render.fps_base = 1
@@ -3750,7 +3751,8 @@ class NWOImporter:
                     graph.generate_renames(filter)
                 if self.graph_import_events:
                     utils.print_bullet("Importing Frame Events")
-                    count = graph.events_to_blender()
+                    imported_animations = self.scene_nwo.animations[imported_animation_start:]
+                    count = graph.events_to_blender(imported_animations)
                     utils.print_bullet(f"Imported {count} frame events")
 
             if do_reset:
