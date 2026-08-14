@@ -374,12 +374,18 @@ def ik_target_bake_contexts(arm: bpy.types.Object) -> list[tuple[str, bpy.types.
 def remove_control_rig_settings_fcurves(action: bpy.types.Action, arm: bpy.types.Object):
     fcurves = utils.get_fcurves(action, arm)
     if not fcurves:
-        return
+        return 0, 0
 
     data_path_prefix = f'pose.bones["{settings_control_name}"]["'
+    removed_keyframes = 0
+    removed_curves = 0
     for fcurve in list(fcurves):
         if fcurve.data_path.startswith(data_path_prefix):
+            removed_keyframes += len(fcurve.keyframe_points)
             fcurves.remove(fcurve)
+            removed_curves += 1
+
+    return removed_keyframes, removed_curves
 
 
 def remove_settings_prop_fcurve(action: bpy.types.Action, arm: bpy.types.Object, prop_name: str):
@@ -1279,6 +1285,149 @@ def settings_prop_has_fcurve(arm: bpy.types.Object, prop_name: str) -> bool:
     return any(fcurve.data_path == data_path for fcurve in fcurves)
 
 POSE_BONE_DATA_PATH_RE = re.compile(r'pose\.bones\["([^"]+)"\]')
+
+def control_rig_bone_category(bone_name: str) -> str | None:
+    if bone_name.startswith("IK_"):
+        return 'IK'
+    if bone_name.startswith("PT_"):
+        return 'PT'
+    if bone_name.startswith("FK_"):
+        return 'FK'
+    if is_control_bone_name(bone_name):
+        return 'OTHER'
+
+    return None
+
+
+def remove_control_rig_transform_fcurves(action: bpy.types.Action, arm: bpy.types.Object, categories: set[str]) -> tuple[int, int]:
+    fcurves = utils.get_fcurves(action, arm)
+    if not fcurves:
+        return 0, 0
+
+    removed_keyframes = 0
+    removed_curves = 0
+    for fcurve in list(fcurves):
+        match = POSE_BONE_DATA_PATH_RE.match(fcurve.data_path)
+        if match is None:
+            continue
+
+        bone_name = match.group(1)
+        if control_rig_bone_category(bone_name) not in categories:
+            continue
+        if fcurve.data_path not in pose_bone_transform_paths(bone_name):
+            continue
+
+        removed_keyframes += len(fcurve.keyframe_points)
+        fcurves.remove(fcurve)
+        removed_curves += 1
+
+    return removed_keyframes, removed_curves
+
+
+class NWO_OT_ClearControlRigKeyframes(bpy.types.Operator):
+    bl_idname = "nwo.clear_control_rig_keyframes"
+    bl_label = "Clear Control Rig Keyframes for Current Animation"
+    bl_description = "Removes selected control-bone transform keyframes from the active armature's current animation"
+    bl_options = {"UNDO"}
+
+    clear_ik: bpy.props.BoolProperty(
+        name="IK Controls",
+        description="Clear transform keyframes from IK control bones",
+        default=True,
+    )
+    clear_pt: bpy.props.BoolProperty(
+        name="PT Controls",
+        description="Clear transform keyframes from pole-target control bones",
+        default=True,
+    )
+    clear_fk: bpy.props.BoolProperty(
+        name="FK Controls",
+        description="Clear transform keyframes from FK control bones",
+        default=True,
+    )
+    clear_other: bpy.props.BoolProperty(
+        name="Other Controls",
+        description="Clear transform keyframes from other CTRL_ control bones",
+        default=True,
+    )
+
+    @classmethod
+    def poll(cls, context):
+        arm = context.object
+        return bool(
+            arm
+            and arm.type == 'ARMATURE'
+            and arm.animation_data
+            and arm.animation_data.action
+        )
+
+    def invoke(self, context, _event):
+        return context.window_manager.invoke_props_dialog(self, width=360)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Control types to clear:")
+        col = layout.column(align=True)
+        col.prop(self, "clear_ik")
+        col.prop(self, "clear_pt")
+        col.prop(self, "clear_fk")
+        col.prop(self, "clear_other")
+        layout.separator()
+        layout.label(text=f'Current animation: {context.object.animation_data.action.name}', icon='ACTION')
+
+    def execute(self, context):
+        arm = context.object
+        action = arm.animation_data.action
+        categories = {
+            category
+            for enabled, category in (
+                (self.clear_ik, 'IK'),
+                (self.clear_pt, 'PT'),
+                (self.clear_fk, 'FK'),
+                (self.clear_other, 'OTHER'),
+            )
+            if enabled
+        }
+        if not categories:
+            self.report({'WARNING'}, "Select at least one control type")
+            return {'CANCELLED'}
+
+        removed_keyframes, removed_curves = remove_control_rig_transform_fcurves(action, arm, categories)
+        if removed_curves == 0:
+            self.report({'INFO'}, f'No selected control rig keyframes found in "{action.name}"')
+            return {'CANCELLED'}
+
+        self.report(
+            {'INFO'},
+            f'Cleared {removed_keyframes} keyframes from {removed_curves} control rig curves in "{action.name}"',
+        )
+        return {'FINISHED'}
+
+
+class NWO_OT_ClearPoseControlKeyframes(bpy.types.Operator):
+    bl_idname = "nwo.clear_pose_control_keyframes"
+    bl_label = "Clear Pose Controls Keyframes"
+    bl_description = "Removes all CTRL_settings property keyframes from the active armature's current animation"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        arm = context.object
+        return bool(arm and arm.type == 'ARMATURE' and arm.animation_data and arm.animation_data.action)
+
+    def execute(self, context):
+        arm = context.object
+        action = arm.animation_data.action
+        removed_keyframes, removed_curves = remove_control_rig_settings_fcurves(action, arm)
+        if removed_curves == 0:
+            self.report({'INFO'}, f'No pose control keyframes found in "{action.name}"')
+            return {'CANCELLED'}
+
+        self.report(
+            {'INFO'},
+            f'Cleared {removed_keyframes} keyframes from {removed_curves} pose control curves in "{action.name}"',
+        )
+        return {'FINISHED'}
 
 def fk_bones_from_ik_prop(arm: bpy.types.Object, prop_name: str) -> list[bpy.types.PoseBone]:
     bones = []

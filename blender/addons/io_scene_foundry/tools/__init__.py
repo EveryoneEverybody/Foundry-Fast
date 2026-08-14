@@ -32,7 +32,7 @@ from .animation.automate_pose_overlay import NWO_OT_GeneratePoses, NWO_OT_Conver
 from .animation.generate_aim_look_overlays import NWO_OT_GenerateAimLookOverlays
 from .animation.generate_frames import NWO_OT_GenerateFrames
 from .rigging.convert_to_halo_rig import NWO_OT_ConvertToHaloRig
-from .rigging.create_rig import NWO_OT_AddRig, NWO_OT_BakeIKControl, NWO_OT_BakeToControl, NWO_OT_BuildControlRig, NWO_OT_ClearControlRig, NWO_OT_InvertAimControl, NWO_OT_InvertControlRig, NWO_OT_KeyframeControlRigSettings, NWO_OT_SelectArmature
+from .rigging.create_rig import NWO_OT_AddRig, NWO_OT_BakeIKControl, NWO_OT_BakeToControl, NWO_OT_BuildControlRig, NWO_OT_ClearControlRig, NWO_OT_ClearControlRigKeyframes, NWO_OT_ClearPoseControlKeyframes, NWO_OT_InvertAimControl, NWO_OT_InvertControlRig, NWO_OT_KeyframeControlRigSettings, NWO_OT_SelectArmature
 from .rigging.validation import NWO_AddPoseBones, NWO_FixArmatureTransforms, NWO_FixPoseBones, NWO_FixRootBone, NWO_ValidateRig,NWO_OT_AddAimDisplay
 from .scene_scaler import NWO_ScaleScene
 from .append_foundry_materials import NWO_AppendFoundryMaterials
@@ -139,6 +139,8 @@ classes = (
     NWO_OT_BakeToControl,
     NWO_OT_BakeIKControl,
     NWO_OT_KeyframeControlRigSettings,
+    NWO_OT_ClearControlRigKeyframes,
+    NWO_OT_ClearPoseControlKeyframes,
     NWO_OT_BuildControlRig,
     NWO_OT_ClearControlRig,
     NWO_OT_InvertControlRig,
