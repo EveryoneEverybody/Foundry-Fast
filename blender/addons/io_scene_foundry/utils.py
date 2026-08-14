@@ -5968,7 +5968,7 @@ def mesh_add_emissive_attributes(mesh: bpy.types.Mesh):
                     continue
 
                 color_on = np.array(m_prop.material_lighting_emissive_color[:], dtype=np.single)
-                power_on = np.array((prop.material_lighting_emissive_power, prop.material_lighting_attenuation_falloff, prop.material_lighting_attenuation_cutoff), dtype=np.single)
+                power_on = np.array((m_prop.material_lighting_emissive_power, m_prop.material_lighting_attenuation_falloff, m_prop.material_lighting_attenuation_cutoff), dtype=np.single)
 
                 color_data[mask] = color_on
                 power_data[mask] = power_on
