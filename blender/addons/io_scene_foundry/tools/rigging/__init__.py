@@ -257,8 +257,11 @@ class HaloRig:
                 pedestal.custom_shape_scale_xyz = Vector((1, 1, 1)) * shape_scale * self.shape_scale
                 pedestal.use_custom_shape_bone_size = False
                 
-                if reach_fp_fix:
-                    pedestal.custom_shape_rotation_euler.x = radians(-90)
+                pedestal.custom_shape_rotation_euler = Vector((
+                    radians(-90) if reach_fp_fix else 0.0,
+                    0.0,
+                    0.0,
+                ))
                 
                 # if wireframe:
                 #     self.rig_data.bones[pedestal.name].show_wire = True
@@ -325,8 +328,11 @@ class HaloRig:
                     aim_control.custom_shape_scale_xyz = Vector((1, 1, 1)) * shape_scale * self.shape_scale
                     aim_control.use_custom_shape_bone_size = False
 
-                    if reach_fp_fix:
-                        aim_control.custom_shape_rotation_euler.z = radians(90)
+                    aim_control.custom_shape_rotation_euler = Vector((
+                        0.0,
+                        0.0,
+                        radians(90) if reach_fp_fix else 0.0,
+                    ))
 
                     # if wireframe:
                     #     self.rig_data.bones[aim_control.name].show_wire = True
@@ -336,8 +342,11 @@ class HaloRig:
                     pitch.custom_shape = shape_ob
                     pitch.custom_shape_scale_xyz = Vector((0.2, 0.2, 0.2)) * shape_scale * self.shape_scale
                     pitch.use_custom_shape_bone_size = False
-                    if not reach_fp_fix:
-                        pitch.custom_shape_rotation_euler.x = radians(90)
+                    pitch.custom_shape_rotation_euler = Vector((
+                        0.0 if reach_fp_fix else radians(90),
+                        0.0,
+                        0.0,
+                    ))
 
                     # if wireframe:
                     #     self.rig_data.bones[pitch.name].show_wire = True
@@ -348,8 +357,11 @@ class HaloRig:
                     yaw.custom_shape_scale_xyz = Vector((0.2, 0.2, 0.2)) * shape_scale * self.shape_scale
                     yaw.use_custom_shape_bone_size = False
 
-                    if reach_fp_fix:
-                        yaw.custom_shape_rotation_euler.x = radians(90)
+                    yaw.custom_shape_rotation_euler = Vector((
+                        radians(90) if reach_fp_fix else 0.0,
+                        0.0,
+                        0.0,
+                    ))
 
                     # if wireframe:
                     #     self.rig_data.bones[yaw.name].show_wire = True

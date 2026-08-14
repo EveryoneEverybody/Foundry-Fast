@@ -131,6 +131,7 @@ def set_control_rig_inverted(context, arm: bpy.types.Object, inverted: bool):
             aim_control=aim_control,
             aim_control_only=True,
             reverse_control=inverted,
+            reach_fp_fix=armature_needs_reach_fp_ik_fix(arm),
             constraints_only=True,
         )
 
@@ -1764,6 +1765,7 @@ class NWO_OT_BuildControlRig(bpy.types.Operator):
         rig.build_and_apply_control_shapes(
             aim_control=aim_control,
             reverse_control=arm.nwo.invert_control_aim,
+            reach_fp_fix=self.apply_reach_fp_ik_fix,
             constraints_only=False,
         )
         
@@ -1896,7 +1898,13 @@ class NWO_OT_InvertAimControl(bpy.types.Operator):
         rig.rig_ob = arm
         rig.rig_data = arm.data
         rig.rig_pose = arm.pose
-        rig.build_and_apply_control_shapes(aim_control=aim_control, aim_control_only=True, reverse_control=(not arm.nwo.invert_control_aim), constraints_only=True)
+        rig.build_and_apply_control_shapes(
+            aim_control=aim_control,
+            aim_control_only=True,
+            reverse_control=(not arm.nwo.invert_control_aim),
+            reach_fp_fix=armature_needs_reach_fp_ik_fix(arm),
+            constraints_only=True,
+        )
         self.report({'INFO'}, f"Aim pitch & yaw now control {aim_control_name}" if arm.nwo.invert_control_aim else f"{aim_control_name} controls aim pitch & yaw")
         return {'FINISHED'}
 

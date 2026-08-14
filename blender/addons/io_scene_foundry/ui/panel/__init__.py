@@ -2025,9 +2025,10 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
 
         custom_props = sorted(key for key in settings_bone.keys() if not key.startswith("_"))
         if custom_props:
-            box.operator("nwo.keyframe_control_rig_settings", icon='KEY_HLT')
+            row = box.row()
+            row.operator("nwo.keyframe_control_rig_settings", icon='KEY_HLT')
+            row.operator("nwo.clear_pose_control_keyframes", icon='KEY_DEHLT')
         box.operator("nwo.clear_control_rig_keyframes", icon='KEY_DEHLT')
-        box.operator("nwo.clear_pose_control_keyframes", icon='KEY_DEHLT')
 
         if not custom_props:
             box.label(text="No custom pose controls")
