@@ -1,6 +1,6 @@
 import random
 import re
-from math import degrees
+from math import degrees, radians
 
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
@@ -26,6 +26,8 @@ _LOWER_BODY_NAME_TOKENS = (
     "thigh", "leg", "calf", "shin", "knee", "ankle", "foot", "toe", "tarsal",
 )
 _WRAP_EVENT_TYPE = "_connected_geometry_animation_event_type_import"
+_WRAP_EVENT_NAMES = {"Wrapped Left", "Wrapped Right"}
+_TURN_AIM_YAW_OFFSETS = {"turn_left": 45.0, "turn_right": -45.0}
 _SOURCE_STATE_PATTERN = re.compile(r"^(aim|look)_still(?P<suffix>(?:_.*)?)$")
 
 
@@ -180,6 +182,68 @@ def _sample_local_matrices(armature: bpy.types.Object, curves: dict, frame: int,
     }
 
 
+def _evaluated_action_poses(
+    action: bpy.types.Action,
+    armature: bpy.types.Object,
+    frames,
+) -> dict[int, dict[str, Matrix]]:
+    frames = tuple(frames)
+    if not frames:
+        return {}
+
+    scene = bpy.context.scene
+    had_animation_data = armature.animation_data is not None
+    animation_data = armature.animation_data_create()
+    previous_action = animation_data.action
+    previous_slot_identifier = getattr(
+        getattr(animation_data, "action_slot", None), "identifier", ""
+    )
+    previous_use_nla = animation_data.use_nla
+    previous_influence = animation_data.action_influence
+    previous_frame = scene.frame_current
+    previous_subframe = scene.frame_subframe
+    poses = {}
+
+    try:
+        animation_data.use_nla = False
+        animation_data.action_influence = 1.0
+        animation_data.action = action
+        slots = getattr(action, "slots", None)
+        if slots:
+            slot_identifier = _slot_identifier(action, armature)
+            slot = slots.get(slot_identifier) or slots[0]
+            animation_data.action_slot = slot
+
+        for frame in frames:
+            scene.frame_set(frame)
+            evaluated_armature = armature.evaluated_get(
+                bpy.context.evaluated_depsgraph_get()
+            )
+            frame_pose = {}
+            for bone in evaluated_armature.pose.bones:
+                frame_pose[bone.name] = (
+                    bone.parent.matrix.inverted_safe() @ bone.matrix
+                    if bone.parent is not None
+                    else bone.matrix.copy()
+                )
+            poses[frame] = frame_pose
+    finally:
+        animation_data.action = previous_action
+        if previous_action is not None and previous_slot_identifier:
+            previous_slots = getattr(previous_action, "slots", None)
+            if previous_slots:
+                previous_slot = previous_slots.get(previous_slot_identifier)
+                if previous_slot is not None:
+                    animation_data.action_slot = previous_slot
+        animation_data.use_nla = previous_use_nla
+        animation_data.action_influence = previous_influence
+        scene.frame_set(previous_frame, subframe=previous_subframe)
+        if not had_animation_data:
+            armature.animation_data_clear()
+
+    return poses
+
+
 def _component_divide(value: Vector, divisor: Vector) -> Vector:
     return Vector(
         value[index] / divisor[index] if abs(divisor[index]) > 1e-8 else 1.0
@@ -229,39 +293,141 @@ def _bone_depth(bone: bpy.types.PoseBone) -> int:
     return depth
 
 
-def _apply_turn_aim_facing(
+def _apply_turn_aim_delta(
     armature: bpy.types.Object,
     source_reference: dict,
     source_pose: dict,
+    target_reference: dict,
     target_pose: dict,
     pedestal_name: str,
     aim_bone_names: set[str],
 ) -> None:
     source_reference_world = _world_matrices(armature, source_reference)
     source_pose_world = _world_matrices(armature, source_pose)
+    target_reference_world = _world_matrices(armature, target_reference)
     target_world = _world_matrices(armature, target_pose)
-    _location, source_pedestal_rotation, _scale = source_reference_world[pedestal_name].decompose()
-    _location, target_pedestal_rotation, _scale = target_world[pedestal_name].decompose()
-    source_pedestal_rotation.normalize()
-    target_pedestal_rotation.normalize()
+
+    _location, source_reference_pedestal, _scale = source_reference_world[
+        pedestal_name
+    ].decompose()
+    _location, source_pose_pedestal, _scale = source_pose_world[
+        pedestal_name
+    ].decompose()
+    _location, target_reference_pedestal, _scale = target_reference_world[
+        pedestal_name
+    ].decompose()
+    _location, target_pedestal, _scale = target_world[pedestal_name].decompose()
+    for rotation in (
+        source_reference_pedestal,
+        source_pose_pedestal,
+        target_reference_pedestal,
+        target_pedestal,
+    ):
+        rotation.normalize()
 
     aim_bones = [armature.pose.bones.get(name) for name in aim_bone_names]
-    aim_bones = sorted((bone for bone in aim_bones if bone is not None), key=_bone_depth)
+    aim_bones = sorted(
+        (bone for bone in aim_bones if bone is not None),
+        key=_bone_depth,
+    )
     for bone in aim_bones:
-        _location, source_rotation, _scale = source_pose_world[bone.name].decompose()
-        source_rotation.normalize()
-        relative_rotation = source_pedestal_rotation.inverted() @ source_rotation
-        desired_world_rotation = target_pedestal_rotation @ relative_rotation
+        _location, source_reference_rotation, _scale = source_reference_world[
+            bone.name
+        ].decompose()
+        _location, source_pose_rotation, _scale = source_pose_world[
+            bone.name
+        ].decompose()
+        _location, target_reference_rotation, _scale = target_reference_world[
+            bone.name
+        ].decompose()
+        for rotation in (
+            source_reference_rotation,
+            source_pose_rotation,
+            target_reference_rotation,
+        ):
+            rotation.normalize()
+
+        source_reference_relative = (
+            source_reference_pedestal.inverted()
+            @ source_reference_rotation
+        )
+        source_pose_relative = (
+            source_pose_pedestal.inverted() @ source_pose_rotation
+        )
+        source_delta = (
+            source_reference_relative.inverted() @ source_pose_relative
+        )
+        target_reference_relative = (
+            target_reference_pedestal.inverted()
+            @ target_reference_rotation
+        )
+        desired_world_rotation = target_pedestal @ (
+            target_reference_relative @ source_delta
+        )
         if bone.parent is None:
             desired_local_rotation = desired_world_rotation
         else:
-            _location, parent_rotation, _scale = target_world[bone.parent.name].decompose()
+            _location, parent_rotation, _scale = target_world[
+                bone.parent.name
+            ].decompose()
+            parent_rotation.normalize()
+            desired_local_rotation = (
+                parent_rotation.inverted() @ desired_world_rotation
+            )
+        desired_local_rotation.normalize()
+        location, _rotation, scale = target_pose[bone.name].decompose()
+        target_pose[bone.name] = Matrix.LocRotScale(
+            location,
+            desired_local_rotation,
+            scale,
+        )
+        target_world = _world_matrices(armature, target_pose)
+
+
+
+def _offset_turn_aim_yaw(
+    armature: bpy.types.Object,
+    target_reference: dict,
+    pedestal_name: str,
+    aim_bone_names: set[str],
+    yaw_degrees: float,
+) -> None:
+    pedestal = armature.pose.bones.get(pedestal_name)
+    if pedestal is None:
+        raise RuntimeError("Turn overlays require a valid pedestal bone")
+
+    reference_world = _world_matrices(armature, target_reference)
+    target_world = dict(reference_world)
+    _location, pedestal_rotation, _scale = reference_world[pedestal_name].decompose()
+    pedestal_rotation.normalize()
+    yaw_delta = Quaternion((0.0, 0.0, 1.0), radians(yaw_degrees))
+
+    aim_bones = [armature.pose.bones.get(name) for name in aim_bone_names]
+    aim_bones = sorted(
+        (bone for bone in aim_bones if bone is not None),
+        key=_bone_depth,
+    )
+    for bone in aim_bones:
+        _location, reference_rotation, _scale = reference_world[bone.name].decompose()
+        reference_rotation.normalize()
+        relative_rotation = pedestal_rotation.inverted() @ reference_rotation
+        desired_world_rotation = pedestal_rotation @ (yaw_delta @ relative_rotation)
+        if bone.parent is None:
+            desired_local_rotation = desired_world_rotation
+        else:
+            _location, parent_rotation, _scale = target_world[
+                bone.parent.name
+            ].decompose()
             parent_rotation.normalize()
             desired_local_rotation = parent_rotation.inverted() @ desired_world_rotation
         desired_local_rotation.normalize()
-        location, _rotation, scale = target_pose[bone.name].decompose()
-        target_pose[bone.name] = Matrix.LocRotScale(location, desired_local_rotation, scale)
-        target_world = _world_matrices(armature, target_pose)
+        location, _rotation, scale = target_reference[bone.name].decompose()
+        target_reference[bone.name] = Matrix.LocRotScale(
+            location,
+            desired_local_rotation,
+            scale,
+        )
+        target_world = _world_matrices(armature, target_reference)
 
 
 def _pose_bone_from_usage(armature: bpy.types.Object, usage_name: str, fallback_names=()):
@@ -512,12 +678,27 @@ def _generated_action(
         raise RuntimeError(f"Base action [{target_base_track.action.name}] has no transform data")
 
     rest_matrices = {bone.name: _rest_local_matrix(bone) for bone in armature.pose.bones}
-    source_reference = _sample_local_matrices(
-        armature, source_curves, source_animation.frame_start, rest_matrices
+    source_frames = range(source_animation.frame_start, source_animation.frame_end + 1)
+    source_poses = _evaluated_action_poses(
+        source_track.action,
+        armature,
+        source_frames,
     )
+    source_reference = source_poses[source_animation.frame_start]
+    base_state = utils.AnimationName(target_base_animation.name).state
+    turn_yaw_offset = _TURN_AIM_YAW_OFFSETS.get(base_state)
+    is_turn = turn_yaw_offset is not None
     target_reference = _sample_local_matrices(
         armature, target_curves, target_base_animation.frame_start, rest_matrices
     )
+    if is_turn:
+        _offset_turn_aim_yaw(
+            armature,
+            target_reference,
+            pedestal_name,
+            aim_bone_names,
+            turn_yaw_offset,
+        )
     animated_bone_names = {
         bone.name
         for bone in armature.pose.bones
@@ -525,26 +706,35 @@ def _generated_action(
     }
     animated_bone_names.update(aim_bone_names)
 
-    is_turn = utils.AnimationName(target_base_animation.name).state.startswith("turn_")
+    generated_reference = target_reference
+
     output_frames = {}
     for frame in range(source_animation.frame_start, source_animation.frame_end + 1):
-        source_pose = _sample_local_matrices(armature, source_curves, frame, rest_matrices)
-        target_pose = {}
-        for bone in armature.pose.bones:
-            if bone.name in lower_body_names and bone.name not in aim_bone_names:
-                target_pose[bone.name] = target_reference[bone.name].copy()
-            else:
-                target_pose[bone.name] = _compose_overlay_transform(
-                    source_reference[bone.name],
-                    source_pose[bone.name],
-                    target_reference[bone.name],
-                )
+        source_pose = source_poses[frame]
+        if frame == source_animation.frame_start:
+            target_pose = {
+                bone.name: generated_reference[bone.name].copy()
+                for bone in armature.pose.bones
+            }
+        else:
+            target_pose = {}
+            for bone in armature.pose.bones:
+                if bone.name in lower_body_names and bone.name not in aim_bone_names:
+                    target_pose[bone.name] = generated_reference[bone.name].copy()
+                else:
+                    target_pose[bone.name] = _compose_overlay_transform(
+                        source_reference[bone.name],
+                        source_pose[bone.name],
+                        generated_reference[bone.name],
+                    )
 
         if is_turn and frame != source_animation.frame_start:
-            _apply_turn_aim_facing(
+            # Aim changes are relative to the turn's offset aim-bone reference.
+            _apply_turn_aim_delta(
                 armature,
                 source_reference,
                 source_pose,
+                generated_reference,
                 target_pose,
                 pedestal_name,
                 aim_bone_names,
@@ -580,26 +770,33 @@ def _rebuild_wrap_events(
 ) -> int:
     """Replace copied wrap events using the generated pose-screen transforms."""
     for index in range(len(animation.animation_events) - 1, -1, -1):
-        if animation.animation_events[index].event_type == _WRAP_EVENT_TYPE:
+        event = animation.animation_events[index]
+        if (
+            event.event_type == _WRAP_EVENT_TYPE
+            and event.import_name in _WRAP_EVENT_NAMES
+        ):
             animation.animation_events.remove(index)
 
     if not yaw_name:
         return 0
 
-    curves, _slot_identifier = _fcurve_map(action, armature)
     pedestal = armature.pose.bones.get(pedestal_name)
     yaw = armature.pose.bones.get(yaw_name)
-    if not curves or pedestal is None or yaw is None:
+    if pedestal is None or yaw is None:
         return 0
 
-    rest_matrices = {bone.name: _rest_local_matrix(bone) for bone in armature.pose.bones}
+    poses = _evaluated_action_poses(
+        action,
+        armature,
+        range(animation.frame_start, animation.frame_end + 1),
+    )
     event_ids = {event.event_id for event in animation.animation_events}
     reset = True
     current_name = ""
     added = 0
 
     for frame in range(animation.frame_start + 1, animation.frame_end + 1):
-        local_matrices = _sample_local_matrices(armature, curves, frame, rest_matrices)
+        local_matrices = poses[frame]
         world_matrices = _world_matrices(armature, local_matrices)
         relative = (
             world_matrices[pedestal.name].inverted_safe()
@@ -701,8 +898,7 @@ class NWO_OT_GenerateAimLookOverlays(bpy.types.Operator):
     bl_idname = "nwo.generate_aim_look_overlays"
     bl_label = "Generate Aim / Look Overlays"
     bl_description = (
-        "Generate movement pose overlays from the active aim_still or look_still pose overlay, "
-        "including Reach-style conversion of legacy turn bases"
+        "Generate movement pose overlays from the active aim_still or look_still pose overlay"
     )
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -744,8 +940,8 @@ class NWO_OT_GenerateAimLookOverlays(bpy.types.Operator):
         if not source_name.valid or source_name.custom or source_name.type != utils.AnimationStateType.ACTION:
             self.report({'WARNING'}, "The active animation does not have a valid action animation name")
             return {'CANCELLED'}
-        if source.animation_type != 'overlay':
-            self.report({'WARNING'}, "The active animation must be an overlay")
+        if source.animation_type != 'overlay' or not source.pose_overlay:
+            self.report({'WARNING'}, "The active animation must be a pose overlay")
             return {'CANCELLED'}
         if _retarget_overlay_state(source_name.state, "move_front") is None:
             self.report(
