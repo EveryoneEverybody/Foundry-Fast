@@ -2888,7 +2888,109 @@ def reset_to_basis(keep_animation=False, record_current_action=False):
     if record_current_action:
         return ob_actions
 
-def clear_animation(animation):
+_animation_pose_snapshots = {}
+
+def set_animation_frame(animation, scene):
+    frame_option = get_prefs().animation_switch_frame
+    if frame_option == 'CURRENT':
+        return
+
+    frame = animation.frame_start
+    if frame_option == 'LAST' and animation.last_frame >= 0:
+        frame = animation.last_frame
+
+    scene.frame_current = min(max(frame, animation.frame_start), animation.frame_end)
+
+def save_animation_pose(animation):
+    """Save the bone transforms and pose controls for each armature driven by an animation."""
+    snapshot = {}
+    for group in animation.action_tracks:
+        armature = group.object
+        if group.is_shape_key_action or group.action is None or armature is None or armature.type != 'ARMATURE':
+            continue
+
+        animation_data = armature.animation_data
+        if animation_data is None or animation_data.action != group.action:
+            continue
+
+        settings_bone = armature.pose.bones.get("CTRL_settings")
+        pose_controls = {}
+        if settings_bone is not None:
+            pose_controls = {
+                key: copy.deepcopy(settings_bone[key])
+                for key in settings_bone.keys()
+                if not key.startswith("_")
+            }
+
+        snapshot[armature] = {
+            "bone_matrices": {bone.name: bone.matrix_basis.copy() for bone in armature.pose.bones},
+            "pose_controls": pose_controls,
+        }
+
+    # An animation can be cleared more than once while switching. Only replace a
+    # useful snapshot so a second clear of the now-unanimated rig cannot erase it.
+    if snapshot:
+        _animation_pose_snapshots[animation] = snapshot
+
+def restore_animation_pose(animation, context):
+    """Restore and consume a pose saved the last time an animation was cleared."""
+    snapshot = _animation_pose_snapshots.pop(animation, None)
+    if snapshot is None:
+        return
+
+    # context.view_layer.update()
+    armature_snapshots = {}
+    for group in animation.action_tracks:
+        armature = group.object
+        if group.is_shape_key_action or group.action is None or armature is None or armature.type != 'ARMATURE':
+            continue
+
+        animation_data = armature.animation_data
+        if animation_data is None or animation_data.action != group.action:
+            continue
+
+        armature_snapshot = snapshot.get(armature)
+        if armature_snapshot is not None:
+            armature_snapshots[armature] = armature_snapshot
+
+    pose_control_snapshots = []
+    for armature, armature_snapshot in armature_snapshots.items():
+        settings_bone = armature.pose.bones.get("CTRL_settings")
+        if settings_bone is None:
+            continue
+
+        pose_controls = {
+            key: value
+            for key, value in armature_snapshot["pose_controls"].items()
+            if key in settings_bone
+        }
+        if not pose_controls:
+            continue
+
+        for key, value in pose_controls.items():
+            settings_bone[key] = value
+        settings_bone.id_data.update_tag()
+        pose_control_snapshots.append((settings_bone, pose_controls))
+
+    if pose_control_snapshots:
+        # context.view_layer.update()
+        for settings_bone, pose_controls in pose_control_snapshots:
+            for key, value in pose_controls.items():
+                settings_bone[key] = value
+
+    for armature, armature_snapshot in armature_snapshots.items():
+        bone_matrices = armature_snapshot["bone_matrices"]
+        for bone_name, matrix_basis in bone_matrices.items():
+            bone = armature.pose.bones.get(bone_name)
+            if bone is not None:
+                bone.matrix_basis = matrix_basis
+
+def clear_animation(animation, save_pose=False, current_frame=None):
+    if save_pose:
+        save_animation_pose(animation)
+        if current_frame is not None:
+            animation.last_frame = current_frame
+
     for group in animation.action_tracks:
         if group.action is not None and group.object is not None:
             if group.is_shape_key_action:

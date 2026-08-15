@@ -882,7 +882,7 @@ class NWO_OT_UnlinkAnimation(bpy.types.Operator):
         animation = scene_nwo.animations[scene_nwo.active_animation_index]
         scene_nwo.active_animation_index = -1
         
-        utils.clear_animation(animation)
+        utils.clear_animation(animation, save_pose=True, current_frame=context.scene.frame_current)
                     
         return {"FINISHED"}
     
@@ -1654,6 +1654,8 @@ class NWO_OT_SetTimeline(bpy.types.Operator):
     bl_idname = "nwo.set_timeline"
     bl_description = "Sets the scene timeline to match the current animation's frame range"
     bl_options = {'UNDO'}
+
+    set_frame: bpy.props.BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
     
     # exclude_first_frame: bpy.props.BoolProperty()
     # exclude_last_frame: bpy.props.BoolProperty()
@@ -1677,7 +1679,8 @@ class NWO_OT_SetTimeline(bpy.types.Operator):
         
         scene.frame_start = start_frame
         scene.frame_end = end_frame
-        scene.frame_current = start_frame
+        if self.set_frame:
+            scene.frame_current = start_frame
             
         return {'FINISHED'}
     
@@ -1914,7 +1917,7 @@ class NWO_OT_NewAnimation(bpy.types.Operator):
         
         if scene_nwo.active_animation_index > -1:
             current_animation = scene_nwo.animations[scene_nwo.active_animation_index]
-            utils.clear_animation(current_animation)
+            utils.clear_animation(current_animation, save_pose=True, current_frame=context.scene.frame_current)
         
         animation = scene_nwo.animations.add()
 

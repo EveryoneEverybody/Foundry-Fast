@@ -429,6 +429,8 @@ def draw_foundry_preferences(layout, prefs, context=None, show_save_button=False
     row = box.row(align=True)
     row.prop(prefs, "sync_timeline_range")
     row = box.row(align=True)
+    row.prop(prefs, "animation_switch_frame")
+    row = box.row(align=True)
     row.prop(prefs, "ignore_final_frame")
     row = box.row(align=True)
     row.prop(prefs, "debug_menu_on_export")
@@ -506,6 +508,17 @@ class FoundryPreferences(AddonPreferences):
         name="Update Timeline Range on Switching Animation",
         description="Sets the scene timeline to match the start and end frame range of the current animation if using the Foundry Animation Panel to switch animations. On switching to a base, replacement, or world animation the timeline range is purposely set 1 frame short of the animation's final frame. This is to mimic how the game will slice off the final frame of a base, replacement, or world animation",
         default=True,
+    )
+
+    animation_switch_frame: EnumProperty(
+        name="Animation Switch Frame",
+        description="Controls which frame is selected when switching animations",
+        default="CURRENT",
+        items=[
+            ("LAST", "Last frame used", "Return to the frame last used for that animation, or its first frame if it has not been used yet"),
+            ("FIRST", "First frame", "Always jump to the animation's first frame"),
+            ("CURRENT", "Current frame", "Do not change the current frame when switching animations"),
+        ],
     )
     
     ignore_final_frame: BoolProperty(

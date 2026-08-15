@@ -96,7 +96,7 @@ def animation_from_composite(self, context):
                 if len(animations) > previous_active_animation_index:
                     previous_animation = animations[previous_active_animation_index]
                 if previous_animation:
-                    utils.clear_animation(previous_animation)
+                    utils.clear_animation(previous_animation, save_pose=True, current_frame=context.scene.frame_current)
                     
             for track in animation.action_tracks:
                 if track.object and track.action:
@@ -127,7 +127,9 @@ def animation_from_composite(self, context):
                     self.id_data.frame_end = animation.frame_end - 1
                 else:
                     self.id_data.frame_end = animation.frame_end
-                self.id_data.frame_current = animation.frame_start
+            utils.set_animation_frame(animation, self.id_data)
+
+            utils.restore_animation_pose(animation, context)
 
         
 
@@ -1276,6 +1278,8 @@ class NWO_AnimationPropertiesGroup(bpy.types.PropertyGroup):
         min=0,
         update=update_frame_end,
     )
+
+    last_frame: bpy.props.IntProperty(default=-1, options={'HIDDEN', 'SKIP_SAVE'})
 
     export_this: bpy.props.BoolProperty(
         name="Export",
@@ -2840,7 +2844,7 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
                     if len(self.animations) > self.previous_active_animation_index:
                         previous_animation = self.animations[self.previous_active_animation_index]
                     if previous_animation:
-                        utils.clear_animation(previous_animation)
+                        utils.clear_animation(previous_animation, save_pose=True, current_frame=context.scene.frame_current)
                 last_used_compo_leaf[animation] = None
                 return
                     
@@ -2848,7 +2852,7 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
                 if len(self.animations) > self.previous_active_animation_index:
                     previous_animation = self.animations[self.previous_active_animation_index]
                 if previous_animation:
-                    utils.clear_animation(previous_animation)
+                    utils.clear_animation(previous_animation, save_pose=True, current_frame=context.scene.frame_current)
                     
             for track in animation.action_tracks:
                 if track.object and track.action:
@@ -2872,7 +2876,10 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
                             track.object.data.animation_data.action = track.action
 
             if utils.get_prefs().sync_timeline_range and not is_composite:
-                bpy.ops.nwo.set_timeline()
+                bpy.ops.nwo.set_timeline(set_frame=False)
+            utils.set_animation_frame(animation, context.scene)
+
+            utils.restore_animation_pose(animation, context)
                 
         self.previous_active_animation_index = self.active_animation_index
     
