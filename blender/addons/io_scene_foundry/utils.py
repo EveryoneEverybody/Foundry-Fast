@@ -2888,7 +2888,6 @@ def reset_to_basis(keep_animation=False, record_current_action=False):
     if record_current_action:
         return ob_actions
 
-_animation_pose_snapshots = {}
 
 def set_animation_frame(animation, scene):
     frame_option = get_prefs().animation_switch_frame
@@ -2901,9 +2900,26 @@ def set_animation_frame(animation, scene):
 
     scene.frame_current = min(max(frame, animation.frame_start), animation.frame_end)
 
+def _pose_control_value_json(value):
+    try:
+        return json.dumps(value)
+    except (TypeError, ValueError):
+        pass
+
+    for conversion_method in ("to_list", "to_dict"):
+        convert = getattr(value, conversion_method, None)
+        if convert is None:
+            continue
+        try:
+            return json.dumps(convert())
+        except (TypeError, ValueError):
+            continue
+
+    return None
+
 def save_animation_pose(animation):
     """Save the bone transforms and pose controls for each armature driven by an animation."""
-    snapshot = {}
+    armatures = []
     for group in animation.action_tracks:
         armature = group.object
         if group.is_shape_key_action or group.action is None or armature is None or armature.type != 'ARMATURE':
@@ -2913,33 +2929,47 @@ def save_animation_pose(animation):
         if animation_data is None or animation_data.action != group.action:
             continue
 
-        settings_bone = armature.pose.bones.get("CTRL_settings")
-        pose_controls = {}
-        if settings_bone is not None:
-            pose_controls = {
-                key: copy.deepcopy(settings_bone[key])
-                for key in settings_bone.keys()
-                if not key.startswith("_")
-            }
-
-        snapshot[armature] = {
-            "bone_matrices": {bone.name: bone.matrix_basis.copy() for bone in armature.pose.bones},
-            "pose_controls": pose_controls,
-        }
+        if armature not in armatures:
+            armatures.append(armature)
 
     # An animation can be cleared more than once while switching. Only replace a
     # useful snapshot so a second clear of the now-unanimated rig cannot erase it.
-    if snapshot:
-        _animation_pose_snapshots[animation] = snapshot
+    if not armatures:
+        return
+
+    animation.pose_snapshots.clear()
+    for armature in armatures:
+        armature_snapshot = animation.pose_snapshots.add()
+        armature_snapshot.armature = armature
+
+        for bone in armature.pose.bones:
+            bone_snapshot = armature_snapshot.bones.add()
+            bone_snapshot.name = bone.name
+            bone_snapshot.matrix_basis = tuple(component for row in bone.matrix_basis for component in row)
+
+        settings_bone = armature.pose.bones.get("CTRL_settings")
+        if settings_bone is None:
+            continue
+
+        for key in settings_bone.keys():
+            if key.startswith("_"):
+                continue
+
+            value_json = _pose_control_value_json(settings_bone[key])
+            if value_json is None:
+                continue
+
+            pose_control = armature_snapshot.pose_controls.add()
+            pose_control.name = key
+            pose_control.value_json = value_json
 
 def restore_animation_pose(animation, context):
-    """Restore and consume a pose saved the last time an animation was cleared."""
-    snapshot = _animation_pose_snapshots.pop(animation, None)
-    if snapshot is None:
+    """Restore a pose saved the last time an animation was cleared."""
+    if not animation.pose_snapshots:
         return
 
     # context.view_layer.update()
-    armature_snapshots = {}
+    active_armatures = set()
     for group in animation.action_tracks:
         armature = group.object
         if group.is_shape_key_action or group.action is None or armature is None or armature.type != 'ARMATURE':
@@ -2949,9 +2979,13 @@ def restore_animation_pose(animation, context):
         if animation_data is None or animation_data.action != group.action:
             continue
 
-        armature_snapshot = snapshot.get(armature)
-        if armature_snapshot is not None:
-            armature_snapshots[armature] = armature_snapshot
+        active_armatures.add(armature)
+
+    armature_snapshots = {
+        snapshot.armature: snapshot
+        for snapshot in animation.pose_snapshots
+        if snapshot.armature in active_armatures
+    }
 
     pose_control_snapshots = []
     for armature, armature_snapshot in armature_snapshots.items():
@@ -2959,11 +2993,14 @@ def restore_animation_pose(animation, context):
         if settings_bone is None:
             continue
 
-        pose_controls = {
-            key: value
-            for key, value in armature_snapshot["pose_controls"].items()
-            if key in settings_bone
-        }
+        pose_controls = {}
+        for pose_control in armature_snapshot.pose_controls:
+            if pose_control.name not in settings_bone:
+                continue
+            try:
+                pose_controls[pose_control.name] = json.loads(pose_control.value_json)
+            except (json.JSONDecodeError, TypeError):
+                continue
         if not pose_controls:
             continue
 
@@ -2979,11 +3016,11 @@ def restore_animation_pose(animation, context):
                 settings_bone[key] = value
 
     for armature, armature_snapshot in armature_snapshots.items():
-        bone_matrices = armature_snapshot["bone_matrices"]
-        for bone_name, matrix_basis in bone_matrices.items():
-            bone = armature.pose.bones.get(bone_name)
+        for bone_snapshot in armature_snapshot.bones:
+            bone = armature.pose.bones.get(bone_snapshot.name)
             if bone is not None:
-                bone.matrix_basis = matrix_basis
+                values = bone_snapshot.matrix_basis
+                bone.matrix_basis = Matrix((values[0:4], values[4:8], values[8:12], values[12:16]))
 
 def clear_animation(animation, save_pose=False, current_frame=None):
     if save_pose:

@@ -1178,6 +1178,19 @@ class NWO_ActionGroup(bpy.types.PropertyGroup):
     nla_uuid: bpy.props.StringProperty(options={'HIDDEN'})
     is_shape_key_action: bpy.props.BoolProperty(options={'HIDDEN'})
 
+class NWO_AnimationPoseBoneSnapshot(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(options={'HIDDEN'})
+    matrix_basis: bpy.props.FloatVectorProperty(size=16, options={'HIDDEN'})
+
+class NWO_AnimationPoseControlSnapshot(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(options={'HIDDEN'})
+    value_json: bpy.props.StringProperty(options={'HIDDEN'})
+
+class NWO_AnimationArmatureSnapshot(bpy.types.PropertyGroup):
+    armature: bpy.props.PointerProperty(type=bpy.types.Object, options={'HIDDEN'})
+    bones: bpy.props.CollectionProperty(type=NWO_AnimationPoseBoneSnapshot, options={'HIDDEN'})
+    pose_controls: bpy.props.CollectionProperty(type=NWO_AnimationPoseControlSnapshot, options={'HIDDEN'})
+
 class NWO_AnimationPropertiesGroup(bpy.types.PropertyGroup):
     active_action_group_index: bpy.props.IntProperty()
     
@@ -1218,6 +1231,7 @@ class NWO_AnimationPropertiesGroup(bpy.types.PropertyGroup):
     )
     
     action_tracks: bpy.props.CollectionProperty(type=NWO_ActionGroup)
+    pose_snapshots: bpy.props.CollectionProperty(type=NWO_AnimationArmatureSnapshot, options={'HIDDEN'})
     
     def update_composite_names(self, context):
         old_name = self.name_old
@@ -1279,7 +1293,7 @@ class NWO_AnimationPropertiesGroup(bpy.types.PropertyGroup):
         update=update_frame_end,
     )
 
-    last_frame: bpy.props.IntProperty(default=-1, options={'HIDDEN', 'SKIP_SAVE'})
+    last_frame: bpy.props.IntProperty(default=-1, options={'HIDDEN'})
 
     export_this: bpy.props.BoolProperty(
         name="Export",
