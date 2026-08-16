@@ -131,6 +131,8 @@ classes = [
     animation.NWO_OT_DeleteAnimation,
     animation.NWO_OT_UnlinkAnimation,
     animation.NWO_OT_AnimationLinkToGR2,
+    animation.NWO_OT_SelectExternalAnimationPath,
+    animation.NWO_OT_OpenExternalAnimationGR2,
     animation.NWO_OT_AnimationMoveToOwnBlend,
     animation.NWO_OT_AnimationsMoveToAssetBlends,
     animation.NWO_OT_OpenExternalAnimationBlend,

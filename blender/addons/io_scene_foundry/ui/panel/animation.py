@@ -1,6 +1,7 @@
 """Animation sub-panel specific operators"""
 
 from collections import defaultdict
+import os
 from pathlib import Path
 import random
 from typing import cast
@@ -1157,6 +1158,143 @@ class NWO_OT_OpenExternalAnimationBlend(bpy.types.Operator):
         bpy.ops.wm.open_mainfile(filepath=str(blend))
         
         self.report({'INFO'}, f"Loaded blend: {blend}")
+        return {'FINISHED'}
+
+
+class NWO_OT_SelectExternalAnimationPath(bpy.types.Operator):
+    bl_label = "Select External Animation File"
+    bl_idname = "nwo.select_external_animation_path"
+    bl_description = "Select a file and store its data-relative path"
+    bl_options = {'UNDO'}
+
+    path_type: bpy.props.EnumProperty(
+        items=[
+            ('GR2', "GR2", "Select the GR2 file containing the animation data"),
+            ('BLEND', "Blend", "Select the Blend file that authors the animation"),
+        ],
+        options={'HIDDEN'},
+    )
+
+    filepath: bpy.props.StringProperty(subtype='FILE_PATH', options={'HIDDEN'})
+    filter_glob: bpy.props.StringProperty(options={'HIDDEN'}, maxlen=1024)
+
+    open_in_explorer: bpy.props.BoolProperty(
+        name="Open in File Explorer",
+        options={'SKIP_SAVE'}
+    )
+
+    @classmethod
+    def poll(cls, context):
+        scene_nwo = utils.get_scene_props()
+        return scene_nwo.animations and scene_nwo.active_animation_index > -1
+
+    def execute(self, context):
+        if self.open_in_explorer:
+            if self.filepath:
+                if not utils.open_in_explorer(self.filepath):
+                    self.report({'WARNING'}, "Failed to open file")
+                    return {'CANCELLED'}
+                return {'FINISHED'}
+        path = Path(self.filepath)
+        if not path.is_file():
+            self.report({'WARNING'}, f"File does not exist: {path}")
+            return {'CANCELLED'}
+
+        expected_suffix = '.gr2' if self.path_type == 'GR2' else '.blend'
+        if path.suffix.lower() != expected_suffix:
+            self.report({'WARNING'}, f"Expected a {expected_suffix} file: {path}")
+            return {'CANCELLED'}
+
+        scene_nwo = utils.get_scene_props()
+        animation = scene_nwo.animations[scene_nwo.active_animation_index]
+        relative_path = utils.relative_path(path)
+        if self.path_type == 'GR2':
+            animation.gr2_path = relative_path
+        else:
+            animation.blend_path = relative_path
+
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        self.open_in_explorer = event.alt
+        scene_nwo = utils.get_scene_props()
+        animation = scene_nwo.animations[scene_nwo.active_animation_index]
+        current_path = animation.gr2_path if self.path_type == 'GR2' else animation.blend_path
+        self.filter_glob = '*.gr2' if self.path_type == 'GR2' else '*.blend'
+
+        if current_path.strip():
+            path = Path(current_path.strip())
+            if not path.is_absolute():
+                path = Path(utils.get_data_path(), path)
+            self.filepath = str(path)
+        else:
+            asset_path = utils.get_asset_path_full()
+            if asset_path:
+                self.filepath = str(Path(asset_path))
+            elif bpy.data.filepath:
+                self.filepath = str(Path(bpy.data.filepath).parent)
+
+        if self.open_in_explorer:
+            return self.execute(context)
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+
+class NWO_OT_OpenExternalAnimationGR2(bpy.types.Operator):
+    bl_label = "Open GR2"
+    bl_idname = "nwo.open_external_animation_gr2"
+    bl_description = "Open the first permutation render model and this animation in Granny Viewer"
+
+    @classmethod
+    def poll(cls, context):
+        scene_nwo = utils.get_scene_props()
+        return (
+            utils.has_gr2_viewer()
+            and scene_nwo.animations
+            and scene_nwo.active_animation_index > -1
+            and (
+                not scene_nwo.animations[scene_nwo.active_animation_index].external
+                or bool(scene_nwo.animations[scene_nwo.active_animation_index].gr2_path.strip())
+            )
+        )
+
+    def execute(self, context):
+        scene_nwo = utils.get_scene_props()
+        animation = scene_nwo.animations[scene_nwo.active_animation_index]
+        asset_path = utils.get_asset_path_full()
+        if not asset_path:
+            self.report({'WARNING'}, "Unable to determine the asset path")
+            return {'CANCELLED'}
+
+        asset_path = Path(asset_path)
+        if animation.external:
+            animation_path = Path(animation.gr2_path.strip())
+            if not animation_path.is_absolute():
+                animation_path = Path(utils.get_data_path(), animation_path)
+        else:
+            animation_path = Path(asset_path, "export", "animations", animation.name).with_suffix(".gr2")
+
+        if not animation_path.is_file():
+            self.report({'WARNING'}, f"GR2 file does not exist: {animation_path}")
+            return {'CANCELLED'}
+
+        if not scene_nwo.permutations_table:
+            self.report({'WARNING'}, "Unable to determine the first permutation render model")
+            return {'CANCELLED'}
+
+        first_permutation = scene_nwo.permutations_table[0].name
+        render_model_path = Path(
+            asset_path,
+            "export",
+            "models",
+            f"{asset_path.name}_render_{first_permutation}.gr2",
+        )
+        if not render_model_path.is_file():
+            self.report({'WARNING'}, f"Render model GR2 does not exist: {render_model_path}")
+            return {'CANCELLED'}
+
+        viewer_path = Path(utils.get_prefs().granny_viewer_path.strip("'\" ")).with_suffix('.exe')
+        os.startfile(viewer_path, arguments=f'"{render_model_path}" "{animation_path}"')
         return {'FINISHED'}
 
 class NWO_OT_AnimationMoveToOwnBlend(bpy.types.Operator):

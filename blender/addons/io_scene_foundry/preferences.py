@@ -598,6 +598,7 @@ class FoundryPreferences(AddonPreferences):
     granny_viewer_path: StringProperty(
         name="Granny Viewer Path",
         description="Full system path to granny viewer. Having this allows Foundry to open gr2 files in the viewer",
+        subtype='FILE_PATH',
     )
     
     allow_foundation_plugin_install: BoolProperty(

@@ -3836,9 +3836,15 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         if animation.external:
             col.prop(animation, "external")
             col.prop(animation, "pose_overlay")
-            col.prop(animation, "gr2_path")
-            col.prop(animation, "blend_path")
-            col.operator("nwo.open_external_animation_blend", icon='BLENDER')
+            row = col.row(align=True)
+            row.prop(animation, "gr2_path")
+            row.operator("nwo.select_external_animation_path", text="", icon='FILEBROWSER').path_type = 'GR2'
+            if utils.has_gr2_viewer():
+                row.operator("nwo.open_external_animation_gr2", icon_value=get_icon_id("granny3d"), text="")
+            row = col.row(align=True)
+            row.prop(animation, "blend_path")
+            row.operator("nwo.select_external_animation_path", text="", icon='FILEBROWSER').path_type = 'BLEND'
+            row.operator("nwo.open_external_animation_blend", icon='BLENDER', text="")
         else:
             row = col.row()
             row.label(text="Action Tracks")
@@ -3870,6 +3876,8 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
                 row = col.row()
                 row.operator("nwo.animation_move_to_own_blend", icon='BLENDER')
                 row.operator("nwo.animation_link_to_gr2", icon='LINKED')
+            if utils.has_gr2_viewer():
+                col.operator("nwo.open_external_animation_gr2", icon_value=get_icon_id("granny3d"))
             col.separator()
             row = col.row()
             row.operator("nwo.animation_frames_sync_to_keyframes", text="Sync Frame Range to Keyframes", icon='FILE_REFRESH', depress=scene_nwo.keyframe_sync_active)
