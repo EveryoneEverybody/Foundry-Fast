@@ -22,13 +22,17 @@ WM_SIZE = 0x0005
 WM_COMMAND = 0x0111
 WM_TIMER = 0x0113
 WM_VSCROLL = 0x0115
+WM_LBUTTONUP = 0x0202
 WM_CTLCOLORBTN = 0x0135
 WM_CTLCOLORSTATIC = 0x0138
 WM_SETICON = 0x0080
 WM_SETFONT = 0x0030
 WM_COPY = 0x0301
+EM_GETSEL = 0x00B0
 EM_SETSEL = 0x00B1
+EM_LINESCROLL = 0x00B6
 EM_SCROLLCARET = 0x00B7
+EM_GETFIRSTVISIBLELINE = 0x00CE
 EM_SETLIMITTEXT = 0x00C5
 EM_SETREADONLY = 0x00CF
 WM_USER = 0x0400
@@ -43,6 +47,7 @@ WS_HSCROLL = 0x00100000
 WS_TABSTOP = 0x00010000
 WS_GROUP = 0x00020000
 WS_EX_CLIENTEDGE = 0x00000200
+GWLP_WNDPROC = -4
 ES_MULTILINE = 0x0004
 ES_AUTOVSCROLL = 0x0040
 ES_AUTOHSCROLL = 0x0080
@@ -115,7 +120,6 @@ MAX_DISPLAY_LINES = 100_000
 
 ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 
-SEPARATOR_LINE = re.compile(r"^-{20,}$")
 EXPORT_BANNER_LINE = re.compile(r"^>{3}\s+.*\bEXPORT\b.*<{3}$", re.IGNORECASE)
 EXPORT_COMPLETE_LINE = re.compile(r"^(?:Export|Import) Completed in\s+(.+)$", re.IGNORECASE)
 CANCELLED_LINE = re.compile(r"^(?:EXPORT|IMPORT) CANCELLED(?: BY USER)?$", re.IGNORECASE)
@@ -220,6 +224,10 @@ user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
 user32.LoadCursorW.argtypes = [wintypes.HINSTANCE, ctypes.c_void_p]
 user32.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
 user32.SetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPCWSTR]
+user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+user32.SetWindowLongPtrW.restype = ctypes.c_void_p
+user32.CallWindowProcW.argtypes = [ctypes.c_void_p, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.CallWindowProcW.restype = ctypes.c_ssize_t
 user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.SendMessageW.restype = ctypes.c_ssize_t
 user32.MoveWindow.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.BOOL]
@@ -429,9 +437,9 @@ class OutputSources:
 
 
 class LogEntry:
-    __slots__ = ("text", "level", "context", "message", "foreground", "bold", "has_newline")
+    __slots__ = ("text", "level", "context", "message", "foreground", "bold", "has_newline", "toggle_key")
 
-    def __init__(self, text, level="message", context=(), message=None, foreground=None, bold=False, has_newline=True):
+    def __init__(self, text, level="message", context=(), message=None, foreground=None, bold=False, has_newline=True, toggle_key=None):
         self.text = text
         self.level = level
         self.context = tuple(context)
@@ -439,6 +447,7 @@ class LogEntry:
         self.foreground = foreground
         self.bold = bold
         self.has_newline = has_newline
+        self.toggle_key = toggle_key
 
 
 class BonoboOutput:
@@ -450,6 +459,7 @@ class BonoboOutput:
         self.current_line = ""
         self.pending_carriage_return = False
         self.last_source = ""
+        self.current_section = "General"
         self.total_characters = 0
 
     @staticmethod
@@ -496,6 +506,18 @@ class BonoboOutput:
         if SECTION_LINE.match(text) or EXPORT_BANNER_LINE.match(text):
             return "status"
         return "message"
+
+    @staticmethod
+    def _display_section(title):
+        title = title.strip()
+        return {"writing tags": "Tool Import"}.get(title.casefold(), title)
+
+    def _diagnostic_context(self, context):
+        section = self.current_section or "General"
+        context = tuple(context)
+        if context and context[0] == section:
+            return context
+        return (section, *context)
 
     def _entries_from_text(self, text, level="message", context=(), message=None, foreground=None, bold=False, add_newline=True):
         normalized = (text or "").replace("\r\n", "\n").replace("\r", "\n")
@@ -588,18 +610,28 @@ class BonoboOutput:
         structured_entries = self._parse_structured(raw_text)
         if structured_entries is not None:
             for entry in structured_entries:
+                if self._filter_level(entry.level) in {"warning", "error"}:
+                    entry.context = self._diagnostic_context(entry.context)
                 self._add_entry(entry)
             return
         clean_text = ANSI_ESCAPE.sub("", raw_text)
         level = self._plain_level(raw_text, clean_text)
         context, message = self._plain_context(clean_text)
-        if level in {"warning", "error", "critical"} and not context:
-            context = ("Foundry",)
-        if SECTION_LINE.match(clean_text) and self.entries and self.entries[-1].text.strip() and self.entries[-1].level in {"message", "verbose"}:
-            self.entries[-1].level = "status"
-            self.entries[-1].bold = True
+        if SECTION_LINE.match(clean_text) and self.entries:
+            previous = self.entries[-1]
+            heading = previous.text.strip()
+            if heading and not SECTION_LINE.match(heading):
+                terminal_heading = EXPORT_COMPLETE_LINE.match(heading) or FAILURE_LINE.search(heading)
+                if not terminal_heading:
+                    previous.level = "status"
+                    previous.context = ()
+                    previous.message = heading
+                    previous.bold = True
+                    if heading.casefold() != "error log":
+                        self.current_section = self._display_section(heading)
+        if self._filter_level(level) in {"warning", "error"}:
+            context = self._diagnostic_context(context)
         self._add_entry(LogEntry(clean_text, level, context, message, bold=level in {"status", "success"}))
-
     def _add_entry(self, entry):
         if self.entries and not self.entries[-1].has_newline:
             previous = self.entries[-1]
@@ -635,16 +667,24 @@ class BonoboOutput:
             counts[self._filter_level(entry.level)] += 1
         return counts
 
-    def grouped_entries(self, enabled_levels):
+    def grouped_entries(self, enabled_levels, collapsed_keys=()):
+        collapsed_keys = set(collapsed_keys)
         unique = {}
         for entry in self.entries:
             filter_level = self._filter_level(entry.level)
             if filter_level not in {"warning", "error"} or filter_level not in enabled_levels:
                 continue
-            key = (entry.level, entry.context or ("Foundry",), entry.message)
+            key = (entry.level, entry.context or ("General",), entry.message)
             unique[key] = unique.get(key, 0) + 1
         if not unique:
             return [LogEntry("No warnings or errors.", "status", bold=True)]
+
+        def message_count(node):
+            total = sum(count for _, count in node.get("_messages", []))
+            for name, child in node.items():
+                if name != "_messages":
+                    total += message_count(child)
+            return total
 
         result = []
         severity_groups = (("critical", "Critical Errors"), ("error", "Errors"), ("warning", "Warnings"))
@@ -653,7 +693,18 @@ class BonoboOutput:
             if not items:
                 continue
             total = sum(count for _, count in items)
-            result.append(LogEntry(f"{title} ({total})", f"{severity}_header", bold=True))
+            severity_key = ("severity", severity)
+            severity_collapsed = severity_key in collapsed_keys
+            arrow = "▶" if severity_collapsed else "▼"
+            result.append(LogEntry(
+                f"{arrow} {title} ({total})",
+                f"{severity}_header",
+                bold=True,
+                toggle_key=severity_key,
+            ))
+            if severity_collapsed:
+                continue
+
             tree = {}
             for (level, context, message), count in items:
                 node = tree
@@ -661,24 +712,28 @@ class BonoboOutput:
                     node = node.setdefault(part, {"_messages": []})
                 node.setdefault("_messages", []).append((message, count))
 
-            def append_node(node, depth):
-                for name in sorted(key for key in node if key != "_messages"):
-                    child = node[name]
-                    child_count = sum(count for _, count in child.get("_messages", []))
-                    stack = [value for key, value in child.items() if key != "_messages"]
-                    while stack:
-                        nested = stack.pop()
-                        child_count += sum(count for _, count in nested.get("_messages", []))
-                        stack.extend(value for key, value in nested.items() if key != "_messages")
-                    result.append(LogEntry(f"{'  ' * depth}> {name} ({child_count})", f"{severity}_header", bold=True))
-                    append_node(child, depth + 1)
+            def append_node(node, depth, path):
+                for name, child in node.items():
+                    if name == "_messages":
+                        continue
+                    child_path = (*path, name)
+                    node_key = ("context", severity, *child_path)
+                    collapsed = node_key in collapsed_keys
+                    arrow = "▶" if collapsed else "▼"
+                    result.append(LogEntry(
+                        f"{'  ' * depth}{arrow} {name} ({message_count(child)})",
+                        f"{severity}_header",
+                        bold=True,
+                        toggle_key=node_key,
+                    ))
+                    if not collapsed:
+                        append_node(child, depth + 1, child_path)
                 for message, count in sorted(node.get("_messages", [])):
                     suffix = f" (x{count})" if count > 1 else ""
                     result.append(LogEntry(f"{'  ' * depth}- {message}{suffix}", severity))
 
-            append_node(tree, 1)
+            append_node(tree, 1, ())
         return result
-
 
 class ExportStatus:
     def __init__(self):
@@ -726,9 +781,9 @@ class ExportStatus:
             if self.started_at is None:
                 self.started_at = time.monotonic()
             self.state = "active"
-        if SEPARATOR_LINE.match(line):
+        if SECTION_LINE.match(line):
             heading = self.previous_line.strip()
-            if heading and not SEPARATOR_LINE.match(heading):
+            if heading and not SECTION_LINE.match(heading):
                 completed = EXPORT_COMPLETE_LINE.match(heading)
                 if completed:
                     self.status = heading
@@ -765,6 +820,10 @@ class FoundryOutputWindow:
         self.rendered_status = None
         self.show_messages = False
         self.enabled_levels = {"message", "warning", "error"}
+        self.collapsed_message_nodes = set()
+        self.message_toggle_ranges = []
+        self.original_edit_window_proc = None
+        self.edit_window_proc = WNDPROC(self._edit_window_proc)
         self.font = None
         self.icon = load_png_icon(ICON_PATH)
         self.window_brush = gdi32.CreateSolidBrush(colorref(THEME_WINDOW))
@@ -800,6 +859,9 @@ class FoundryOutputWindow:
             None,
             None,
             None,
+        )
+        self.original_edit_window_proc = user32.SetWindowLongPtrW(
+            self.edit, GWLP_WNDPROC, ctypes.cast(self.edit_window_proc, ctypes.c_void_p)
         )
         user32.SendMessageW(self.edit, EM_SETLIMITTEXT, MAX_DISPLAY_CHARACTERS, 0)
         user32.SendMessageW(self.edit, EM_SETBKGNDCOLOR, 0, colorref(THEME_LOG))
@@ -942,9 +1004,18 @@ class FoundryOutputWindow:
         summary = f"Messages: {counts['message']}   Warnings: {counts['warning']}   Errors: {counts['error']}"
         user32.SetWindowTextW(self.filter_summary, summary)
 
-    def _render_output(self):
+    def _render_output(self, scroll_to_end=True):
+        first_visible_line = 0
+        if not scroll_to_end:
+            first_visible_line = user32.SendMessageW(self.edit, EM_GETFIRSTVISIBLELINE, 0, 0)
+
         enabled_levels = self._enabled_levels()
-        entries = self.output.grouped_entries(enabled_levels) if self.show_messages else self.output.filtered_entries(enabled_levels)
+        entries = (
+            self.output.grouped_entries(enabled_levels, self.collapsed_message_nodes)
+            if self.show_messages
+            else self.output.filtered_entries(enabled_levels)
+        )
+        self.message_toggle_ranges = []
 
         user32.SendMessageW(self.edit, EM_SETREADONLY, 0, 0)
         rendered = "\r".join(entry.text for entry in entries)
@@ -954,16 +1025,52 @@ class FoundryOutputWindow:
         position = 0
         for entry in entries:
             end = position + len(entry.text)
+            if entry.toggle_key is not None:
+                self.message_toggle_ranges.append((position, end, entry.toggle_key))
             user32.SendMessageW(self.edit, EM_SETSEL, position, end)
             format_value = self._entry_format(entry)
             user32.SendMessageW(self.edit, EM_SETCHARFORMAT, SCF_SELECTION, ctypes.addressof(format_value))
             position = end + 1
         user32.SendMessageW(self.edit, EM_SETREADONLY, 1, 0)
-        user32.SendMessageW(self.edit, EM_SETSEL, WPARAM_MINUS_ONE, -1)
-        user32.SendMessageW(self.edit, EM_SCROLLCARET, 0, 0)
-        user32.SendMessageW(self.edit, WM_VSCROLL, SB_BOTTOM, 0)
+
+        if scroll_to_end:
+            user32.SendMessageW(self.edit, EM_SETSEL, WPARAM_MINUS_ONE, -1)
+            user32.SendMessageW(self.edit, EM_SCROLLCARET, 0, 0)
+            user32.SendMessageW(self.edit, WM_VSCROLL, SB_BOTTOM, 0)
+        else:
+            current_first_line = user32.SendMessageW(self.edit, EM_GETFIRSTVISIBLELINE, 0, 0)
+            line_delta = first_visible_line - current_first_line
+            if line_delta:
+                user32.SendMessageW(self.edit, EM_LINESCROLL, 0, line_delta)
         self._update_filter_summary()
 
+    def _toggle_message_node_at(self, character_index):
+        for start, end, toggle_key in self.message_toggle_ranges:
+            if start <= character_index <= end:
+                if toggle_key in self.collapsed_message_nodes:
+                    self.collapsed_message_nodes.remove(toggle_key)
+                else:
+                    self.collapsed_message_nodes.add(toggle_key)
+                self._render_output(scroll_to_end=False)
+                return True
+        return False
+
+    def _edit_window_proc(self, hwnd, message, wparam, lparam):
+        if not self.original_edit_window_proc:
+            return user32.DefWindowProcW(hwnd, message, wparam, lparam)
+        result = user32.CallWindowProcW(self.original_edit_window_proc, hwnd, message, wparam, lparam)
+        if message == WM_LBUTTONUP and self.show_messages:
+            selection_start = wintypes.DWORD()
+            selection_end = wintypes.DWORD()
+            user32.SendMessageW(
+                hwnd,
+                EM_GETSEL,
+                ctypes.addressof(selection_start),
+                ctypes.addressof(selection_end),
+            )
+            if selection_start.value == selection_end.value:
+                self._toggle_message_node_at(selection_start.value)
+        return result
     def _update_output(self):
         chunks = self.sources.read_new()
         for source, text in chunks:
@@ -1002,6 +1109,7 @@ class FoundryOutputWindow:
             if command == BUTTON_CLEAR:
                 self.output.clear()
                 self.export_status.clear()
+                self.collapsed_message_nodes.clear()
                 self._render_output()
                 self._update_status_controls()
                 return 0
