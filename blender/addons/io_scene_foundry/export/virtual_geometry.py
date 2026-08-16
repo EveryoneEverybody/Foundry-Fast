@@ -246,7 +246,7 @@ def simplify_water_physics_mesh(mesh: bpy.types.Mesh, scene: 'VirtualScene') -> 
     finally:
         bm.free()
 
-    print(f"--- Water physics simplification [{mesh.name}]: {before_triangles} -> {mesh_triangle_count(mesh)} triangles")
+    # print(f"--- Water physics simplification [{mesh.name}]: {before_triangles} -> {mesh_triangle_count(mesh)} triangles")
     
 def frame_id_from_index(index: int) -> tuple[int, int]:
     # Tool sorts same-depth nodes by frame_ID1 and then frame_ID2, using signed longs.

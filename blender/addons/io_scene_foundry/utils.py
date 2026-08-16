@@ -726,7 +726,9 @@ def _popen_tool(command, cwd, stdout=None, stderr=None, tool_patches=None):
         return _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches)
 
     creationflags = _CREATE_NO_WINDOW if os.name == "nt" and (stdout is not None or stderr is not None) else 0
-    return Popen(command, stdout=stdout, stderr=stderr, cwd=cwd, creationflags=creationflags)
+    process = Popen(command, stdout=stdout, stderr=stderr, cwd=cwd, creationflags=creationflags)
+    foundry_output.register_tool_process(process)
+    return process
 
 
 def _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches):
@@ -762,6 +764,7 @@ def _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches):
             ctypes.byref(startup),
             ctypes.byref(process_info),
         ))
+        foundry_output.register_tool_process_handle(process_info.hProcess)
     except Exception:
         for handle in handles_to_close:
             if handle:
@@ -1121,7 +1124,10 @@ def run_tool_sidecar(tool_args: list, event_level='WARNING', tool_patches=None):
                     break
                 time.sleep(0.1)
 
-    p.wait()
+    returncode = p.wait()
+    if returncode and not failed:
+        failed = True
+        error = "Import cancelled by user" if returncode == 1223 else f"Tool exited with code {returncode}"
     
     if tmp_log is not None and tmp_log.exists() and os.path.getsize(tmp_log) > 0:
         os.startfile(tmp_log)

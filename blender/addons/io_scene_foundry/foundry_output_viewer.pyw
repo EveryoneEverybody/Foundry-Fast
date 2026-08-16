@@ -21,6 +21,8 @@ WM_DESTROY = 0x0002
 WM_SIZE = 0x0005
 WM_COMMAND = 0x0111
 WM_TIMER = 0x0113
+WM_CTLCOLORBTN = 0x0135
+WM_CTLCOLORSTATIC = 0x0138
 WM_SETICON = 0x0080
 WM_SETFONT = 0x0030
 WM_COPY = 0x0301
@@ -53,6 +55,7 @@ BS_PUSHLIKE = 0x00001000
 SW_SHOW = 5
 CW_USEDEFAULT = -2147483648
 COLOR_WINDOW = 5
+OPAQUE = 2
 DEFAULT_CHARSET = 1
 FIXED_PITCH = 1
 FF_MODERN = 48
@@ -70,7 +73,24 @@ CFE_BOLD = 0x00000001
 CFM_BACKCOLOR = 0x04000000
 CFM_COLOR = 0x40000000
 
+RDW_INVALIDATE = 0x0001
+RDW_ERASE = 0x0004
+RDW_ALLCHILDREN = 0x0080
+
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+DWMWA_BORDER_COLOR = 34
+DWMWA_CAPTION_COLOR = 35
+DWMWA_TEXT_COLOR = 36
+
 ICON_PATH = Path(__file__).parent / "icons" / "foundry.png"
+
+THEME_WINDOW = (32, 34, 35)
+THEME_SURFACE = (45, 47, 49)
+THEME_LOG = (24, 25, 26)
+THEME_BORDER = (72, 75, 78)
+THEME_TEXT = (224, 226, 228)
+THEME_MUTED_TEXT = (153, 157, 160)
+THEME_ACCENT = (242, 243, 244)
 
 BUTTON_CLEAR = 1001
 BUTTON_COPY = 1002
@@ -79,6 +99,7 @@ BUTTON_MESSAGES = 1004
 FILTER_MESSAGE = 1005
 FILTER_WARNING = 1006
 FILTER_ERROR = 1007
+BUTTON_CANCEL = 1008
 TIMER_ID = 1
 MAX_DISPLAY_CHARACTERS = 2_000_000
 MAX_DISPLAY_LINES = 100_000
@@ -87,7 +108,8 @@ ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))
 
 SEPARATOR_LINE = re.compile(r"^-{20,}$")
 EXPORT_BANNER_LINE = re.compile(r"^>{3}\s+.*\bEXPORT\b.*<{3}$", re.IGNORECASE)
-EXPORT_COMPLETE_LINE = re.compile(r"^Export Completed in\s+(.+)$", re.IGNORECASE)
+EXPORT_COMPLETE_LINE = re.compile(r"^(?:Export|Import) Completed in\s+(.+)$", re.IGNORECASE)
+CANCELLED_LINE = re.compile(r"^(?:EXPORT|IMPORT) CANCELLED BY USER$", re.IGNORECASE)
 SECTION_LINE = re.compile(r"^[-=]{8,}$")
 WARNING_LINE = re.compile(r"^(?:\[?warning\]?|warn)\s*[:\-]", re.IGNORECASE)
 ERROR_LINE = re.compile(r"^(?:\[?error\]?|fatal(?: error)?|critical|traceback|exception)\b", re.IGNORECASE)
@@ -97,12 +119,15 @@ kernel32 = ctypes.windll.kernel32
 gdi32 = ctypes.windll.gdi32
 gdiplus = ctypes.windll.gdiplus
 shell32 = ctypes.windll.shell32
+dwmapi = ctypes.windll.dwmapi
+uxtheme = ctypes.windll.uxtheme
 user32.CreateWindowExW.restype = wintypes.HWND
 user32.DefWindowProcW.restype = ctypes.c_ssize_t
 user32.LoadCursorW.restype = wintypes.HANDLE
 kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 kernel32.OpenProcess.restype = wintypes.HANDLE
 gdi32.CreateFontW.restype = wintypes.HFONT
+gdi32.CreateSolidBrush.restype = wintypes.HBRUSH
 
 
 class WNDCLASSW(ctypes.Structure):
@@ -152,6 +177,20 @@ class CHARFORMAT2W(ctypes.Structure):
         ("bUnderlineColor", wintypes.BYTE),
     ]
 
+
+class JOBOBJECT_BASIC_ACCOUNTING_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("TotalUserTime", ctypes.c_longlong),
+        ("TotalKernelTime", ctypes.c_longlong),
+        ("ThisPeriodTotalUserTime", ctypes.c_longlong),
+        ("ThisPeriodTotalKernelTime", ctypes.c_longlong),
+        ("TotalPageFaultCount", wintypes.DWORD),
+        ("TotalProcesses", wintypes.DWORD),
+        ("ActiveProcesses", wintypes.DWORD),
+        ("TotalTerminatedProcesses", wintypes.DWORD),
+    ]
+
+
 WNDPROC = ctypes.WINFUNCTYPE(
     ctypes.c_ssize_t,
     wintypes.HWND,
@@ -169,6 +208,7 @@ user32.SetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPCWSTR]
 user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.SendMessageW.restype = ctypes.c_ssize_t
 user32.MoveWindow.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.BOOL]
+user32.RedrawWindow.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
 user32.SetTimer.argtypes = [wintypes.HWND, ctypes.c_size_t, wintypes.UINT, ctypes.c_void_p]
 user32.KillTimer.argtypes = [wintypes.HWND, ctypes.c_size_t]
 user32.DestroyWindow.argtypes = [wintypes.HWND]
@@ -181,10 +221,20 @@ kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 kernel32.LoadLibraryW.argtypes = [wintypes.LPCWSTR]
 kernel32.LoadLibraryW.restype = wintypes.HMODULE
+kernel32.OpenJobObjectW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+kernel32.OpenJobObjectW.restype = wintypes.HANDLE
+kernel32.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
+kernel32.QueryInformationJobObject.restype = wintypes.BOOL
+kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+kernel32.TerminateJobObject.restype = wintypes.BOOL
 RICHEDIT_MODULE = kernel32.LoadLibraryW("Msftedit.dll")
 OUTPUT_CONTROL_CLASS = "RICHEDIT50W" if RICHEDIT_MODULE else "EDIT"
 gdi32.CreateFontW.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPCWSTR]
 gdi32.DeleteObject.argtypes = [wintypes.HANDLE]
+gdi32.CreateSolidBrush.argtypes = [wintypes.DWORD]
+gdi32.SetTextColor.argtypes = [wintypes.HDC, wintypes.DWORD]
+gdi32.SetBkColor.argtypes = [wintypes.HDC, wintypes.DWORD]
+gdi32.SetBkMode.argtypes = [wintypes.HDC, ctypes.c_int]
 user32.DestroyIcon.argtypes = [wintypes.HICON]
 gdiplus.GdiplusStartup.argtypes = [ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(GdiplusStartupInput), ctypes.c_void_p]
 gdiplus.GdipCreateBitmapFromFile.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_void_p)]
@@ -192,6 +242,45 @@ gdiplus.GdipCreateHICONFromBitmap.argtypes = [ctypes.c_void_p, ctypes.POINTER(wi
 gdiplus.GdipDisposeImage.argtypes = [ctypes.c_void_p]
 gdiplus.GdiplusShutdown.argtypes = [ctypes.c_size_t]
 shell32.SetCurrentProcessExplicitAppUserModelID.argtypes = [wintypes.LPCWSTR]
+dwmapi.DwmSetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+dwmapi.DwmSetWindowAttribute.restype = ctypes.c_long
+uxtheme.SetWindowTheme.argtypes = [wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
+uxtheme.SetWindowTheme.restype = ctypes.c_long
+
+
+def colorref(rgb):
+    red, green, blue = rgb
+    return red | (green << 8) | (blue << 16)
+
+
+def enable_dark_app_mode():
+    try:
+        preferred_app_mode = uxtheme[135]
+        preferred_app_mode.argtypes = [ctypes.c_int]
+        preferred_app_mode.restype = ctypes.c_int
+        preferred_app_mode(2)
+    except (AttributeError, OSError, TypeError, ValueError):
+        pass
+
+
+def apply_dark_title_bar(hwnd):
+    enabled = ctypes.c_int(1)
+    result = dwmapi.DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_USE_IMMERSIVE_DARK_MODE,
+        ctypes.byref(enabled),
+        ctypes.sizeof(enabled),
+    )
+    if result != 0:
+        dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(enabled), ctypes.sizeof(enabled))
+
+    for attribute, rgb in (
+        (DWMWA_BORDER_COLOR, THEME_BORDER),
+        (DWMWA_CAPTION_COLOR, THEME_WINDOW),
+        (DWMWA_TEXT_COLOR, THEME_ACCENT),
+    ):
+        value = wintypes.DWORD(colorref(rgb))
+        dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value))
 
 
 def load_png_icon(path):
@@ -214,6 +303,35 @@ def load_png_icon(path):
             gdiplus.GdipDisposeImage(bitmap)
     finally:
         gdiplus.GdiplusShutdown(token)
+
+
+def cancel_active_tool_processes(parent_pid):
+    job_name = f"Foundry.ToolProcesses.{parent_pid}"
+    job_handle = kernel32.OpenJobObjectW(0x000C, False, job_name)
+    if not job_handle:
+        return 0
+    try:
+        accounting = JOBOBJECT_BASIC_ACCOUNTING_INFORMATION()
+        if not kernel32.QueryInformationJobObject(job_handle, 1, ctypes.byref(accounting), ctypes.sizeof(accounting), None):
+            return 0
+        active_processes = accounting.ActiveProcesses
+        if not active_processes:
+            return 0
+        if not kernel32.TerminateJobObject(job_handle, 1223):
+            return 0
+        return active_processes
+    finally:
+        kernel32.CloseHandle(job_handle)
+
+
+def request_cooperative_cancel(path):
+    if not path:
+        return False
+    try:
+        Path(path).write_text(str(time.time_ns()), encoding="utf-8")
+    except OSError:
+        return False
+    return True
 
 
 class TailSource:
@@ -555,6 +673,7 @@ class ExportStatus:
         self.status = "Ready"
         self.started_at = None
         self.completed_duration = None
+        self.finished = False
         self.current_line = ""
         self.previous_line = ""
         self.pending_carriage_return = False
@@ -583,6 +702,9 @@ class ExportStatus:
     def _finish_line(self):
         line = self.current_line.strip()
         self.current_line = ""
+        if CANCELLED_LINE.match(line):
+            self.status = line.title()
+            self.finished = True
         if EXPORT_BANNER_LINE.match(line) and self.started_at is None:
             self.started_at = time.monotonic()
         if SEPARATOR_LINE.match(line):
@@ -594,6 +716,7 @@ class ExportStatus:
                 completed = EXPORT_COMPLETE_LINE.match(heading)
                 if completed:
                     self.completed_duration = completed.group(1)
+                    self.finished = True
         self.previous_line = line
 
     def timer_text(self):
@@ -620,6 +743,7 @@ class FoundryOutputWindow:
         self.edit = None
         self.clear_button = None
         self.copy_button = None
+        self.cancel_button = None
         self.output_button = None
         self.messages_button = None
         self.show_label = None
@@ -633,6 +757,8 @@ class FoundryOutputWindow:
         self.enabled_levels = {"message", "warning", "error"}
         self.font = None
         self.icon = load_png_icon(ICON_PATH)
+        self.window_brush = gdi32.CreateSolidBrush(colorref(THEME_WINDOW))
+        self.surface_brush = gdi32.CreateSolidBrush(colorref(THEME_SURFACE))
         self.window_proc = WNDPROC(self._window_proc)
 
     def _parent_is_alive(self):
@@ -663,7 +789,7 @@ class FoundryOutputWindow:
             None,
         )
         user32.SendMessageW(self.edit, EM_SETLIMITTEXT, MAX_DISPLAY_CHARACTERS, 0)
-        user32.SendMessageW(self.edit, EM_SETBKGNDCOLOR, 0, 0x00FFFFFF)
+        user32.SendMessageW(self.edit, EM_SETBKGNDCOLOR, 0, colorref(THEME_LOG))
         self.output_button = user32.CreateWindowExW(
             0, "BUTTON", "Output",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_AUTORADIOBUTTON | BS_PUSHLIKE,
@@ -703,9 +829,13 @@ class FoundryOutputWindow:
             0, "BUTTON", "Copy All", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
             106, 536, 90, 28, hwnd, BUTTON_COPY, None, None,
         )
+        self.cancel_button = user32.CreateWindowExW(
+            0, "BUTTON", "Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            204, 536, 100, 28, hwnd, BUTTON_CANCEL, None, None,
+        )
         self.status_label = user32.CreateWindowExW(
             WS_EX_CLIENTEDGE, "STATIC", "Ready", WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE,
-            204, 536, 520, 28, hwnd, None, None, None,
+            312, 536, 412, 28, hwnd, None, None, None,
         )
         self.timer_label = user32.CreateWindowExW(
             WS_EX_CLIENTEDGE, "STATIC", "Elapsed: 00:00.000",
@@ -719,9 +849,10 @@ class FoundryOutputWindow:
         for control in (
             self.edit, self.output_button, self.messages_button, self.show_label,
             self.filter_message, self.filter_warning, self.filter_error, self.filter_summary,
-            self.clear_button, self.copy_button, self.status_label, self.timer_label,
+            self.clear_button, self.copy_button, self.cancel_button, self.status_label, self.timer_label,
         ):
             user32.SendMessageW(control, WM_SETFONT, self.font, True)
+            uxtheme.SetWindowTheme(control, "DarkMode_Explorer", None)
         user32.SendMessageW(self.output_button, BM_SETCHECK, BST_CHECKED, 0)
         user32.SendMessageW(self.filter_message, BM_SETCHECK, BST_CHECKED, 0)
         user32.SendMessageW(self.filter_warning, BM_SETCHECK, BST_CHECKED, 0)
@@ -746,11 +877,13 @@ class FoundryOutputWindow:
         user32.MoveWindow(self.filter_summary, summary_left, filter_top, max(80, width - summary_left - margin), filter_height, True)
         user32.MoveWindow(self.clear_button, margin, control_top, 90, button_height, True)
         user32.MoveWindow(self.copy_button, margin + 98, control_top, 90, button_height, True)
-        status_left = margin + 196
+        user32.MoveWindow(self.cancel_button, margin + 196, control_top, 100, button_height, True)
+        status_left = margin + 304
         timer_width = 220
         timer_left = max(status_left + 100, width - margin - timer_width)
         user32.MoveWindow(self.status_label, status_left, control_top, max(80, timer_left - status_left - margin), button_height, True)
         user32.MoveWindow(self.timer_label, timer_left, control_top, timer_width, button_height, True)
+        user32.RedrawWindow(self.hwnd, None, None, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN)
 
     def _update_status_controls(self):
         user32.SetWindowTextW(self.status_label, self.export_status.status)
@@ -758,24 +891,23 @@ class FoundryOutputWindow:
 
     @staticmethod
     def _colorref(rgb):
-        red, green, blue = rgb
-        return red | (green << 8) | (blue << 16)
+        return colorref(rgb)
 
     def _enabled_levels(self):
         return set(self.enabled_levels)
 
     def _entry_format(self, entry):
         styles = {
-            "message": ((0, 0, 0), (255, 255, 255), False),
-            "verbose": ((90, 90, 90), (255, 255, 255), False),
-            "status": ((255, 255, 255), (15, 35, 53), True),
-            "warning": ((0, 0, 0), (255, 183, 38), False),
-            "warning_header": ((0, 0, 0), (255, 183, 38), True),
-            "error": ((255, 255, 255), (211, 47, 47), False),
-            "error_header": ((255, 255, 255), (211, 47, 47), True),
-            "critical": ((255, 255, 255), (128, 0, 0), False),
-            "critical_header": ((255, 255, 255), (128, 0, 0), True),
-            "success": ((255, 255, 255), (0, 128, 0), True),
+            "message": (THEME_TEXT, THEME_LOG, False),
+            "verbose": (THEME_MUTED_TEXT, THEME_LOG, False),
+            "status": (THEME_ACCENT, THEME_SURFACE, True),
+            "warning": ((24, 25, 26), (230, 169, 50), False),
+            "warning_header": ((24, 25, 26), (230, 169, 50), True),
+            "error": ((255, 245, 245), (178, 55, 55), False),
+            "error_header": ((255, 245, 245), (178, 55, 55), True),
+            "critical": ((255, 245, 245), (115, 35, 35), False),
+            "critical_header": ((255, 245, 245), (115, 35, 35), True),
+            "success": ((245, 255, 245), (47, 125, 62), True),
         }
         foreground, background, bold = styles.get(entry.level, styles["message"])
         if entry.foreground:
@@ -825,6 +957,16 @@ class FoundryOutputWindow:
         self._update_status_controls()
 
     def _window_proc(self, hwnd, message, wparam, lparam):
+        if message in {WM_CTLCOLORBTN, WM_CTLCOLORSTATIC}:
+            control = int(lparam)
+            surface_controls = {self.status_label, self.timer_label}
+            brush = self.surface_brush if message == WM_CTLCOLORBTN or control in surface_controls else self.window_brush
+            background = THEME_SURFACE if brush == self.surface_brush else THEME_WINDOW
+            foreground = THEME_MUTED_TEXT if control in {self.show_label, self.filter_summary} else THEME_TEXT
+            gdi32.SetTextColor(wparam, colorref(foreground))
+            gdi32.SetBkColor(wparam, colorref(background))
+            gdi32.SetBkMode(wparam, OPAQUE)
+            return brush
         if message == WM_CREATE:
             self.hwnd = hwnd
             self._create_controls(hwnd)
@@ -843,6 +985,23 @@ class FoundryOutputWindow:
             if command == BUTTON_COPY:
                 user32.SendMessageW(self.edit, EM_SETSEL, 0, -1)
                 user32.SendMessageW(self.edit, WM_COPY, 0, 0)
+                return 0
+            if command == BUTTON_CANCEL:
+                process_count = cancel_active_tool_processes(self.arguments.parent_pid)
+                blender_phase_active = self.export_status.started_at is not None and not self.export_status.finished
+                cancellation_requested = False
+                if process_count or blender_phase_active:
+                    cancellation_requested = request_cooperative_cancel(self.arguments.cancel)
+                if process_count or cancellation_requested:
+                    suffix = "es" if process_count != 1 else ""
+                    detail = f" ({process_count} Tool process{suffix})" if process_count else ""
+                    message = f"Cancelling import / export{detail}..."
+                else:
+                    message = "No active import / export to cancel"
+                self.export_status.status = message
+                self.output._add_entry(LogEntry(message, "status", bold=True))
+                self._render_output()
+                self._update_status_controls()
                 return 0
             if command == BUTTON_OUTPUT:
                 self.show_messages = False
@@ -881,11 +1040,17 @@ class FoundryOutputWindow:
             if self.icon:
                 user32.DestroyIcon(self.icon)
                 self.icon = None
+            for brush_name in ("window_brush", "surface_brush"):
+                brush = getattr(self, brush_name, None)
+                if brush:
+                    gdi32.DeleteObject(brush)
+                    setattr(self, brush_name, None)
             user32.PostQuitMessage(0)
             return 0
         return user32.DefWindowProcW(hwnd, message, wparam, lparam)
 
     def run(self):
+        enable_dark_app_mode()
         shell32.SetCurrentProcessExplicitAppUserModelID("Foundry.Output")
         instance = kernel32.GetModuleHandleW(None)
         class_name = f"FoundryOutputWindow{self.arguments.parent_pid}"
@@ -894,7 +1059,7 @@ class FoundryOutputWindow:
         window_class.hInstance = instance
         window_class.hCursor = user32.LoadCursorW(None, ctypes.c_void_p(32512))
         window_class.hIcon = self.icon
-        window_class.hbrBackground = COLOR_WINDOW + 1
+        window_class.hbrBackground = self.window_brush
         window_class.lpszClassName = class_name
         if not user32.RegisterClassW(ctypes.byref(window_class)):
             return 1
@@ -915,6 +1080,8 @@ class FoundryOutputWindow:
         )
         if not self.hwnd:
             return 1
+        apply_dark_title_bar(self.hwnd)
+        uxtheme.SetWindowTheme(self.hwnd, "DarkMode_Explorer", None)
         if self.icon:
             user32.SendMessageW(self.hwnd, WM_SETICON, ICON_BIG, self.icon)
             user32.SendMessageW(self.hwnd, WM_SETICON, ICON_SMALL, self.icon)
@@ -932,6 +1099,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--log", required=True)
     parser.add_argument("--watch", required=True)
+    parser.add_argument("--cancel", default="")
     parser.add_argument("--parent-pid", required=True, type=int)
     parser.add_argument("--title", required=True)
     return parser.parse_args()

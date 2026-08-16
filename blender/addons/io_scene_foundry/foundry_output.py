@@ -1,4 +1,5 @@
 import ctypes
+from ctypes import wintypes
 import json
 import os
 from pathlib import Path
@@ -16,8 +17,10 @@ _SW_RESTORE = 9
 _SESSION_DIRECTORY = Path(tempfile.gettempdir(), "foundry_output", str(os.getpid()))
 _LOG_PATH = _SESSION_DIRECTORY / "foundry.log"
 _WATCH_PATH = _SESSION_DIRECTORY / "watched_logs.jsonl"
+_CANCEL_PATH = _SESSION_DIRECTORY / "cancel.request"
 _VIEWER_PATH = Path(__file__).with_name("foundry_output_viewer.pyw")
 _WINDOW_TITLE = f"Foundry Output - {os.getpid()}"
+_TOOL_JOB_NAME = f"Foundry.ToolProcesses.{os.getpid()}"
 
 _log_stream = None
 _stdout_proxy = None
@@ -26,6 +29,57 @@ _viewer_process = None
 _write_lock = threading.RLock()
 _watched_paths = set()
 _mute_depth = 0
+_tool_job_handle = None
+_tool_kernel32 = None
+
+
+def _ensure_tool_job():
+    global _tool_job_handle, _tool_kernel32
+    if os.name != "nt":
+        return None
+    with _write_lock:
+        if _tool_job_handle:
+            return _tool_job_handle
+        if _tool_kernel32 is None:
+            _tool_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            _tool_kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+            _tool_kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+            _tool_kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+            _tool_kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+            _tool_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        _tool_job_handle = _tool_kernel32.CreateJobObjectW(None, _TOOL_JOB_NAME)
+        return _tool_job_handle
+
+
+def register_tool_process_handle(process_handle):
+    """Place a Tool process in the cancelable job shared with the output viewer."""
+    if os.name != "nt" or not process_handle:
+        return False
+    job_handle = _ensure_tool_job()
+    if not job_handle:
+        return False
+    return bool(_tool_kernel32.AssignProcessToJobObject(job_handle, wintypes.HANDLE(process_handle)))
+
+
+def register_tool_process(process):
+    process_handle = getattr(process, "_process_handle", None)
+    if process_handle is None:
+        process_handle = getattr(process, "_handle", None)
+    return register_tool_process_handle(process_handle)
+
+
+def _raise_if_cancel_requested():
+    if threading.current_thread() is not threading.main_thread():
+        return
+    with _write_lock:
+        try:
+            requested = _CANCEL_PATH.read_text(encoding="utf-8").strip()
+            if not requested:
+                return
+            _CANCEL_PATH.write_text("", encoding="utf-8")
+        except OSError:
+            return
+    raise KeyboardInterrupt
 
 
 class _BinaryOutputProxy:
@@ -43,6 +97,7 @@ class _BinaryOutputProxy:
                 except (OSError, ValueError):
                     pass
             _write_bytes(bytes(data))
+            _raise_if_cancel_requested()
         return len(data)
 
     def flush(self):
@@ -83,6 +138,7 @@ class _OutputProxy:
                 except (OSError, ValueError):
                     pass
             _write_bytes(text.encode("utf-8", errors="replace"))
+            _raise_if_cancel_requested()
         return len(text)
 
     def flush(self):
@@ -189,7 +245,9 @@ def register():
     _SESSION_DIRECTORY.mkdir(parents=True, exist_ok=True)
     _watched_paths.clear()
     _WATCH_PATH.write_text("", encoding="utf-8")
+    _CANCEL_PATH.write_text("", encoding="utf-8")
     _log_stream = open(_LOG_PATH, "wb", buffering=0)
+    _ensure_tool_job()
 
     original_stdout = _unwrap_proxy(sys.stdout)
     original_stderr = _unwrap_proxy(sys.stderr)
@@ -201,7 +259,7 @@ def register():
 
 
 def unregister():
-    global _log_stream, _stdout_proxy, _stderr_proxy, _viewer_process, _mute_depth
+    global _log_stream, _stdout_proxy, _stderr_proxy, _viewer_process, _mute_depth, _tool_job_handle
     try:
         bpy.utils.unregister_class(NWO_OT_ShowFoundryOutput)
     except RuntimeError:
@@ -226,6 +284,9 @@ def unregister():
     _viewer_process = None
     _mute_depth = 0
     _watched_paths.clear()
+    if _tool_job_handle:
+        _tool_kernel32.CloseHandle(_tool_job_handle)
+        _tool_job_handle = None
 
 
 def show():
@@ -248,6 +309,8 @@ def show():
         str(_LOG_PATH),
         "--watch",
         str(_WATCH_PATH),
+        "--cancel",
+        str(_CANCEL_PATH),
         "--parent-pid",
         str(os.getpid()),
         "--title",
@@ -271,6 +334,10 @@ def show():
 
 def clear():
     """Start a fresh visible output session without replacing the underlying file."""
+    try:
+        _CANCEL_PATH.write_text("", encoding="utf-8")
+    except OSError:
+        pass
     _write_bytes(b"\x0c")
 
 
