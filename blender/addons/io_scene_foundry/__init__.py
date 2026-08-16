@@ -1,5 +1,6 @@
 import bpy
 from . import startup
+from . import foundry_output
 
 from . import props
 from . import tools
@@ -20,6 +21,7 @@ modules = [
 ]
             
 def register():
+    foundry_output.register()
     bpy.app.handlers.exit_pre.append(startup.managed_blam_exit)
     bpy.app.handlers.load_post.append(startup.load_handler)
     bpy.app.handlers.load_post.append(startup.load_set_output_state)
@@ -36,3 +38,4 @@ def unregister():
     bpy.app.handlers.exit_pre.remove(startup.managed_blam_exit)
     for module in reversed(modules):
         module.unregister()
+    foundry_output.unregister()

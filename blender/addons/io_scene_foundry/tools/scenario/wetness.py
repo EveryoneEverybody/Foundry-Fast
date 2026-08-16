@@ -7,9 +7,9 @@ import os
 import time
 
 def generate_wetness(scenario_path, bsp="all"):
-    os.system("cls")
+    utils.clear_output()
     if utils.get_export_props().show_output:
-        bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+        utils.show_output()  # open Foundry Output so users can see progress
         print(f"►►► WETNESS FARM ◄◄◄")
     
     tool_path = Path(utils.get_project_path(), "tool.exe")

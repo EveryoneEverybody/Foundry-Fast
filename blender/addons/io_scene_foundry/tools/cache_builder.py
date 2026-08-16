@@ -965,16 +965,16 @@ class NWO_OT_CacheBuild(bpy.types.Operator):
         
         scene_nwo_export = utils.get_export_props()
         scene_nwo = utils.get_scene_props()
-        os.system("cls")
+        utils.clear_output()
         if scene_nwo_export.show_output:
-            bpy.ops.wm.console_toggle()
+            utils.show_output()
             scene_nwo_export.show_output = False
         
 
         start = time.perf_counter()
         title = f"►►► CACHE BUILDER ◄◄◄"
         print(title)
-        print("\nIf you did not intend to run this, hold CTRL+C")
+
         try:
             if force_asset_export or (self.rexport_scenario and own_asset):
                 if bpy.ops.nwo.export_scene.poll():

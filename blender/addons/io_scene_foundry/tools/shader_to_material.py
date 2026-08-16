@@ -1140,10 +1140,10 @@ class NWO_OT_ShaderToMaterial(bpy.types.Operator):
         return utils.current_project_valid() and utils.is_corinth(context)
 
     def execute(self, context):
-        os.system("cls")
+        utils.clear_output()
         scene_nwo_export = utils.get_export_props()
         if scene_nwo_export.show_output:
-            bpy.ops.wm.console_toggle()
+            utils.show_output()
 
         print("Converting Shaders to Materials\n")
         start = time.perf_counter()
@@ -1177,7 +1177,7 @@ class NWO_OT_ShaderToMaterial(bpy.types.Operator):
         print("-----------------------------------------------------------------------")
 
         if report.failed:
-            self.report({"WARNING"}, f"Converted with {report.failed} failure(s). See console for details")
+            self.report({"WARNING"}, f"Converted with {report.failed} failure(s). See Foundry Output for details")
         else:
             message = f"Converted {report.converted + report.updated} shader tag(s) to material tags"
             if report.deleted:

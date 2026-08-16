@@ -43,10 +43,10 @@ class NWO_OT_BuildShaderTemplates(bpy.types.Operator):
         shader_paths = []
         tags_path = utils.get_tags_path()
         
-        os.system("cls")
+        utils.clear_output()
         scene_nwo_export = utils.get_export_props()
         if scene_nwo_export.show_output:
-            bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+            utils.show_output()  # open Foundry Output so users can see progress
             
         print(f"Building Shader Templates\n")
         start = time.perf_counter()
@@ -133,9 +133,9 @@ class NWO_OT_ShaderToNodesBulk(bpy.types.Operator):
     def execute(self, context):
         corinth = utils.is_corinth(context)
         
-        os.system("cls")
+        utils.clear_output()
         if utils.get_export_props().show_output:
-            bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+            utils.show_output()  # open Foundry Output so users can see progress
         print(f"Building Blender Materials\n")
         
         built_count = 0

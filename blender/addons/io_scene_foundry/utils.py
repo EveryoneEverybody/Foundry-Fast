@@ -31,6 +31,7 @@ from subprocess import Popen, check_call, PIPE
 import threading
 import queue
 
+from . import foundry_output
 from .tools.node_tree_arrange import arrange
 from .constants import COLLISION_MESH_TYPES, OBJECT_TAG_EXTS, PROTECTED_MATERIALS, VALID_MESHES, VALID_OBJECTS, WU_SCALAR, css_colors
 from .tools.materials import special_materials, convention_materials
@@ -495,6 +496,7 @@ def run_tool(tool_args: list, in_background=False, null_output=False, event_leve
         tool_type = get_tool_type()
 
     command = [str(Path(project_dir, tool_type).with_suffix(".exe")), *[str(arg) for arg in tool_args]]
+    output_stream = foundry_output.child_stream()
     # print(subprocess.list2cmdline(command))
     
     log_warnings = event_level == 'LOG'
@@ -506,29 +508,30 @@ def run_tool(tool_args: list, in_background=False, null_output=False, event_leve
     
     if in_background:
         if log_file:
+            foundry_output.watch_file(getattr(log_file, "name", None), f"{tool_type}: {tool_args[0] if tool_args else 'process'}")
             return _popen_tool(command, project_dir, stdout=log_file, stderr=log_file, tool_patches=tool_patches)
         elif null_output:
             return _popen_tool(command, project_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, tool_patches=tool_patches)
         elif log_warnings:
             file = open(tmp_log, "w")
             try:
-                return _popen_tool(command, project_dir, stderr=file, tool_patches=tool_patches)
+                return _popen_tool(command, project_dir, stdout=output_stream, stderr=file, tool_patches=tool_patches)
             finally:
                 file.close()
         else:
-            return _popen_tool(command, project_dir, tool_patches=tool_patches)
+            return _popen_tool(command, project_dir, stdout=output_stream, stderr=output_stream, tool_patches=tool_patches)
     else:
         if null_output:
             return _check_call_tool(command, project_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, tool_patches=tool_patches)
         elif log_warnings:
             with open(tmp_log, "w") as file:
-                result = _check_call_tool(command, project_dir, stderr=file, tool_patches=tool_patches)
+                result = _check_call_tool(command, project_dir, stdout=output_stream, stderr=file, tool_patches=tool_patches)
                 
             if tmp_log.exists() and os.path.getsize(tmp_log) > 0:
                 os.startfile(tmp_log)
             return result
         else:
-            return _check_call_tool(command, project_dir, tool_patches=tool_patches)
+            return _check_call_tool(command, project_dir, stdout=output_stream, stderr=output_stream, tool_patches=tool_patches)
 
 
 def _check_call_tool(command, cwd, stdout=None, stderr=None, tool_patches=None):
@@ -548,6 +551,7 @@ class _ToolMemoryPatchError(RuntimeError):
 
 
 _CREATE_SUSPENDED = 0x00000004
+_CREATE_NO_WINDOW = 0x08000000
 _DUPLICATE_SAME_ACCESS = 0x00000002
 _HANDLE_FLAG_INHERIT = 0x00000001
 _INFINITE = 0xFFFFFFFF
@@ -719,7 +723,8 @@ def _popen_tool(command, cwd, stdout=None, stderr=None, tool_patches=None):
     if tool_patches and os.name == "nt":
         return _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches)
 
-    return Popen(command, stdout=stdout, stderr=stderr, cwd=cwd)
+    creationflags = _CREATE_NO_WINDOW if os.name == "nt" and (stdout is not None or stderr is not None) else 0
+    return Popen(command, stdout=stdout, stderr=stderr, cwd=cwd, creationflags=creationflags)
 
 
 def _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches):
@@ -749,7 +754,7 @@ def _create_patched_tool_process(command, cwd, stdout, stderr, tool_patches):
             None,
             None,
             inherit_handles,
-            _CREATE_SUSPENDED,
+            _CREATE_SUSPENDED | (_CREATE_NO_WINDOW if inherit_handles else 0),
             None,
             str(cwd),
             ctypes.byref(startup),
@@ -973,6 +978,7 @@ def run_tool_sidecar(tool_args: list, event_level='WARNING', tool_patches=None):
     os.chdir(project_dir)
     tool_path = Path(project_dir, get_tool_type()).with_suffix(".exe")
     command = [str(tool_path), *[str(arg) for arg in tool_args]]
+    output_stream = foundry_output.child_stream()
     # print(subprocess.list2cmdline(command))
     error = ""
     cull_warnings = event_level == 'DEFAULT'
@@ -980,13 +986,13 @@ def run_tool_sidecar(tool_args: list, event_level='WARNING', tool_patches=None):
     tmp_log = None
     try:
         if cull_warnings:
-            p = _popen_tool(command, project_dir, stderr=subprocess.PIPE, tool_patches=tool_patches)
+            p = _popen_tool(command, project_dir, stdout=output_stream, stderr=subprocess.PIPE, tool_patches=tool_patches)
         elif log_warnings:
             tmp_log = Path(tempfile.gettempdir(), "halo_errors.txt")
             with open(tmp_log, "w") as file:
-                p = _popen_tool(command, project_dir, stderr=file, tool_patches=tool_patches)
+                p = _popen_tool(command, project_dir, stdout=output_stream, stderr=file, tool_patches=tool_patches)
         else:
-            p = _popen_tool(command, project_dir, tool_patches=tool_patches)
+            p = _popen_tool(command, project_dir, stdout=output_stream, stderr=output_stream, tool_patches=tool_patches)
     except _ToolMemoryPatchError as e:
         return True, str(e)
     except OSError as e:
@@ -1175,12 +1181,14 @@ def run_ek_cmd(args: list, in_background=False):
     set_project_in_registry()
     os.chdir(get_project_path())
     command = f"""{' '.join(f'"{arg}"' for arg in args)}"""
+    output_stream = foundry_output.child_stream()
+    creationflags = _CREATE_NO_WINDOW if os.name == "nt" and output_stream is not None else 0
     # print(command)
     if in_background:
-        return Popen(command)
+        return Popen(command, stdout=output_stream, stderr=output_stream, creationflags=creationflags)
     else:
         try:
-            return check_call(command)
+            return check_call(command, stdout=output_stream, stderr=output_stream, creationflags=creationflags)
         except Exception as e:
             return e
 
@@ -1587,14 +1595,26 @@ def delete_object_list(context, object_list):
         bpy.ops.object.delete()
 
 
+def clear_output():
+    foundry_output.clear()
+
+
+def show_output():
+    return foundry_output.show()
+
+
+def get_output_stream():
+    return foundry_output.child_stream()
+
+
 def disable_prints():
     """Disables console prints"""
-    sys.stdout = open(os.devnull, "w")
+    foundry_output.mute()
 
 
 def enable_prints():
     """Enables console prints"""
-    sys.stdout = sys.__stdout__
+    foundry_output.unmute()
     
 class MutePrints():
     def __enter__(self):
@@ -5455,7 +5475,8 @@ def tag_to_xml(filepath: Path | str) -> None | Path:
     output_path = f"{filepath}.xml"
     os.chdir(tool_path.parent)
     command = f'tool export-tag-to-xml "{final_filepath}" "{output_path}"'
-    subprocess.run(command)
+    output_stream = foundry_output.child_stream()
+    subprocess.run(command, stdout=output_stream, stderr=output_stream, creationflags=_CREATE_NO_WINDOW if os.name == "nt" and output_stream is not None else 0)
     
     path_xml = Path(output_path)
     

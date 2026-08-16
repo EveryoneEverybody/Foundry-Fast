@@ -175,10 +175,10 @@ class NWO_OT_InstanceImposterGenerate(bpy.types.Operator):
             self.report({"WARNING"}, "No scenario path given. Operation cancelled")
             return {'CANCELLED'}
         farm = ImposterFarm(utils.relative_path(self.filepath))
-        os.system("cls")
+        utils.clear_output()
         scene_nwo_export = utils.get_export_props()
         if scene_nwo_export.show_output:
-            bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+            utils.show_output()  # open Foundry Output so users can see progress
             print(f"►►► IMPOSTER FARM ◄◄◄")
         if self.launch_game:
             farm.launch_game(self.clear_imposter_cache)

@@ -494,6 +494,7 @@ class NWO_HaloExportSettings(bpy.types.Panel):
         col = flow.column()
         col.prop(scene_nwo_export, "export_quick", text="Quick Export")
         col.prop(scene_nwo_export, "show_output", text="Toggle Output")
+        col.operator("nwo.show_foundry_output", text="Open Foundry Output", icon="CONSOLE")
         if asset_type in {'cinematic', 'model', 'animation'}:
             col.prop(scene_nwo_export, "faster_animation_export")
         col.separator()
@@ -1190,7 +1191,7 @@ class NWO_HaloExportPropertiesGroup(bpy.types.PropertyGroup):
 
     show_output: bpy.props.BoolProperty(
         name="Toggle Output",
-        description="Select whether or not the output console should toggle at export",
+        description="Select whether the Foundry Output window should open at export",
         options=set(),
         # get=get_show_output,
         # set=set_show_output,

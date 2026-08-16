@@ -121,10 +121,10 @@ class NWO_FarmShaders(bpy.types.Operator):
             blend_asset_path = utils.asset_path_from_blend_location()
             tag_type = 'Material' if self.corinth else 'Shader'
             start = time.perf_counter()
-            os.system("cls")
+            utils.clear_output()
             scene_nwo_export = utils.get_export_props()
             if scene_nwo_export.show_output:
-                bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+                utils.show_output()  # open Foundry Output so users can see progress
                 scene_nwo_export.show_output = False
 
             export_title = f"►►► {tag_type.upper()} FARM ◄◄◄"

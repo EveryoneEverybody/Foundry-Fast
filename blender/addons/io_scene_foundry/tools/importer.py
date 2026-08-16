@@ -880,11 +880,11 @@ class NWO_OT_ConvertScene(bpy.types.Operator):
             objects_in_scope = bpy.data.objects[:]
             
         with utils.ExportManager():
-            os.system("cls")
+            utils.clear_output()
             start = time.perf_counter()
             user_cancelled = False
             if scene_nwo_export.show_output:
-                bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+                utils.show_output()  # open Foundry Output so users can see progress
                 scene_nwo_export.show_output = False
             try:
                 utils.print_section("FOUNDRY CONVERTER")
@@ -1349,10 +1349,10 @@ class NWO_Import(bpy.types.Operator):
         scene_datas = []
 
         with utils.ExportManager():
-            os.system("cls")
+            utils.clear_output()
             
             if not self.place_at_mouse and scene_nwo_export.show_output:
-                bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+                utils.show_output()  # open Foundry Output so users can see progress
                 scene_nwo_export.show_output = False
             try:
                 utils.print_section("FOUNDRY IMPORTER")

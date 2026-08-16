@@ -863,12 +863,12 @@ class NWO_OT_ConvertLegacyPoseOverlays(bpy.types.Operator):
             self.report({'WARNING'}, f"Armature {armature.name} does not have aim bones. Cannot build poses")
             return {'CANCELLED'}
         
-        os.system("cls")
+        utils.clear_output()
         start = time.perf_counter()
         user_cancelled = False
         scene_nwo_export = utils.get_export_props()
         if scene_nwo_export.show_output:
-            bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+            utils.show_output()  # open Foundry Output so users can see progress
             scene_nwo_export.show_output = False
             
         export_title = f"►►► LEGACY POSE OVERLAY CONVERTER ◄◄◄\n"

@@ -1,7 +1,6 @@
 """Animation sub-panel specific operators"""
 
 from collections import defaultdict
-import ctypes
 import os
 from pathlib import Path
 import random
@@ -1563,12 +1562,7 @@ class NWO_OT_AnimationsExportChildBlends(bpy.types.Operator):
 
     @staticmethod
     def _show_console():
-        try:
-            console_window = ctypes.windll.kernel32.GetConsoleWindow()
-            if not console_window or not ctypes.windll.user32.IsWindowVisible(console_window):
-                bpy.ops.wm.console_toggle()
-        except (AttributeError, RuntimeError):
-            bpy.ops.wm.console_toggle()
+        utils.show_output()
 
     @staticmethod
     def _child_blend_paths(scene_nwo):
@@ -1616,6 +1610,7 @@ class NWO_OT_AnimationsExportChildBlends(bpy.types.Operator):
             "assert 'FINISHED' in result, f'Child export did not finish: {result}'"
         )
         failures = []
+        output_stream = utils.get_output_stream()
         total = len(blend_paths)
         for index, blend_path in enumerate(blend_paths, 1):
             print(f"\n[{index}/{total}] Exporting: {blend_path}", flush=True)
@@ -1630,6 +1625,8 @@ class NWO_OT_AnimationsExportChildBlends(bpy.types.Operator):
                     export_script,
                 ],
                 check=False,
+                stdout=output_stream,
+                stderr=output_stream,
             )
             if result.returncode:
                 failures.append(blend_path)
@@ -1645,7 +1642,7 @@ class NWO_OT_AnimationsExportChildBlends(bpy.types.Operator):
         print("-----------------------------------------------------------------------\n", flush=True)
 
         if failures:
-            self.report({'WARNING'}, f"Child export complete: {succeeded}/{total} succeeded; see console for failures")
+            self.report({'WARNING'}, f"Child export complete: {succeeded}/{total} succeeded; see Foundry Output for failures")
         else:
             skipped = f"; skipped {len(missing_paths)} missing" if missing_paths else ""
             self.report({'INFO'}, f"Exported {succeeded} child Blend file{'s' if succeeded != 1 else ''}{skipped}")

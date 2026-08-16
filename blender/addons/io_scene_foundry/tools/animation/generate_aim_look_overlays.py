@@ -1068,7 +1068,7 @@ class NWO_OT_GenerateAimLookOverlays(bpy.types.Operator):
             self.report(
                 {'WARNING'},
                 f"Failed to generate {len(failed)} overlay animation(s); "
-                "see the console for details",
+                "see Foundry Output for details",
             )
             return {'CANCELLED'}
 

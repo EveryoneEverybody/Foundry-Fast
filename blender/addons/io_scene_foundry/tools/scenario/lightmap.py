@@ -71,9 +71,9 @@ class NWO_OT_Lightmap(bpy.types.Operator):
         asset_path, asset_name = utils.get_asset_info()
         scenario_path = str(Path(asset_path, asset_name))
         is_corinth = utils.is_corinth(context)
-        os.system("cls")
+        utils.clear_output()
         if scene_nwo_export.show_output:
-            bpy.ops.wm.console_toggle()  # toggle the console so users can see progress of export
+            utils.show_output()  # open Foundry Output so users can see progress
             scene_nwo_export.show_output = False
 
         export_title = f"►►► LIGHTMAPPER ◄◄◄"
