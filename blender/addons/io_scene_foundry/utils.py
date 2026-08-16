@@ -1744,6 +1744,7 @@ def is_halo_object(ob) -> bool:
                 "sky",
                 "decorator_set",
                 "particle_model",
+                "polyart",
                 "prefab",
                 "animation",
             )
@@ -6411,11 +6412,15 @@ def ignore_for_export_fast(ob, collection_map, instancer_parent):
 damage_states = "h_ping", "s_ping", "h_kill", "s_kill"
 directions = "front", "left", "right", "back"
 regions = "gut", "chest", "head", "l_arm", "l_hand", "l_leg", "l_foot", "r_arm", "r_hand", "r_leg", "r_foot"
+animation_modes_to_any = "vehicle", "first_person", "weapon", "device"
+vehicle_suspension_modes = "suspension", "tread"
 
 class AnimationStateType(Enum):
     ACTION = 0
     DAMAGE = 1
     TRANSITION = 2
+    VEHICLE_SUSPENSION = 3
+    OBJECT_FUNCTION_OVERLAY = 4
 
 class AnimationName:
     def __init__(self, name: str):
@@ -6434,53 +6439,101 @@ class AnimationName:
         self.variant = ""
         self.type = AnimationStateType.ACTION
         self.custom = False
+        self.stance = False
         
         tokens = list(tokenise(name))
         if not tokens:
             return
         
-        if tokens[-1].startswith("var"):
-            self.variant = tokens.pop()
+        for index, token in enumerate(tokens):
+            if token.startswith("var"):
+                self.variant = token
+                tokens = tokens[:index]
+                break
+
+        if not tokens:
+            return
+
+        # H4's tokeniser converts legacy device_* names to device:*.
+        if tokens[0].startswith("device_"):
+            tokens[0:1] = ("device", tokens[0].removeprefix("device_"))
+
+        # Stances use the normal mode/state graph layout, but have an extra
+        # leading token which is not part of that layout.
+        if tokens[0] == "stance":
+            self.stance = True
+            tokens.pop(0)
+
+        if not tokens:
+            return
 
         if len(tokens) == 1:
             self.custom = True
             return
-        
-        if len(tokens) > 2 and tokens[-1] in regions:
-            if tokens[-2] in directions and tokens[-3] in damage_states:
-                self.type = AnimationStateType.DAMAGE
-                self.region = tokens.pop()
-                self.direction = tokens.pop()
-                
-        elif len(tokens) > 2 and "2" in tokens:
-            index_2 = tokens.index("2")
-            if index_2 > 0 and index_2 < (len(tokens) - 1):
-                self.type = AnimationStateType.TRANSITION
-                self.destination_state = tokens.pop()
-                if tokens[-1] == "2":
-                    tokens.pop()
-                else:
-                    self.destination_mode = tokens[index_2 + 1]
-                    while tokens[-1] != "2":
-                        tokens.pop()
-                    tokens.pop()
-                    
-        self.state = tokens.pop()
 
-        if tokens:
-            self.mode = tokens.pop(0)
-            
-        if tokens:
-            self.weapon_class = tokens.pop(0)
-            
-        if tokens:
-            self.weapon_type = tokens.pop(0)
-            
-        if tokens:
-            self.set = tokens.pop(0)
-            
-        if tokens:
-            print_warning(("Bad animation name?", name, tokens))
+        if tokens[0] in vehicle_suspension_modes:
+            self.type = AnimationStateType.VEHICLE_SUSPENSION
+            self.mode = tokens[0]
+            self.state = tokens[1]
+            self.valid = True
+            return
+
+        if tokens[0] == "object":
+            self.type = AnimationStateType.OBJECT_FUNCTION_OVERLAY
+            self.mode = tokens[0]
+            self.state = tokens[1]
+            self.valid = True
+            return
+
+        source_tokens = tokens
+        if "2" in tokens:
+            index_2 = len(tokens) - 1 - tokens[::-1].index("2")
+            source_tokens = tokens[:index_2]
+            destination_tokens = tokens[index_2 + 1:]
+            if not source_tokens or not destination_tokens or "2" in source_tokens:
+                return
+
+            if len(destination_tokens) == 1:
+                destination_tokens.insert(0, "any")
+            elif len(destination_tokens) != 2:
+                print_warning(("Bad transition animation name?", name, destination_tokens))
+                return
+
+            self.type = AnimationStateType.TRANSITION
+            self.destination_mode, self.destination_state = destination_tokens
+        elif len(source_tokens) > 2 and source_tokens[-1] in regions:
+            if source_tokens[-2] in directions and source_tokens[-3] in damage_states:
+                self.type = AnimationStateType.DAMAGE
+                self.direction = source_tokens[-2]
+                self.region = source_tokens[-1]
+                source_tokens = source_tokens[:-2]
+
+        # Expand the abbreviated source name to the mode / weapon class /
+        # weapon type / set / state layout used by the animation graph.
+        graph_tokens = list(source_tokens)
+        first_token = graph_tokens[0]
+        if first_token in damage_states:
+            graph_tokens[0:0] = ("any", "any", "any", "any")
+        elif len(graph_tokens) > 1 and first_token == "first_person" and graph_tokens[1] == "dual":
+            graph_tokens[0] = "any"
+            graph_tokens.insert(2, "any")
+            graph_tokens.insert(3, "any")
+        elif first_token in animation_modes_to_any:
+            graph_tokens[0] = "any"
+            graph_tokens[0:0] = ("any", "any", "any")
+        elif len(graph_tokens) == 1:
+            graph_tokens.insert(0, "any")
+
+        if 2 <= len(graph_tokens) <= 4:
+            graph_tokens[-1:-1] = ("any",) * (5 - len(graph_tokens))
+
+        if len(graph_tokens) < 5:
+            return
+
+        self.mode, self.weapon_class, self.weapon_type, self.set, self.state = graph_tokens[:5]
+
+        if len(graph_tokens) > 5:
+            print_warning(("Bad animation name?", name, graph_tokens[5:]))
             
         self.valid = True
         
@@ -6514,6 +6567,10 @@ class AnimationName:
                 return f"DAMAGE, MODE:{self.mode}, CLASS:{self.weapon_class}, TYPE:{self.weapon_type}, SET:{self.set}, STATE:{self.state}, DIRECTION:{self.direction}, REGION:{self.region}"
             case AnimationStateType.TRANSITION:
                 return f"TRANSITION, MODE:{self.mode}, CLASS:{self.weapon_class}, TYPE:{self.weapon_type}, SET:{self.set}, STATE:{self.state}, DEST_MODE:{self.destination_mode}, DEST_STATE:{self.destination_state}"
+            case AnimationStateType.VEHICLE_SUSPENSION:
+                return f"VEHICLE_SUSPENSION, STATE:{self.state}"
+            case AnimationStateType.OBJECT_FUNCTION_OVERLAY:
+                return f"OBJECT_FUNCTION_OVERLAY, STATE:{self.state}"
             case _:
                 return self.data_name
             
