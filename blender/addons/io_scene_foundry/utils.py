@@ -496,6 +496,8 @@ def run_tool(tool_args: list, in_background=False, null_output=False, event_leve
         tool_type = get_tool_type()
 
     command = [str(Path(project_dir, tool_type).with_suffix(".exe")), *[str(arg) for arg in tool_args]]
+    if is_corinth() and not null_output and event_level != 'LOG' and "-structured-xml" not in command:
+        command.insert(1, "-structured-xml")
     output_stream = foundry_output.child_stream()
     # print(subprocess.list2cmdline(command))
     
@@ -978,6 +980,9 @@ def run_tool_sidecar(tool_args: list, event_level='WARNING', tool_patches=None):
     os.chdir(project_dir)
     tool_path = Path(project_dir, get_tool_type()).with_suffix(".exe")
     command = [str(tool_path), *[str(arg) for arg in tool_args]]
+    structured_output = is_corinth() and event_level != 'LOG'
+    if structured_output and "-structured-xml" not in command:
+        command.insert(1, "-structured-xml")
     output_stream = foundry_output.child_stream()
     # print(subprocess.list2cmdline(command))
     error = ""
@@ -1034,7 +1039,11 @@ def run_tool_sidecar(tool_args: list, event_level='WARNING', tool_patches=None):
                     break
                 continue
 
-            line = item.decode().rstrip("\n")
+            line = item.decode(errors="replace").rstrip("\r\n")
+            if structured_output:
+                line = _tool_structured_output_text(line)
+                if not line:
+                    continue
 
             if failed and not error:
                 error = get_error_explanation(line)
@@ -1119,6 +1128,43 @@ def run_tool_sidecar(tool_args: list, event_level='WARNING', tool_patches=None):
 
     return failed, error
 
+
+def _tool_structured_output_text(line):
+    """Return Bonobo structured XML as the equivalent readable Tool line."""
+    if not line.lstrip().startswith("<"):
+        return line
+    try:
+        root = ET.fromstring(line)
+    except ET.ParseError:
+        return line
+
+    tag = root.tag.rpartition("}")[2]
+    attributes = root.attrib
+
+    def escaped(name):
+        value = attributes.get(name, "")
+        escapes = {"n": "\n", "r": "\r", "t": "\t", "\\": "\\"}
+        return re.sub(r"\\([nrt\\])", lambda match: escapes[match.group(1)], value)
+
+    if tag in {"output", "debug", "error", "alert"}:
+        return escaped("message")
+    if tag == "event":
+        context = attributes.get("context", "").strip(": ")
+        category = attributes.get("category", "").strip(": ")
+        message = attributes.get("message", "")
+        prefix = ":".join(part for part in (context, category) if part)
+        return f"{prefix}: {message}" if prefix else message
+    if tag == "progress_begin":
+        return escaped("message")
+    if tag == "progress_update":
+        description = escaped("description")
+        optional = escaped("optional_description")
+        return " ".join(part for part in (description, optional) if part)
+    if tag == "progress_end":
+        return escaped("message")
+    if tag == "ask_user":
+        return ": ".join(part for part in (escaped("caption"), escaped("message")) if part)
+    return ""
 
 def is_error_line(line):
     return line.startswith("IMPORT FAILED") or "### ASSERTION FAILED" in line or "FATAL ERROR!" in line
