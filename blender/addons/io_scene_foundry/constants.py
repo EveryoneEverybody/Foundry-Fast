@@ -154,7 +154,7 @@ LEGACY_ANIMATION_TYPES = (
 
 object_asset_validation = {
     # Mesh
-    '_connected_geometry_mesh_type_default': ('model', 'scenario', 'sky', 'particle_model', 'decorator_set', 'animation', 'prefab', 'resource', 'multi_model', 'multi_prefab'),
+    '_connected_geometry_mesh_type_default': ('model', 'scenario', 'sky', 'particle_model', 'polyart', 'decorator_set', 'animation', 'prefab', 'resource', 'multi_model', 'multi_prefab'),
     '_connected_geometry_mesh_type_collision': ('model', 'resource', 'multi_model'),
     '_connected_geometry_mesh_type_physics': ('model', 'resource', 'multi_model'),
     '_connected_geometry_mesh_type_object_instance': ('model', 'resource', 'multi_model'),

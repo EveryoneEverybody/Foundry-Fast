@@ -726,6 +726,8 @@ def set_asset(tag_ext: str, ob: bpy.types.Object=None, is_sky=False):
                 scene_nwo.asset_type = 'prefab'
             case '.particle_model':
                 scene_nwo.asset_type = 'particle_model'
+            case '.polyart_asset':
+                scene_nwo.asset_type = 'polyart'
             case '.decorator_set':
                 scene_nwo.asset_type = 'decorator_set'
             case '.camera_track':

@@ -27,6 +27,7 @@ from ..tools.refresh_cinematic_controls import add_controls_to_debug_menu
 from ..tools.asset_types import AssetType
 
 from ..tools.camera_track_sync import export_current_action_as_camera_track
+from ..managed_blam.polyart import export_polyart
 
 from .process import ExportScene
 
@@ -706,6 +707,12 @@ def export_asset(context, sidecar_path_full, sidecar_path, asset_name, asset_pat
     child_animation = _is_child_animation_export(scene_settings)
     if asset_type == 'camera_track_set':
         return export_current_action_as_camera_track(context, asset_path) # Return early if this is a camera track export
+    if asset_type == 'polyart':
+        if export_settings.export_mode == 'GRANNY':
+            raise RuntimeError("Polyart assets do not produce GR2 files. Use Full or Tags export mode")
+        print("\n\nWriting Polyart Tags")
+        print("-----------------------------------------------------------------------\n")
+        return export_polyart(context, asset_path)
     start_scene = context.scene
     start_window = context.window
     restore_start_scene_scheduled = False

@@ -657,7 +657,7 @@ def object_context_apply_types(self, context):
 def object_context_sets(self, context):
     scene_nwo = utils.get_scene_props()
     asset_type = scene_nwo.asset_type
-    regions_valid = asset_type in ('model', 'sky', 'scenario')
+    regions_valid = asset_type in ('model', 'sky', 'scenario', 'polyart')
     permutations_valid =  asset_type in ('model', 'sky', 'scenario', 'prefab')
     region_name = "BSP" if scene_nwo.asset_type == "scenario" else "Region" 
     permutation_name = "Layer" if scene_nwo.asset_type in ("scenario", "prefab") else "Permutation"

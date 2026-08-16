@@ -1660,9 +1660,10 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
 
         is_scenario = nwo.asset_type == 'scenario'
         self.draw_object_visibility(box.box(), nwo)
-        if self.asset_type in {'model', 'sky', 'scenario', 'prefab', 'resource'}:
+        if self.asset_type in {'model', 'sky', 'scenario', 'prefab', 'polyart', 'resource'}:
             self.draw_expandable_box(box.box(), nwo, "regions_table", "BSPs" if is_scenario else "Regions")
-            self.draw_expandable_box(box.box(), nwo, "permutations_table", "Layers" if is_scenario else "Permutations")
+            if self.asset_type != 'polyart':
+                self.draw_expandable_box(box.box(), nwo, "permutations_table", "Layers" if is_scenario else "Permutations")
 
 
     def draw_object_visibility(self, box: bpy.types.UILayout, nwo):
@@ -2536,7 +2537,7 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
                 col.label(text="Particle Model")
                 return
             
-            if self.asset_type in {'model', 'sky', 'scenario', 'prefab', 'resource'}:
+            if self.asset_type in {'model', 'sky', 'scenario', 'prefab', 'polyart', 'resource'}:
                 if nwo.mesh_type == '_connected_geometry_mesh_type_object_instance':
                     row = col.row()
                     row.use_property_split = False
@@ -4378,6 +4379,14 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
 
 
     def draw_table_menus(self, col, nwo, ob):
+        if self.asset_type == 'polyart':
+            row = col.row()
+            row.enabled = not nwo.region_name_locked
+            row.label(text="Region", icon_value=get_icon_id("collection_creator") if nwo.region_name_locked else 0)
+            row.menu("NWO_MT_Regions", text=utils.true_region(nwo), icon_value=get_icon_id("region"))
+            col.separator()
+            return
+
         perm_name = "Permutation"
         region_name = "Region"
         is_mesh = utils.is_mesh(ob)

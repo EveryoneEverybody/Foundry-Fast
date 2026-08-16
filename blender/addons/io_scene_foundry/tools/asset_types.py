@@ -21,6 +21,7 @@ scenario_description = "Scenarios are playable levels. They are made up of BSPs 
 sky_description = "Skies are used for scenarios as a skybox.\n\nThey may contain lights which can be used when lightmapping a scenario. Skies contain only render geometry"
 decorator_set_description = "Decorator sets are used as paint brushes in scenarios.\n\nThey are made up of a set of render geometry that can then be painted onto scenario geometry"
 particle_model_description = "Particle models are used for particle emitters in effect tags"
+polyart_description = "Polyart is lightweight UI and effects geometry for Halo 4 and Halo 2 Anniversary Multiplayer. Each Foundry region exports to its own polyart_asset tag"
 animation_description = "Animation graphs enable animations to play on objects.\n\nUnlike the model asset type, this type only generates an animation graph.\n\nUse this if you are creating first person animations or standalone animations"
 camera_track_set_description = "Camera tracks represent the position of a third person camera on a unit (such as a vehicle) at different look angles"
 resource_description = "Resource assets cannot be exported but offer access to all object/mesh/marker types and tools.\n\nThey are designed to contain data (such as materials of meshes) that can then be referenced in other scenes"
@@ -35,6 +36,7 @@ scenario = NWOAsset("scenario", "Scenario", "scenario", False, scenario_descript
 sky = NWOAsset("sky", "Sky", "sky", False, sky_description)
 decorator_set = NWOAsset("decorator_set", "Decorator Set", "decorator", False, decorator_set_description)
 particle_model = NWOAsset("particle_model", "Particle Model", "particle_model", False, particle_model_description)
+polyart = NWOAsset("polyart", "Polyart", "MESH_DATA", True, polyart_description)
 animation = NWOAsset("animation", "Animation Graph", "animation", False, animation_description)
 camera_track_set = NWOAsset("camera_track_set", "Camera Track Set", 'CON_CAMERASOLVER', False, camera_track_set_description)
 resource = NWOAsset("resource", "Resource", "LINKED", False, resource_description)
@@ -44,7 +46,7 @@ single_animation = NWOAsset("single_animation", "Single Animation", "ACTION", Fa
 multi_model = NWOAsset("multi_model", "Crates", "crate", False, multi_model_description)
 multi_prefab = NWOAsset("multi_prefab", "Multiple Prefabs", "prefab", True, multi_prefab_description)
 
-asset_types = [model, scenario, sky, decorator_set, particle_model, animation, camera_track_set, resource, cinematic, prefab, single_animation, multi_model, multi_prefab]
+asset_types = [model, scenario, sky, decorator_set, particle_model, animation, camera_track_set, resource, cinematic, prefab, single_animation, multi_model, multi_prefab, polyart]
 
 def asset_type_items(self, context):
     items = []
@@ -83,6 +85,7 @@ class AssetType(Enum):
     SINGLE_ANIMATION = 10
     MULTI_MODEL = 11
     MULTI_PREFAB = 12
+    POLYART = 13
     
     @property
     def supports_permutations(self):
@@ -102,4 +105,4 @@ class AssetType(Enum):
     
     @property
     def supports_regions(self):
-        return self.value in {0, 2, 11}
+        return self.value in {0, 2, 11, 13}

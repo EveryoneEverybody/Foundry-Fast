@@ -1,21 +1,23 @@
 
 
-from math import radians
+from math import isfinite, radians
+from pathlib import Path
 from typing import cast
 import bpy
-import os
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Matrix
 import numpy as np
 
-from ..constants import WU_SCALAR
+from ..constants import VALID_MESHES
 
-from .Tags import TagFieldElement
 from ..managed_blam import Tag
 from .. import utils
 from . import import_transform
 
 POLYART_SCALE_FROM = 0.001
 POLYART_SCALE_TO = 1000
+POLYART_POSITION_SCALE = POLYART_SCALE_FROM * 100
+POLYART_MAX_VERTEX_INDEX = 32767
+POLYART_DEFAULT_PLACEMENT = (57.355, 32.262, 0.1, 10000.0, (0.0, 0.0, -43.914))
         
 def decode_triangle_strip(indices):
     tris = []
@@ -44,13 +46,239 @@ def encode_triangle_strip(triangles):
         if not strips:
             strips.extend([a, b, c])
         else:
+            raw_triangle = (a, b, c) if (len(strips) + 2) % 2 == 0 else (b, a, c)
             if prev_last is not None:
-                strips.extend([prev_last, a])
-            strips.extend([a, b, c])
+                strips.extend([prev_last, raw_triangle[0]])
+            strips.extend(raw_triangle)
         prev_last = c
 
     return strips
-    
+
+
+def _float_to_short(value: float, label: str) -> int:
+    value = float(value)
+    if not isfinite(value):
+        raise RuntimeError(f"Polyart {label} contains a non-finite value")
+    if abs(value) > np.finfo(np.float16).max:
+        raise RuntimeError(f"Polyart {label} value {value:g} exceeds the half-float range")
+    return int(np.asarray([value], dtype=np.float16).view(np.int16)[0])
+
+
+def _vertex_alpha(mesh: bpy.types.Mesh, vertex_index: int, loop_index: int, polygon_index: int) -> float:
+    color_attributes = getattr(mesh, "color_attributes", None)
+    if color_attributes is None:
+        return 1.0
+
+    attribute = color_attributes.get("Color") or color_attributes.active_color
+    if attribute is None or not attribute.data:
+        return 1.0
+
+    match attribute.domain:
+        case 'POINT':
+            index = vertex_index
+        case 'CORNER':
+            index = loop_index
+        case 'FACE':
+            index = polygon_index
+        case _:
+            return 1.0
+
+    color = attribute.data[index].color
+    return float(color[3]) if len(color) > 3 else 1.0
+
+
+def _object_region(original: bpy.types.Object, instancer_parent: bpy.types.Object | None,
+                   collection_map, valid_regions: set[str], default_region: str) -> tuple[str, str | None]:
+    collection_region = ""
+    collection_owner = instancer_parent or original
+    export_collection = collection_owner.nwo.export_collection
+    if export_collection:
+        collection = collection_map.get(export_collection)
+        if collection is not None:
+            collection_region = collection.region or ""
+
+    requested_region = collection_region or original.nwo.region_name or default_region
+    if requested_region in valid_regions:
+        return requested_region, None
+
+    return default_region, (
+        f"Object [{original.name}] has region [{requested_region}] which is not present in the regions table. "
+        f"Setting region to: {default_region}"
+    )
+
+
+def collect_polyart_meshes(context: bpy.types.Context):
+    """Build one quantized, unified mesh per Foundry region."""
+    scene_nwo = utils.get_scene_props()
+    regions = [entry.name for entry in scene_nwo.regions_table]
+    if not regions:
+        regions = ["default"]
+    default_region = regions[0]
+    valid_regions = set(regions)
+
+    vertices_by_region = {region: [] for region in regions}
+    triangles_by_region = {region: [] for region in regions}
+    vertex_maps = {region: {} for region in regions}
+    warnings = []
+    warnings_seen = set()
+
+    collection_map = utils.create_parent_mapping(context)
+    depsgraph = context.evaluated_depsgraph_get()
+    inverse_rotation = import_transform.rotation_matrix(scene_nwo).inverted()
+    scene_scale = import_transform.scale_factor(scene_nwo)
+
+    for instance in depsgraph.object_instances:
+        evaluated_object = instance.object
+        original = evaluated_object.original
+        instancer_parent = original
+
+        if instance.is_instance:
+            evaluated_object = instance.instance_object
+            original = evaluated_object.original
+            instancer_parent = instance.parent
+        elif original.is_instancer and original.instance_collection and original.instance_collection.all_objects and not original.nwo.marker_instance:
+            continue
+
+        if original.type not in VALID_MESHES:
+            continue
+        if utils.ignore_for_export_fast(original, collection_map, instancer_parent):
+            continue
+
+        region, warning = _object_region(original, instancer_parent, collection_map, valid_regions, default_region)
+        if warning is not None and warning not in warnings_seen:
+            warnings_seen.add(warning)
+            warnings.append(warning)
+
+        use_original_mesh = (
+            original.type == 'MESH' and not evaluated_object.modifiers and original.data.shape_keys is None
+        )
+        mesh = original.data if use_original_mesh else evaluated_object.to_mesh(
+            preserve_all_data_layers=True, depsgraph=depsgraph)
+        if mesh is None:
+            continue
+
+        try:
+            mesh.calc_loop_triangles()
+            uv_layer = mesh.uv_layers.get("UVMap0") or mesh.uv_layers.active
+            if uv_layer is None:
+                warning = f"Object [{original.name}] has no UV map. Polyart UVs default to (0, 0)"
+                if warning not in warnings_seen:
+                    warnings_seen.add(warning)
+                    warnings.append(warning)
+
+            matrix_world = instance.matrix_world.copy() if instance.is_instance else original.matrix_world.copy()
+            object_to_tag = inverse_rotation @ matrix_world
+            reverse_winding = matrix_world.to_3x3().determinant() < 0
+            region_vertices = vertices_by_region[region]
+            region_triangles = triangles_by_region[region]
+            vertex_map = vertex_maps[region]
+
+            for loop_triangle in mesh.loop_triangles:
+                loop_indices = list(loop_triangle.loops)
+                if reverse_winding:
+                    loop_indices[1], loop_indices[2] = loop_indices[2], loop_indices[1]
+
+                triangle = []
+                for loop_index in loop_indices:
+                    loop = mesh.loops[loop_index]
+                    tag_position = (object_to_tag @ mesh.vertices[loop.vertex_index].co) / scene_scale / POLYART_POSITION_SCALE
+                    uv = uv_layer.data[loop_index].uv if uv_layer is not None else (0.0, 0.0)
+                    alpha = _vertex_alpha(mesh, loop.vertex_index, loop_index, loop_triangle.polygon_index)
+
+                    encoded = (
+                        _float_to_short(tag_position.x, "position x"),
+                        _float_to_short(tag_position.y, "position y"),
+                        _float_to_short(tag_position.z, "position z"),
+                        _float_to_short(alpha, "alpha"),
+                        _float_to_short(uv[0], "UV u"),
+                        _float_to_short(uv[1], "UV v"),
+                    )
+                    vertex_index = vertex_map.get(encoded)
+                    if vertex_index is None:
+                        vertex_index = len(region_vertices)
+                        if vertex_index > POLYART_MAX_VERTEX_INDEX:
+                            raise RuntimeError(
+                                f"Polyart region [{region}] exceeds {POLYART_MAX_VERTEX_INDEX + 1} unique vertices"
+                            )
+                        vertex_map[encoded] = vertex_index
+                        region_vertices.append(encoded)
+                    triangle.append(vertex_index)
+
+                if len(set(triangle)) == 3:
+                    region_triangles.append(tuple(triangle))
+        finally:
+            if not use_original_mesh:
+                evaluated_object.to_mesh_clear()
+
+    return {
+        region: (vertices_by_region[region], triangles_by_region[region])
+        for region in regions
+        if triangles_by_region[region]
+    }, warnings
+
+
+def export_polyart(context: bpy.types.Context, asset_path: str | Path):
+    """Write a polyart_asset tag for every Foundry region containing geometry."""
+    if not utils.is_corinth(context):
+        raise RuntimeError("Polyart assets are only supported by Halo 4 and Halo 2 Anniversary Multiplayer")
+
+    hidden_objects = {}
+    for ob in context.view_layer.objects:
+        hidden = ob.hide_get()
+        viewport_hidden = ob.hide_viewport
+        if hidden or viewport_hidden:
+            hidden_objects[ob] = hidden, viewport_hidden
+            if hidden:
+                ob.hide_set(False)
+            if viewport_hidden:
+                ob.hide_viewport = False
+
+    try:
+        if hidden_objects:
+            context.view_layer.update()
+        meshes, warnings = collect_polyart_meshes(context)
+    finally:
+        for ob, (hidden, viewport_hidden) in hidden_objects.items():
+            if hidden:
+                ob.hide_set(True)
+            if viewport_hidden:
+                ob.hide_viewport = True
+        if hidden_objects:
+            context.view_layer.update()
+    for warning in warnings:
+        utils.print_warning(warning)
+
+    if not meshes:
+        raise RuntimeError("No exportable Polyart mesh geometry was found")
+
+    relative_asset_path = Path(utils.relative_path(asset_path))
+    tag_directory = Path(utils.get_tags_path(), relative_asset_path)
+    tag_directory.mkdir(parents=True, exist_ok=True)
+
+    safe_names = {}
+    written = []
+    for region, (vertices, triangles) in meshes.items():
+        tag_name = utils.clean_text(region, replace_spaces=True)
+        other_region = safe_names.get(tag_name.lower())
+        if other_region is not None:
+            raise RuntimeError(
+                f"Polyart regions [{other_region}] and [{region}] resolve to the same tag name [{tag_name}]"
+            )
+        safe_names[tag_name.lower()] = region
+
+        tag_path = Path(relative_asset_path, tag_name)
+        with PolyArtTag(path=tag_path) as polyart:
+            polyart.from_blender(vertices, triangles)
+            written.append(polyart.tag_path.RelativePathWithExtension)
+            print(
+                f"--- Wrote Polyart tag [{region}]: {len(vertices)} vertices, "
+                f"{len(triangles)} triangles -> {polyart.tag_path.RelativePathWithExtension}"
+            )
+
+    return written
+
+
+
 class PolyArtTag(Tag):
     tag_ext = 'polyart_asset'
     
@@ -59,8 +287,39 @@ class PolyArtTag(Tag):
         self.block_indices = self.tag.SelectField('Block:indices')
         self.placement_data = self.tag.SelectField('Block:placement data')
         
-    def from_blender(self):
-        pass
+    def from_blender(self, vertices, triangles):
+        indices = encode_triangle_strip(triangles)
+        if len(vertices) > POLYART_MAX_VERTEX_INDEX + 1:
+            raise RuntimeError(f"Polyart exceeds {POLYART_MAX_VERTEX_INDEX + 1} unique vertices")
+        for vertex_index, vertex in enumerate(vertices):
+            if len(vertex) != 6:
+                raise RuntimeError(f"Polyart vertex {vertex_index} must contain position, alpha, and UV data")
+            if any(value < -32768 or value > 32767 for value in vertex):
+                raise RuntimeError(f"Polyart vertex {vertex_index} contains data outside the signed 16-bit range")
+        for index in indices:
+            if index < 0 or index >= len(vertices) or index > POLYART_MAX_VERTEX_INDEX:
+                raise RuntimeError(f"Polyart index {index} is outside the vertex block")
+
+        self.block_vertices.RemoveAllElements()
+        for vertex in vertices:
+            element = self.block_vertices.AddElement()
+            for field, value in zip(element.Fields, vertex):
+                field.Data = int(value)
+
+        self.block_indices.RemoveAllElements()
+        for index in indices:
+            self.block_indices.AddElement().Fields[0].Data = int(index)
+
+        if not self.placement_data.Elements.Count:
+            horizontal_fov, vertical_fov, near, far, camera_position = POLYART_DEFAULT_PLACEMENT
+            element = self.placement_data.AddElement()
+            element.Fields[0].Data = horizontal_fov
+            element.Fields[1].Data = vertical_fov
+            element.Fields[2].Data = near
+            element.Fields[3].Data = far
+            element.Fields[4].Data = camera_position
+
+        self.tag_has_changes = True
     
     
     def to_blender(self, collection=None):
@@ -72,7 +331,7 @@ class PolyArtTag(Tag):
         for element in self.block_vertices.Elements:
             vert_int16 = np.array([element.Fields[0].Data, element.Fields[1].Data, element.Fields[2].Data], dtype=np.int16)
             vert_uint16 = vert_int16.view(np.uint16)
-            verts.append(vert_uint16.view(np.float16) * POLYART_SCALE_FROM * 100)
+            verts.append(vert_uint16.view(np.float16).astype(np.float32) * POLYART_POSITION_SCALE)
             
             alpha_int16 = np.array([element.Fields[3].Data])
             alpha_uint16 = alpha_int16.view(np.uint16)
