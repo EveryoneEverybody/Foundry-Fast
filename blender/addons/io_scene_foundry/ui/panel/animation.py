@@ -1,9 +1,11 @@
 """Animation sub-panel specific operators"""
 
 from collections import defaultdict
+import ctypes
 import os
 from pathlib import Path
 import random
+import subprocess
 from typing import cast
 import bpy
 from mathutils import Matrix
@@ -482,7 +484,7 @@ def _configure_child_animation_scene(scene: bpy.types.Scene, animations, parent_
 def _write_animation_asset_blend(context: bpy.types.Context, blend_path: Path, animations, asset_type: str, parent_blend: str, parent_sidecar: str):
     blend_path.parent.mkdir(parents=True, exist_ok=True)
     temp_scene = context.scene.copy()
-    temp_scene.name = f"{context.scene.name}_animation_split"
+    temp_scene.name = f"{context.scene.name} {blend_path.with_suffix("").name}"
     owners = _scene_animation_owners(context.scene)
     snapshots = [_snapshot_animation_owner(owner) for owner in owners]
     try:
@@ -1546,6 +1548,110 @@ class NWO_OT_AnimationsMoveToAssetBlends(bpy.types.Operator):
         layout.prop(self, "delete_actions")
 
 
+class NWO_OT_AnimationsExportChildBlends(bpy.types.Operator):
+    bl_label = "Export Child Blend GR2s"
+    bl_idname = "nwo.animations_export_child_blends"
+    bl_description = "Export every unique external animation Blend file to its intermediate GR2 files"
+
+    @classmethod
+    def poll(cls, context):
+        scene_nwo = utils.get_scene_props()
+        return any(
+            animation.export_this and animation.external and animation.blend_path.strip()
+            for animation in scene_nwo.animations
+        )
+
+    @staticmethod
+    def _show_console():
+        try:
+            console_window = ctypes.windll.kernel32.GetConsoleWindow()
+            if not console_window or not ctypes.windll.user32.IsWindowVisible(console_window):
+                bpy.ops.wm.console_toggle()
+        except (AttributeError, RuntimeError):
+            bpy.ops.wm.console_toggle()
+
+    @staticmethod
+    def _child_blend_paths(scene_nwo):
+        unique_paths = {}
+        missing_paths = {}
+        data_path = Path(utils.get_data_path())
+        for animation in scene_nwo.animations:
+            if not animation.export_this or not animation.external or not animation.blend_path.strip():
+                continue
+
+            blend_path = Path(animation.blend_path.strip())
+            if not blend_path.is_absolute():
+                blend_path = Path(data_path, blend_path)
+            blend_path = Path(os.path.abspath(blend_path))
+            path_key = os.path.normcase(str(blend_path))
+            if path_key in unique_paths or path_key in missing_paths:
+                continue
+            if blend_path.is_file():
+                unique_paths[path_key] = blend_path
+            else:
+                missing_paths[path_key] = blend_path
+
+        sort_key = lambda path: os.path.normcase(str(path))
+        return sorted(unique_paths.values(), key=sort_key), sorted(missing_paths.values(), key=sort_key)
+
+    def execute(self, context):
+        blend_paths, missing_paths = self._child_blend_paths(utils.get_scene_props())
+        if not blend_paths:
+            self.report({'WARNING'}, "No external animation Blend files were found")
+            return {'CANCELLED'}
+
+        self._show_console()
+        print("\n►►► CHILD ANIMATION GR2 EXPORT ◄◄◄", flush=True)
+        print(f"Exporting {len(blend_paths)} unique child Blend file{'s' if len(blend_paths) != 1 else ''}\n", flush=True)
+        for missing_path in missing_paths:
+            print(f"Skipping missing Blend file: {missing_path}", flush=True)
+
+        export_script = (
+            "import bpy; "
+            "scene = next((scene for scene in bpy.data.scenes if scene.nwo.is_main_scene), bpy.context.scene); "
+            "scene.nwo_export.export_mode = 'GRANNY'; "
+            "scene.nwo_export.export_animations = 'ALL'; "
+            "scene.nwo_export.show_output = False; "
+            "result = bpy.ops.nwo.export_scene(); "
+            "assert 'FINISHED' in result, f'Child export did not finish: {result}'"
+        )
+        failures = []
+        total = len(blend_paths)
+        for index, blend_path in enumerate(blend_paths, 1):
+            print(f"\n[{index}/{total}] Exporting: {blend_path}", flush=True)
+            result = subprocess.run(
+                [
+                    bpy.app.binary_path,
+                    "--background",
+                    str(blend_path),
+                    "--python-exit-code",
+                    "1",
+                    "--python-expr",
+                    export_script,
+                ],
+                check=False,
+            )
+            if result.returncode:
+                failures.append(blend_path)
+                print(f"FAILED ({result.returncode}): {blend_path}", flush=True)
+            else:
+                print(f"Completed: {blend_path}", flush=True)
+
+        succeeded = total - len(failures)
+        print("\n-----------------------------------------------------------------------", flush=True)
+        print(f"Child animation export complete: {succeeded}/{total} succeeded", flush=True)
+        if missing_paths:
+            print(f"Skipped {len(missing_paths)} missing Blend file{'s' if len(missing_paths) != 1 else ''}", flush=True)
+        print("-----------------------------------------------------------------------\n", flush=True)
+
+        if failures:
+            self.report({'WARNING'}, f"Child export complete: {succeeded}/{total} succeeded; see console for failures")
+        else:
+            skipped = f"; skipped {len(missing_paths)} missing" if missing_paths else ""
+            self.report({'INFO'}, f"Exported {succeeded} child Blend file{'s' if succeeded != 1 else ''}{skipped}")
+        return {'FINISHED'}
+
+
 class NWO_OT_AnimationLinkToGR2(bpy.types.Operator):
     bl_label = "Link to GR2"
     bl_idname = "nwo.animation_link_to_gr2"
@@ -1739,7 +1845,8 @@ class NWO_MT_AnimationTools(bpy.types.Menu):
         layout.operator("nwo.animations_from_actions", icon='UV_SYNC_SELECT')
         layout.operator("nwo.animations_from_blend", icon='IMPORT')
         layout.separator()
-        layout.operator("nwo.animations_move_to_asset_blends", icon='EXPORT')
+        layout.operator("nwo.animations_move_to_asset_blends", icon='INDIRECT_ONLY_OFF')
+        layout.operator("nwo.animations_export_child_blends", icon='EXPORT')
         layout.separator()
         layout.operator("nwo.clear_animations", icon='CANCEL')
         layout.operator("nwo.clear_renames", icon='CANCEL')
