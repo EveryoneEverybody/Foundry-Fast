@@ -431,6 +431,8 @@ def draw_foundry_preferences(layout, prefs, context=None, show_save_button=False
     row = box.row(align=True)
     row.prop(prefs, "animation_switch_frame")
     row = box.row(align=True)
+    row.prop(prefs, "load_animation_snapshots")
+    row = box.row(align=True)
     row.prop(prefs, "ignore_final_frame")
     row = box.row(align=True)
     row.prop(prefs, "debug_menu_on_export")
@@ -519,6 +521,12 @@ class FoundryPreferences(AddonPreferences):
             ("FIRST", "First frame", "Always jump to the animation's first frame"),
             ("CURRENT", "Current frame", "Do not change the current frame when switching animations"),
         ],
+    )
+
+    load_animation_snapshots: BoolProperty(
+        name="Load Pose Snapshot on Switching Animation",
+        description="Restores the saved bone pose and CTRL_settings pose controls when switching back to an animation",
+        default=True,
     )
     
     ignore_final_frame: BoolProperty(

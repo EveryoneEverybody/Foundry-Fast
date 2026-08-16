@@ -2965,7 +2965,7 @@ def save_animation_pose(animation):
 
 def restore_animation_pose(animation, context):
     """Restore a pose saved the last time an animation was cleared."""
-    if not animation.pose_snapshots:
+    if not get_prefs().load_animation_snapshots or not animation.pose_snapshots:
         return
 
     # context.view_layer.update()
