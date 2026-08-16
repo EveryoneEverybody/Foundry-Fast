@@ -19,7 +19,7 @@ _LOG_PATH = _SESSION_DIRECTORY / "foundry.log"
 _WATCH_PATH = _SESSION_DIRECTORY / "watched_logs.jsonl"
 _CANCEL_PATH = _SESSION_DIRECTORY / "cancel.request"
 _VIEWER_PATH = Path(__file__).with_name("foundry_output_viewer.pyw")
-_WINDOW_TITLE = f"Foundry Output - {os.getpid()}"
+_WINDOW_TITLE = f"Foundry"
 _TOOL_JOB_NAME = f"Foundry.ToolProcesses.{os.getpid()}"
 
 _log_stream = None

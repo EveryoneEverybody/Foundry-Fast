@@ -21,6 +21,7 @@ WM_DESTROY = 0x0002
 WM_SIZE = 0x0005
 WM_COMMAND = 0x0111
 WM_TIMER = 0x0113
+WM_VSCROLL = 0x0115
 WM_CTLCOLORBTN = 0x0135
 WM_CTLCOLORSTATIC = 0x0138
 WM_SETICON = 0x0080
@@ -48,6 +49,7 @@ ES_AUTOHSCROLL = 0x0080
 ES_READONLY = 0x0800
 SS_RIGHT = 0x0002
 SS_CENTERIMAGE = 0x0200
+SS_ENDELLIPSIS = 0x4000
 BS_PUSHBUTTON = 0x00000000
 BS_AUTOCHECKBOX = 0x00000003
 BS_AUTORADIOBUTTON = 0x00000009
@@ -66,6 +68,7 @@ ICON_BIG = 1
 BM_GETCHECK = 0x00F0
 BM_SETCHECK = 0x00F1
 BST_CHECKED = 1
+SB_BOTTOM = 7
 WPARAM_MINUS_ONE = ctypes.c_size_t(-1).value
 SCF_SELECTION = 0x0001
 CFM_BOLD = 0x00000001
@@ -91,6 +94,12 @@ THEME_BORDER = (72, 75, 78)
 THEME_TEXT = (224, 226, 228)
 THEME_MUTED_TEXT = (153, 157, 160)
 THEME_ACCENT = (242, 243, 244)
+THEME_STATE_COLORS = {
+    "idle": THEME_BORDER,
+    "active": (230, 169, 50),
+    "failed": (178, 55, 55),
+    "success": (47, 125, 62),
+}
 
 BUTTON_CLEAR = 1001
 BUTTON_COPY = 1002
@@ -109,7 +118,13 @@ ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))
 SEPARATOR_LINE = re.compile(r"^-{20,}$")
 EXPORT_BANNER_LINE = re.compile(r"^>{3}\s+.*\bEXPORT\b.*<{3}$", re.IGNORECASE)
 EXPORT_COMPLETE_LINE = re.compile(r"^(?:Export|Import) Completed in\s+(.+)$", re.IGNORECASE)
-CANCELLED_LINE = re.compile(r"^(?:EXPORT|IMPORT) CANCELLED BY USER$", re.IGNORECASE)
+CANCELLED_LINE = re.compile(r"^(?:EXPORT|IMPORT) CANCELLED(?: BY USER)?$", re.IGNORECASE)
+FAILURE_LINE = re.compile(
+    r"(?:^(?:EXPORT|IMPORT)\s+(?:CANCELLED|FAILED)\b|FAILED TO CREATE TAGS|### ASSERTION FAILED|"
+    r"FATAL ERROR!|Export crashed and burned|Import failed spectacularly|Tool exited with code|"
+    r"Lightmapping aborted|Lightmapper did not run|Exception hit|No Folders/Filepaths supplied)",
+    re.IGNORECASE,
+)
 SECTION_LINE = re.compile(r"^[-=]{8,}$")
 WARNING_LINE = re.compile(r"^(?:\[?warning\]?|warn)\s*[:\-]", re.IGNORECASE)
 ERROR_LINE = re.compile(r"^(?:\[?error\]?|fatal(?: error)?|critical|traceback|exception)\b", re.IGNORECASE)
@@ -671,6 +686,7 @@ class ExportStatus:
 
     def clear(self):
         self.status = "Ready"
+        self.state = "idle"
         self.started_at = None
         self.completed_duration = None
         self.finished = False
@@ -702,36 +718,29 @@ class ExportStatus:
     def _finish_line(self):
         line = self.current_line.strip()
         self.current_line = ""
-        if CANCELLED_LINE.match(line):
-            self.status = line.title()
+        if FAILURE_LINE.search(line):
+            self.status = line.title() if CANCELLED_LINE.match(line) else line
+            self.state = "failed"
             self.finished = True
-        if EXPORT_BANNER_LINE.match(line) and self.started_at is None:
-            self.started_at = time.monotonic()
+        if EXPORT_BANNER_LINE.match(line) and not self.finished:
+            if self.started_at is None:
+                self.started_at = time.monotonic()
+            self.state = "active"
         if SEPARATOR_LINE.match(line):
             heading = self.previous_line.strip()
             if heading and not SEPARATOR_LINE.match(heading):
-                if self.started_at is None:
-                    self.started_at = time.monotonic()
-                self.status = heading
                 completed = EXPORT_COMPLETE_LINE.match(heading)
                 if completed:
+                    self.status = heading
                     self.completed_duration = completed.group(1)
+                    self.state = "success"
                     self.finished = True
+                elif not self.finished:
+                    if self.started_at is None:
+                        self.started_at = time.monotonic()
+                    self.status = heading
+                    self.state = "active"
         self.previous_line = line
-
-    def timer_text(self):
-        if self.completed_duration is not None:
-            return f"Total: {self.completed_duration}"
-        elapsed = 0.0 if self.started_at is None else time.monotonic() - self.started_at
-        milliseconds = int(elapsed * 1000)
-        minutes, remainder = divmod(milliseconds, 60_000)
-        seconds, milliseconds = divmod(remainder, 1000)
-        if minutes >= 60:
-            hours, minutes = divmod(minutes, 60)
-            value = f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"
-        else:
-            value = f"{minutes:02}:{seconds:02}.{milliseconds:03}"
-        return f"Elapsed: {value}"
 
 class FoundryOutputWindow:
     def __init__(self, arguments):
@@ -751,14 +760,18 @@ class FoundryOutputWindow:
         self.filter_warning = None
         self.filter_error = None
         self.filter_summary = None
+        self.status_border = None
         self.status_label = None
-        self.timer_label = None
+        self.rendered_status = None
         self.show_messages = False
         self.enabled_levels = {"message", "warning", "error"}
         self.font = None
         self.icon = load_png_icon(ICON_PATH)
         self.window_brush = gdi32.CreateSolidBrush(colorref(THEME_WINDOW))
         self.surface_brush = gdi32.CreateSolidBrush(colorref(THEME_SURFACE))
+        self.status_brushes = {
+            state: gdi32.CreateSolidBrush(colorref(rgb)) for state, rgb in THEME_STATE_COLORS.items()
+        }
         self.window_proc = WNDPROC(self._window_proc)
 
     def _parent_is_alive(self):
@@ -833,14 +846,13 @@ class FoundryOutputWindow:
             0, "BUTTON", "Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
             204, 536, 100, 28, hwnd, BUTTON_CANCEL, None, None,
         )
-        self.status_label = user32.CreateWindowExW(
-            WS_EX_CLIENTEDGE, "STATIC", "Ready", WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE,
-            312, 536, 412, 28, hwnd, None, None, None,
+        self.status_border = user32.CreateWindowExW(
+            0, "STATIC", "", WS_CHILD | WS_VISIBLE,
+            312, 536, 570, 28, hwnd, None, None, None,
         )
-        self.timer_label = user32.CreateWindowExW(
-            WS_EX_CLIENTEDGE, "STATIC", "Elapsed: 00:00.000",
-            WS_CHILD | WS_VISIBLE | SS_RIGHT | SS_CENTERIMAGE,
-            732, 536, 150, 28, hwnd, None, None, None,
+        self.status_label = user32.CreateWindowExW(
+            0, "STATIC", "Ready", WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE | SS_ENDELLIPSIS,
+            314, 538, 566, 24, hwnd, None, None, None,
         )
         self.font = gdi32.CreateFontW(
             -16, 0, 0, 0, 400, False, False, False, DEFAULT_CHARSET,
@@ -849,7 +861,7 @@ class FoundryOutputWindow:
         for control in (
             self.edit, self.output_button, self.messages_button, self.show_label,
             self.filter_message, self.filter_warning, self.filter_error, self.filter_summary,
-            self.clear_button, self.copy_button, self.cancel_button, self.status_label, self.timer_label,
+            self.clear_button, self.copy_button, self.cancel_button, self.status_label,
         ):
             user32.SendMessageW(control, WM_SETFONT, self.font, True)
             uxtheme.SetWindowTheme(control, "DarkMode_Explorer", None)
@@ -879,15 +891,20 @@ class FoundryOutputWindow:
         user32.MoveWindow(self.copy_button, margin + 98, control_top, 90, button_height, True)
         user32.MoveWindow(self.cancel_button, margin + 196, control_top, 100, button_height, True)
         status_left = margin + 304
-        timer_width = 220
-        timer_left = max(status_left + 100, width - margin - timer_width)
-        user32.MoveWindow(self.status_label, status_left, control_top, max(80, timer_left - status_left - margin), button_height, True)
-        user32.MoveWindow(self.timer_label, timer_left, control_top, timer_width, button_height, True)
+        status_width = max(80, width - status_left - margin)
+        user32.MoveWindow(self.status_border, status_left, control_top, status_width, button_height, True)
+        user32.MoveWindow(self.status_label, status_left + 2, control_top + 2, max(76, status_width - 4), button_height - 4, True)
         user32.RedrawWindow(self.hwnd, None, None, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN)
 
     def _update_status_controls(self):
+        rendered_status = (self.export_status.status, self.export_status.state)
+        if rendered_status == self.rendered_status:
+            return
+        self.rendered_status = rendered_status
         user32.SetWindowTextW(self.status_label, self.export_status.status)
-        user32.SetWindowTextW(self.timer_label, self.export_status.timer_text())
+        flags = RDW_INVALIDATE | RDW_ERASE
+        user32.RedrawWindow(self.status_border, None, None, flags)
+        user32.RedrawWindow(self.status_label, None, None, flags)
 
     @staticmethod
     def _colorref(rgb):
@@ -941,9 +958,10 @@ class FoundryOutputWindow:
             format_value = self._entry_format(entry)
             user32.SendMessageW(self.edit, EM_SETCHARFORMAT, SCF_SELECTION, ctypes.addressof(format_value))
             position = end + 1
+        user32.SendMessageW(self.edit, EM_SETREADONLY, 1, 0)
         user32.SendMessageW(self.edit, EM_SETSEL, WPARAM_MINUS_ONE, -1)
         user32.SendMessageW(self.edit, EM_SCROLLCARET, 0, 0)
-        user32.SendMessageW(self.edit, EM_SETREADONLY, 1, 0)
+        user32.SendMessageW(self.edit, WM_VSCROLL, SB_BOTTOM, 0)
         self._update_filter_summary()
 
     def _update_output(self):
@@ -959,9 +977,14 @@ class FoundryOutputWindow:
     def _window_proc(self, hwnd, message, wparam, lparam):
         if message in {WM_CTLCOLORBTN, WM_CTLCOLORSTATIC}:
             control = int(lparam)
-            surface_controls = {self.status_label, self.timer_label}
-            brush = self.surface_brush if message == WM_CTLCOLORBTN or control in surface_controls else self.window_brush
-            background = THEME_SURFACE if brush == self.surface_brush else THEME_WINDOW
+            if control == self.status_border:
+                state_color = THEME_STATE_COLORS.get(self.export_status.state, THEME_BORDER)
+                brush = self.status_brushes.get(self.export_status.state, self.status_brushes["idle"])
+                background = state_color
+            else:
+                surface_controls = {self.status_label}
+                brush = self.surface_brush if message == WM_CTLCOLORBTN or control in surface_controls else self.window_brush
+                background = THEME_SURFACE if brush == self.surface_brush else THEME_WINDOW
             foreground = THEME_MUTED_TEXT if control in {self.show_label, self.filter_summary} else THEME_TEXT
             gdi32.SetTextColor(wparam, colorref(foreground))
             gdi32.SetBkColor(wparam, colorref(background))
@@ -988,7 +1011,7 @@ class FoundryOutputWindow:
                 return 0
             if command == BUTTON_CANCEL:
                 process_count = cancel_active_tool_processes(self.arguments.parent_pid)
-                blender_phase_active = self.export_status.started_at is not None and not self.export_status.finished
+                blender_phase_active = self.export_status.state == "active"
                 cancellation_requested = False
                 if process_count or blender_phase_active:
                     cancellation_requested = request_cooperative_cancel(self.arguments.cancel)
@@ -1045,6 +1068,10 @@ class FoundryOutputWindow:
                 if brush:
                     gdi32.DeleteObject(brush)
                     setattr(self, brush_name, None)
+            for brush in self.status_brushes.values():
+                if brush:
+                    gdi32.DeleteObject(brush)
+            self.status_brushes.clear()
             user32.PostQuitMessage(0)
             return 0
         return user32.DefWindowProcW(hwnd, message, wparam, lparam)

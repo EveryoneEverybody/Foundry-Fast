@@ -932,6 +932,7 @@ class NWO_OT_ConvertScene(bpy.types.Operator):
         if user_cancelled:
             self.report({'WARNING'}, "Cancelled by user")
         elif failed:
+            utils.print_error("IMPORT FAILED")
             self.report({'WARNING'}, "Import failed")
         else:
             print("\n-----------------------------------------------------------------------")
@@ -2180,6 +2181,7 @@ class NWO_Import(bpy.types.Operator):
         if self.user_cancelled:
             self.report({'WARNING'}, "Import cancelled by user")
         elif failed:
+            utils.print_error("IMPORT FAILED")
             self.report({'WARNING'}, "Import failed")
         elif self.nothing_imported:
             print("No Folders/Filepaths supplied")
