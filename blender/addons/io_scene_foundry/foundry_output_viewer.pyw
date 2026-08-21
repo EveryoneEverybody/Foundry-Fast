@@ -132,6 +132,21 @@ FAILURE_LINE = re.compile(
 SECTION_LINE = re.compile(r"^[-=]{8,}$")
 WARNING_LINE = re.compile(r"^(?:\[?warning\]?|warn)\s*[:\-]", re.IGNORECASE)
 ERROR_LINE = re.compile(r"^(?:\[?error\]?|fatal(?: error)?|critical|traceback|exception)\b", re.IGNORECASE)
+TRACEBACK_START_LINE = re.compile(
+    r"(?:^|:\s*)[+|]?\s*(?:Exception Group )?Traceback \(most recent call last\):$",
+    re.IGNORECASE,
+)
+TRACEBACK_CHAIN_LINE = re.compile(
+    r"^(?:During handling of the above exception, another exception occurred:|"
+    r"The above exception was the direct cause of the following exception:)$",
+    re.IGNORECASE,
+)
+TRACEBACK_END_LINE = re.compile(
+    r"^(?:[+|]\s*)*(?:[A-Za-z_][\w.]*\.)*(?:[A-Za-z_]\w*(?:Error|Exception|Interrupt)|"
+    r"KeyboardInterrupt|SystemExit|GeneratorExit|ExceptionGroup|BaseExceptionGroup|"
+    r"StopIteration|StopAsyncIteration)(?::|$)",
+)
+FATAL_PYTHON_LINE = re.compile(r"^Fatal Python error:\s*", re.IGNORECASE)
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -460,6 +475,11 @@ class BonoboOutput:
         self.pending_carriage_return = False
         self.last_source = ""
         self.current_section = "General"
+        self.traceback_active = False
+        self.traceback_chain_pending = False
+        self.has_traceback = False
+        self.traceback_number = 0
+        self.traceback_label = "Traceback"
         self.total_characters = 0
 
     @staticmethod
@@ -615,6 +635,39 @@ class BonoboOutput:
                 self._add_entry(entry)
             return
         clean_text = ANSI_ESCAPE.sub("", raw_text)
+        stripped_text = clean_text.strip()
+        traceback_start = bool(TRACEBACK_START_LINE.search(stripped_text))
+        traceback_chain = bool(TRACEBACK_CHAIN_LINE.match(stripped_text))
+        fatal_python = bool(FATAL_PYTHON_LINE.match(stripped_text))
+
+        if traceback_start or fatal_python:
+            self.traceback_active = True
+            self.traceback_chain_pending = False
+            self.has_traceback = True
+            self.traceback_number += 1
+            self.traceback_label = "Traceback" if self.traceback_number == 1 else f"Traceback {self.traceback_number}"
+        elif self.traceback_chain_pending:
+            if not stripped_text:
+                self._add_entry(LogEntry(clean_text))
+                return
+            if traceback_chain:
+                self._add_entry(LogEntry(
+                    clean_text, "error", self._diagnostic_context((self.traceback_label,))
+                ))
+                return
+            self.traceback_chain_pending = False
+
+        if self.traceback_active:
+            if not stripped_text:
+                self._add_entry(LogEntry(clean_text))
+            else:
+                self._add_entry(LogEntry(
+                    clean_text, "error", self._diagnostic_context((self.traceback_label,))
+                ))
+                if TRACEBACK_END_LINE.match(stripped_text):
+                    self.traceback_active = False
+                    self.traceback_chain_pending = True
+            return
         level = self._plain_level(raw_text, clean_text)
         context, message = self._plain_context(clean_text)
         if SECTION_LINE.match(clean_text) and self.entries:
@@ -632,6 +685,7 @@ class BonoboOutput:
         if self._filter_level(level) in {"warning", "error"}:
             context = self._diagnostic_context(context)
         self._add_entry(LogEntry(clean_text, level, context, message, bold=level in {"status", "success"}))
+
     def _add_entry(self, entry):
         if self.entries and not self.entries[-1].has_newline:
             previous = self.entries[-1]
@@ -728,7 +782,7 @@ class BonoboOutput:
                     ))
                     if not collapsed:
                         append_node(child, depth + 1, child_path)
-                for message, count in sorted(node.get("_messages", [])):
+                for message, count in node.get("_messages", []):
                     suffix = f" (x{count})" if count > 1 else ""
                     result.append(LogEntry(f"{'  ' * depth}- {message}{suffix}", severity))
 
@@ -773,7 +827,11 @@ class ExportStatus:
     def _finish_line(self):
         line = self.current_line.strip()
         self.current_line = ""
-        if FAILURE_LINE.search(line):
+        if TRACEBACK_START_LINE.search(line) or FATAL_PYTHON_LINE.match(line):
+            self.status = "Python crash / traceback — see Messages"
+            self.state = "failed"
+            self.finished = True
+        elif FAILURE_LINE.search(line):
             self.status = line.title() if CANCELLED_LINE.match(line) else line
             self.state = "failed"
             self.finished = True
@@ -785,7 +843,7 @@ class ExportStatus:
             heading = self.previous_line.strip()
             if heading and not SECTION_LINE.match(heading):
                 completed = EXPORT_COMPLETE_LINE.match(heading)
-                if completed:
+                if completed and not self.finished:
                     self.status = heading
                     self.completed_duration = completed.group(1)
                     self.state = "success"
@@ -800,6 +858,10 @@ class ExportStatus:
 class FoundryOutputWindow:
     def __init__(self, arguments):
         self.arguments = arguments
+        self.parent_process = kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, self.arguments.parent_pid
+        )
+        self.parent_exit_handled = False
         self.sources = OutputSources(arguments.log, arguments.watch)
         self.output = BonoboOutput()
         self.export_status = ExportStatus()
@@ -833,17 +895,13 @@ class FoundryOutputWindow:
         }
         self.window_proc = WNDPROC(self._window_proc)
 
-    def _parent_is_alive(self):
-        process = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, self.arguments.parent_pid)
-        if not process:
-            return False
-        try:
-            exit_code = wintypes.DWORD()
-            if not kernel32.GetExitCodeProcess(process, ctypes.byref(exit_code)):
-                return False
-            return exit_code.value == STILL_ACTIVE
-        finally:
-            kernel32.CloseHandle(process)
+    def _parent_exit_code(self):
+        if not self.parent_process:
+            return None
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(self.parent_process, ctypes.byref(exit_code)):
+            return None
+        return exit_code.value
 
     def _create_controls(self, hwnd):
         self.edit = user32.CreateWindowExW(
@@ -1077,6 +1135,10 @@ class FoundryOutputWindow:
             self.output.feed(text, source)
             if source == "Foundry":
                 self.export_status.feed(text)
+        if self.output.has_traceback and self.export_status.state != "failed":
+            self.export_status.status = "Python crash / traceback — see Messages"
+            self.export_status.state = "failed"
+            self.export_status.finished = True
         if chunks:
             self._render_output()
         self._update_status_controls()
@@ -1159,13 +1221,31 @@ class FoundryOutputWindow:
                 self._render_output()
                 return 0
         if message == WM_TIMER and wparam == TIMER_ID:
-            if not self._parent_is_alive():
-                user32.DestroyWindow(hwnd)
+            self._update_output()
+            exit_code = self._parent_exit_code()
+            if exit_code == STILL_ACTIVE:
                 return 0
             self._update_output()
+            if exit_code not in {None, 0}:
+                if not self.parent_exit_handled:
+                    self.parent_exit_handled = True
+                    crash_message = f"Blender exited unexpectedly (exit code 0x{exit_code:08X})"
+                    self.export_status.status = crash_message
+                    self.export_status.state = "failed"
+                    self.export_status.finished = True
+                    self.output._add_entry(LogEntry(crash_message, "error", ("Blender",)))
+                    self._render_output()
+                    self._update_status_controls()
+                    user32.EnableWindow(self.cancel_button, False)
+                    user32.KillTimer(hwnd, TIMER_ID)
+                return 0
+            user32.DestroyWindow(hwnd)
             return 0
         if message == WM_DESTROY:
             user32.KillTimer(hwnd, TIMER_ID)
+            if self.parent_process:
+                kernel32.CloseHandle(self.parent_process)
+                self.parent_process = None
             if self.font:
                 gdi32.DeleteObject(self.font)
             if self.icon:
