@@ -15,6 +15,7 @@ from ...props.scene import NWO_AnimationBlendAxisItems, NWO_AnimationGroupItems,
 from ... import constants
 from ... import utils
 from ...icons import get_icon_id
+from ...tools.animation import animation_name
 
 pose_hints = 'aim', 'look', 'acc', 'steer', 'pain'
 IK_PREVIEW_CONSTRAINT_NAME = "Foundry IK Preview"
@@ -1935,6 +1936,7 @@ class NWO_OT_SetTimeline(bpy.types.Operator):
     #     layout.prop(self, 'exclude_first_frame', text="Exclude First Frame")
     #     layout.prop(self, 'exclude_last_frame', text="Exclude Last Frame")
 
+@animation_name.reuse_animation_name_properties
 class NWO_OT_NewAnimation(bpy.types.Operator):
     bl_label = "New Animation"
     bl_idname = "nwo.new_animation"
@@ -2151,8 +2153,10 @@ class NWO_OT_NewAnimation(bpy.types.Operator):
         self.fp_animation = utils.poll_ui(("animation",)) and utils.get_scene_props().asset_animation_type == 'first_person'
         if self.fp_animation:
             self.mode = "first_person"
+            self.name_type = "first_person"
 
     def execute(self, context):
+        animation_name.release_animation_name_editor(self)
         scene_nwo = utils.get_scene_props()
         # Create the animation
         current_animation = None
@@ -2221,19 +2225,27 @@ class NWO_OT_NewAnimation(bpy.types.Operator):
         animation.animation_space = self.animation_space
 
         # record the inputs from this operator
-        animation.state_type = self.state_type
+        animation.state_type = (
+            self.name_type
+            if self.name_type in {"action", "transition", "damage", "custom"}
+            else "action"
+        )
         animation.custom = self.custom
         animation.mode = self.mode
         animation.weapon_class = self.weapon_class
         animation.weapon_type = self.weapon_type
-        animation.set = self.set
+        animation.set = self.set_name
         animation.state = self.state
         animation.destination_mode = self.destination_mode
         animation.destination_state = self.destination_state
-        animation.damage_power = self.damage_power
+        animation.damage_power = "hard" if self.damage_power == "h" else "soft"
         animation.damage_type = self.damage_type
         animation.damage_direction = self.damage_direction
-        animation.damage_region = self.damage_region
+        animation.damage_region = {
+            "l_arm": "leftarm", "l_hand": "lefthand", "l_leg": "leftleg",
+            "l_foot": "leftfoot", "r_arm": "rightarm", "r_hand": "righthand",
+            "r_leg": "rightleg", "r_foot": "rightfoot",
+        }.get(self.damage_region, self.damage_region)
         animation.variant = self.variant
 
         animation.created_with_foundry = True
@@ -2243,8 +2255,14 @@ class NWO_OT_NewAnimation(bpy.types.Operator):
         return {"FINISHED"}
 
     def invoke(self, context, event):
+        if self.fp_animation:
+            self.name_type = "first_person"
+        animation_name.prepare_animation_name_editor(self)
         wm = context.window_manager
         return wm.invoke_props_dialog(self)
+
+    def cancel(self, context):
+        animation_name.release_animation_name_editor(self)
 
     def draw(self, context):
         layout = self.layout
@@ -2276,40 +2294,16 @@ class NWO_OT_NewAnimation(bpy.types.Operator):
         col.prop(self, "frame_start", text="First Frame")
         col.prop(self, "frame_end", text="Last Frame")
         # col.prop(self, "keep_current_pose")
-        self.draw_name(layout)
+        self.draw_name(layout, context)
 
-    def draw_name(self, layout, ignore_fp=False):
-        if self.fp_animation and not ignore_fp:
-            layout.prop(self, "state", text="State")
-            layout.prop(self, "variant")
-        else:
-            layout.label(text="Animation Name")
-            col = layout.column()
-            col.use_property_split = True
-            col.prop(self, "state_type", text="State Type")
-            is_damage = self.state_type == "damage"
-            if self.state_type == "custom":
-                col.prop(self, "custom")
-            else:
-                col.prop(self, "mode")
-                col.prop(self, "weapon_class")
-                col.prop(self, "weapon_type")
-                col.prop(self, "set")
-                if not is_damage:
-                    col.prop(self, "state", text="State")
-
-                if self.state_type == "transition":
-                    col.prop(self, "destination_mode")
-                    col.prop(self, "destination_state", text="Destination State")
-                elif is_damage:
-                    col.prop(self, "damage_power")
-                    col.prop(self, "damage_type")
-                    col.prop(self, "damage_direction")
-                    col.prop(self, "damage_region")
-
-                col.prop(self, "variant")
+    def draw_name(self, layout, context):
+        layout.label(text="Animation Name")
+        animation_name.draw_animation_name_fields(self, layout.column(), context)
 
     def create_name(self):
+        return animation_name.build_animation_name_from_editor(self)
+
+    def _create_name_legacy(self):
         bad_chars = " :_,-"
         # Strip bad chars from inputs
         mode = self.mode.strip(bad_chars)
@@ -2766,7 +2760,7 @@ class NWO_OT_List_Add_Animation_Rename(bpy.types.Operator):
         rename.name = animation.name
         context.area.tag_redraw()
 
-        return {"FINISHED"}
+        return bpy.ops.nwo.set_animation_name("INVOKE_DEFAULT", target="rename")
 
 class NWO_OT_List_Remove_Animation_Rename(bpy.types.Operator):
     """Remove an Item from the UIList"""

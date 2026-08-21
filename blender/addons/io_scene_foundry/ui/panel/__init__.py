@@ -1588,6 +1588,8 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
             col = row.column(align=True)
             col.operator("nwo.animation_rename_add", text="", icon="ADD")
             col.operator("nwo.animation_rename_remove", icon="REMOVE", text="")
+            edit = col.operator("nwo.set_animation_name", text="", icon="GREASEPENCIL")
+            edit.target = "rename"
             col.separator()
             col.operator("nwo.animation_rename_move", text="", icon="TRIA_UP").direction = 'up'
             col.operator("nwo.animation_rename_move", icon="TRIA_DOWN", text="").direction = 'down'
@@ -3759,6 +3761,7 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         col = row.column(align=True)
         col.operator("nwo.new_animation", icon="ADD", text="")
         col.operator("nwo.delete_animation", icon="REMOVE", text="")
+        col.operator("nwo.set_animation_name", icon_value=get_icon_id("animation_rename"), text="")
         col.separator()
         col.operator("nwo.unlink_animation", icon="X", text="")
         col.separator()
@@ -3937,6 +3940,8 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
         col = row.column(align=True)
         col.operator("nwo.animation_rename_add", text="", icon="ADD")
         col.operator("nwo.animation_rename_remove", icon="REMOVE", text="")
+        edit = col.operator("nwo.set_animation_name", text="", icon="GREASEPENCIL")
+        edit.target = "rename"
         col.separator()
         col.operator("nwo.animation_rename_move", text="", icon="TRIA_UP").direction = 'up'
         col.operator("nwo.animation_rename_move", icon="TRIA_DOWN", text="").direction = 'down'

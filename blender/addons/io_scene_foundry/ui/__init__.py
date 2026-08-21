@@ -1,6 +1,7 @@
 import bpy
 from . import bar, node_editor, outliner, viewport, panel, timeline, properties
 from .panel import animation, asset, help, material, object, scene, sets, setting, tools, cinematic, light
+from ..tools.animation import animation_name
 
 _TOOLBAR_WATCHDOG_INTERVAL = 5.0
 _TOOLBAR_FORCE_REPAIR_TICKS = 12
@@ -143,6 +144,10 @@ classes = [
     animation.NWO_OT_ClearEvents,
     animation.NWO_OT_List_Add_Animation_Rename,
     animation.NWO_OT_List_Remove_Animation_Rename,
+    animation_name.NWO_OT_AnimationNameSetMode,
+    animation_name.NWO_MT_AnimationNameModePicker,
+    animation_name.NWO_MT_AnimationNameDestinationModePicker,
+    animation_name.NWO_OT_SetAnimationName,
     animation.NWO_OT_NewAnimation,
     animation.NWO_OT_AnimationRenameMove,
     animation.NWO_UL_AnimationRename,
@@ -344,6 +349,7 @@ def register():
     )
     
 def unregister():
+    animation_name.unregister_vehicle_mode_operators()
     del bpy.types.Scene.nwo_export
     bpy.types.VIEW3D_MT_object_parent.remove(object.draw_halo_attach)
     bpy.types.DOPESHEET_HT_header.remove(timeline.draw_cinematic_info)

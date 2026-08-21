@@ -2008,6 +2008,7 @@ class ExportScene:
                         controls, vector_events = self.create_event_objects(animation)
                         self.virtual_scene.add_animation(animation, controls=controls, shape_key_objects=shape_key_objects, vector_events=vector_events)
                         self.exported_animations.append(animation)
+                        utils.clear_animation(animation)
                         utils.update_job_count(process, "", idx, num_animations)
                     utils.update_job_count(process, "", num_animations, num_animations)
             else:
