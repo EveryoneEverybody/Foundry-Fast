@@ -18,7 +18,6 @@ import time
 import os
 import ctypes
 import traceback
-import logging
 
 from bpy_extras.io_utils import ExportHelper
 
@@ -358,11 +357,10 @@ class NWO_ExportScene(Operator, ExportHelper):
             
             except Exception as e:
                 if isinstance(e, RuntimeError):
-                    # logging.error(traceback.format_exc())
                     self.fail_explanation = traceback.format_exception_only(e)[0][14:]
                 else:
                     print_error("\n\nException hit. Please include in report\n")
-                    logging.error(traceback.format_exc())
+                    traceback.print_exc()
                     self.failed = True
 
             # validate that a sidecar file exists

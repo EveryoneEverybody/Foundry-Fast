@@ -2,7 +2,6 @@
 
 from collections import defaultdict
 from enum import Enum
-import logging
 from math import radians
 import os
 from pathlib import Path, PureWindowsPath
@@ -916,11 +915,10 @@ class NWO_OT_ConvertScene(bpy.types.Operator):
             except Exception as e:
                 failed = True
                 if isinstance(e, RuntimeError):
-                    # logging.error(traceback.format_exc())
                     utils.print_warning(traceback.format_exception_only(e)[0][14:])
                 else:
                     utils.print_error("\n\nException hit. Please include in report\n")
-                    logging.error(traceback.format_exc())
+                    traceback.print_exc()
                     print("FOUNDRY VERSION: ", utils.get_version_string())
                     utils.print_warning(
                         "Import failed spectacularly. Please let the developer know: https://github.com/ILoveAGoodCrisp/Foundry/issues\n"
@@ -2164,11 +2162,10 @@ class NWO_Import(bpy.types.Operator):
             except Exception as e:
                 failed = True
                 if isinstance(e, RuntimeError):
-                    # logging.error(traceback.format_exc())
                     utils.print_warning(traceback.format_exception_only(e)[0][14:])
                 else:
                     utils.print_error("\n\nException hit. Please include in report\n")
-                    logging.error(traceback.format_exc())
+                    traceback.print_exc()
                     print("FOUNDRY VERSION: ", utils.get_version_string())
                     utils.print_warning(
                         "Import failed spectacularly. Please let the developer know: https://github.com/ILoveAGoodCrisp/Foundry/issues\n"
