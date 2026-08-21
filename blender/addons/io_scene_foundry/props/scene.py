@@ -3382,6 +3382,7 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
     scenario_expanded: bpy.props.BoolProperty(default=False, options=set())
     lighting_expanded: bpy.props.BoolProperty(default=False, options=set())
     decorators_expanded: bpy.props.BoolProperty(default=False, options=set())
+    airprobes_expanded: bpy.props.BoolProperty(default=False, options=set())
     # zone_sets_expanded: bpy.props.BoolProperty(default=False, options=set())
     objects_expanded: bpy.props.BoolProperty(default=False, options=set())
     prefabs_expanded: bpy.props.BoolProperty(default=False, options=set())
@@ -3583,6 +3584,12 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
     decorators_export_on_save : bpy.props.BoolProperty(
         name="Export Decorators on Blender Save",
         description="Exports all decorators from Blender whenever the Blend file is saved",
+    )
+
+    airprobes_export_on_save: bpy.props.BoolProperty(
+        name="Export Airprobes on Blender Save",
+        description="Exports all airprobes from Blender whenever the Blend file is saved",
+        default=False,
     )
     
     # object_sync_active : bpy.props.BoolProperty(
@@ -4126,6 +4133,13 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
         name="Decorators Authored From Blender",
         options=set(),
         description="On export the scenario decorators block will be overwritten and generated using the decorators present in Blender. Don't enable this if you intend to paint decorators in Sapien"
+    )
+
+    airprobes_from_blender: bpy.props.BoolProperty(
+        name="Airprobes Authored From Blender",
+        options=set(),
+        description="On export the scenario airprobes block will be overwritten and generated using the airprobes present in Blender",
+        default=False,
     )
     
     decorators_from_blender_child_scenario: bpy.props.StringProperty(

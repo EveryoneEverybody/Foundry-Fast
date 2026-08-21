@@ -37,6 +37,7 @@ from ..tools.scenario.lightmap import run_lightmapper
 
 from ..tools.light_exporter import export_lights
 from ..tools.decorator_exporter import export_decorators
+from ..tools.airprobe_exporter import export_airprobes
 
 # from ..tools.scenario.zone_sets import write_zone_sets_to_scenario
 
@@ -3309,6 +3310,10 @@ class ExportScene:
             if self.decorators:
                 self.print_post(f"--- Writing {len(self.decorators)} decorator placement{'s' if len(self.decorators) > 1 else ''}")
                 export_decorators(self.corinth, self.decorators)
+
+        if self.export_settings.export_structure and self.scene_settings.airprobes_from_blender and not self.corinth and self.asset_type == AssetType.SCENARIO:
+            self.print_post(f"--- Writing {len(self.airprobes)} airprobe{'s' if len(self.airprobes) != 1 else ''}")
+            export_airprobes(self.airprobes)
                 
         # H4 skies get their lighting info added to the scenery tag
         if self.corinth and self.asset_type == AssetType.SKY:

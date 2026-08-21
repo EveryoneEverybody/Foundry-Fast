@@ -1211,8 +1211,8 @@ class NWO_MT_MarkerTypes(bpy.types.Menu):
         if utils.poll_ui(("scenario", "prefab")):
             layout.operator('nwo.apply_type_marker_single', text='Structure Marker', icon_value=get_icon_id('marker')).m_type = 'model'
             layout.operator('nwo.apply_type_marker_single', text='Game Object', icon_value=get_icon_id('game_object')).m_type = 'game_instance'
+            layout.operator('nwo.apply_type_marker_single', text='Airprobe', icon_value=get_icon_id('airprobe')).m_type = 'airprobe'
             if h4:
-                layout.operator('nwo.apply_type_marker_single', text='Airprobe', icon_value=get_icon_id('airprobe')).m_type = 'airprobe'
                 layout.operator('nwo.apply_type_marker_single', text='Light Cone', icon_value=get_icon_id('light_cone')).m_type = 'lightcone'
 
 class NWO_OT_FaceDefaultsToggle(bpy.types.Operator):

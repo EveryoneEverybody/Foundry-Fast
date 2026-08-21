@@ -6,6 +6,7 @@ import bpy
 from .tools.light_exporter import export_lights
 from .tools.prefab_exporter import export_prefabs
 from .tools.decorator_exporter import export_decorators
+from .tools.airprobe_exporter import export_airprobes
 
 from . import managed_blam
 from . import utils
@@ -234,6 +235,15 @@ def save_object_positions_to_tags(dummy):
     ):
         print("Exporting Decorators")
         export_decorators(utils.is_corinth(bpy.context))
+
+    if (
+        nwo.airprobes_export_on_save
+        and asset_type == 'scenario'
+        and nwo.airprobes_from_blender
+        and not utils.is_corinth()
+    ):
+        print("Exporting Airprobes")
+        export_airprobes()
 
 
 @persistent

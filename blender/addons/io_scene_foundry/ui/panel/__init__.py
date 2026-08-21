@@ -549,6 +549,8 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
                 # self.draw_expandable_box(self.box.box(), nwo, 'zone_sets')
                 self.draw_expandable_box(self.box.box(), nwo, 'lighting')
                 self.draw_expandable_box(self.box.box(), nwo, 'decorators')
+                if not self.h4:
+                    self.draw_expandable_box(self.box.box(), nwo, 'airprobes')
                 # self.draw_expandable_box(self.box.box(), nwo, 'objects')
                 if self.h4:
                     self.draw_expandable_box(self.box.box(), nwo, 'prefabs')
@@ -885,6 +887,15 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
             return
         box_decorators.operator("nwo.export_decorators", icon='EXPORT')
         box_decorators.prop(nwo, "decorators_export_on_save")
+
+    def draw_airprobes(self, box: bpy.types.UILayout, nwo):
+        box_airprobes = box.box()
+        box_airprobes.label(text="Airprobes")
+        box_airprobes.prop(nwo, "airprobes_from_blender")
+        if not nwo.airprobes_from_blender:
+            return
+        box_airprobes.operator("nwo.export_airprobes", icon='EXPORT')
+        box_airprobes.prop(nwo, "airprobes_export_on_save")
         
     def draw_lighting(self, box: bpy.types.UILayout, nwo):
         box_lights = box.box()
@@ -1712,7 +1723,7 @@ class NWO_FoundryPanelProps(bpy.types.Panel):
             grid.prop(nwo, "connected_geometry_marker_type_physics_constraint_visible", text="", icon_value=get_icon_id("physics_constraint") if nwo.connected_geometry_marker_type_physics_constraint_visible else get_icon_id("physics_constraint_off"), emboss=False)
             grid.prop(nwo, "connected_geometry_marker_type_target_visible", text="", icon_value=get_icon_id("target") if nwo.connected_geometry_marker_type_target_visible else get_icon_id("target_off"), emboss=False)
                 
-        if utils.poll_ui(('model', 'scenario', 'multi_model')) and self.h4:
+        if (self.h4 and utils.poll_ui(('model', 'scenario', 'multi_model'))) or utils.poll_ui(('scenario', 'prefab', 'resource', 'multi_prefab')):
             grid.prop(nwo, "connected_geometry_marker_type_airprobe_visible", text="", icon_value=get_icon_id("airprobe") if nwo.connected_geometry_marker_type_airprobe_visible else get_icon_id("airprobe_off"), emboss=False)
         if asset_type == 'scenario':
             grid.prop(nwo, "connected_geometry_marker_type_game_instance_visible", text="", icon_value=get_icon_id("game_object") if nwo.connected_geometry_marker_type_game_instance_visible else get_icon_id("game_object_off"), emboss=False)

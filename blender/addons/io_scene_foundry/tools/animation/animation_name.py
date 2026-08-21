@@ -500,6 +500,19 @@ def build_animation_name_from_editor(operator) -> str:
     )
 
 
+ANIMATION_NAME_PICKER_MENUS = {
+    "mode_picker": "NWO_MT_AnimationNameModePicker",
+    "weapon_class_picker": "NWO_MT_AnimationNameWeaponClassPicker",
+    "weapon_type_picker": "NWO_MT_AnimationNameWeaponTypePicker",
+    "set_picker": "NWO_MT_AnimationNameSetPicker",
+    "state_picker": "NWO_MT_AnimationNameStatePicker",
+    "bunker_set_picker": "NWO_MT_AnimationNameBunkerSetPicker",
+    "bunker_state_picker": "NWO_MT_AnimationNameBunkerStatePicker",
+    "destination_mode_picker": "NWO_MT_AnimationNameDestinationModePicker",
+    "destination_state_picker": "NWO_MT_AnimationNameDestinationStatePicker",
+}
+
+
 def _draw_shared_graph_value(
     operator,
     layout,
@@ -512,12 +525,7 @@ def _draw_shared_graph_value(
         row.prop(operator, value_property)
     else:
         row.prop(operator, value_property, text=text)
-    if picker_property == "mode_picker":
-        row.menu("NWO_MT_AnimationNameModePicker", text="", icon="DOWNARROW_HLT")
-    elif picker_property == "destination_mode_picker":
-        row.menu("NWO_MT_AnimationNameDestinationModePicker", text="", icon="DOWNARROW_HLT")
-    else:
-        row.prop(operator, picker_property, text="", icon_only=True)
+    row.menu(ANIMATION_NAME_PICKER_MENUS[picker_property], text="", icon="DOWNARROW_HLT")
 
 
 def draw_animation_name_fields(operator, layout, context):
@@ -642,6 +650,39 @@ class NWO_OT_AnimationNameSetMode(bpy.types.Operator):
         return _execute_animation_name_mode_operator(self, context)
 
 
+class NWO_OT_AnimationNameSetGraphValue(bpy.types.Operator):
+    bl_idname = "nwo.animation_name_set_graph_value"
+    bl_label = "Set Animation Graph Value"
+    bl_description = "Set a predefined value on the open animation name editor"
+
+    value: bpy.props.StringProperty(options={"HIDDEN"})
+    target_property: bpy.props.StringProperty(options={"HIDDEN"})
+    description_text: bpy.props.StringProperty(options={"HIDDEN"})
+
+    @classmethod
+    def description(cls, context, properties):
+        return properties.description_text or cls.bl_description
+
+    @classmethod
+    def poll(cls, context):
+        return active_animation_name_editor is not None
+
+    def execute(self, context):
+        if self.target_property not in {
+            "weapon_class", "weapon_type", "set_name", "state", "destination_state"
+        }:
+            return {"CANCELLED"}
+
+        try:
+            setattr(active_animation_name_editor, self.target_property, self.value)
+        except (AttributeError, ReferenceError):
+            return {"CANCELLED"}
+
+        if context.area is not None:
+            context.area.tag_redraw()
+        return {"FINISHED"}
+
+
 def _ensure_vehicle_mode_operators():
     if vehicle_mode_operator_ids:
         return
@@ -744,6 +785,97 @@ class NWO_MT_AnimationNameDestinationModePicker(bpy.types.Menu):
 
     def draw(self, context):
         _draw_animation_name_mode_menu(self.layout, "destination_mode")
+
+
+def _draw_animation_name_value_menu(layout, target_property: str, items):
+    for item in items:
+        if item is None:
+            layout.separator()
+            continue
+
+        identifier, label, description = item
+        if identifier == PICKER_PLACEHOLDER[0]:
+            continue
+        if not identifier:
+            layout.label(text=label)
+            continue
+
+        operator = layout.operator("nwo.animation_name_set_graph_value", text=label)
+        operator.value = identifier
+        operator.target_property = target_property
+        operator.description_text = description
+
+
+class NWO_MT_AnimationNameWeaponClassPicker(bpy.types.Menu):
+    bl_idname = "NWO_MT_AnimationNameWeaponClassPicker"
+    bl_label = "Weapon Class Options"
+
+    def draw(self, context):
+        _draw_animation_name_value_menu(
+            self.layout, "weapon_class", _get_external_graph_info().weapon_class_items
+        )
+
+
+class NWO_MT_AnimationNameWeaponTypePicker(bpy.types.Menu):
+    bl_idname = "NWO_MT_AnimationNameWeaponTypePicker"
+    bl_label = "Weapon Type Options"
+
+    def draw(self, context):
+        _draw_animation_name_value_menu(
+            self.layout, "weapon_type", _get_external_graph_info().weapon_type_items
+        )
+
+
+class NWO_MT_AnimationNameSetPicker(bpy.types.Menu):
+    bl_idname = "NWO_MT_AnimationNameSetPicker"
+    bl_label = "Set Options"
+
+    def draw(self, context):
+        _draw_animation_name_value_menu(
+            self.layout, "set_name", _get_external_graph_info().set_items
+        )
+
+
+class NWO_MT_AnimationNameStatePicker(bpy.types.Menu):
+    bl_idname = "NWO_MT_AnimationNameStatePicker"
+    bl_label = "State Options"
+
+    def draw(self, context):
+        _draw_animation_name_value_menu(
+            self.layout, "state", _get_external_graph_info().state_items
+        )
+
+
+class NWO_MT_AnimationNameBunkerSetPicker(bpy.types.Menu):
+    bl_idname = "NWO_MT_AnimationNameBunkerSetPicker"
+    bl_label = "Bunker Set Options"
+
+    def draw(self, context):
+        _draw_animation_name_value_menu(self.layout, "set_name", BUNKER_SET_OPTIONS)
+
+
+class NWO_MT_AnimationNameBunkerStatePicker(bpy.types.Menu):
+    bl_idname = "NWO_MT_AnimationNameBunkerStatePicker"
+    bl_label = "Bunker State Options"
+
+    def draw(self, context):
+        if active_animation_name_editor is None:
+            return
+        _draw_animation_name_value_menu(
+            self.layout,
+            "state",
+            _bunker_state_picker_items(active_animation_name_editor, context),
+        )
+
+
+class NWO_MT_AnimationNameDestinationStatePicker(bpy.types.Menu):
+    bl_idname = "NWO_MT_AnimationNameDestinationStatePicker"
+    bl_label = "Destination State Options"
+
+    def draw(self, context):
+        _draw_animation_name_value_menu(
+            self.layout, "destination_state", _get_external_graph_info().state_items
+        )
 
 
 class NWO_OT_SetAnimationName(bpy.types.Operator):
@@ -1019,12 +1151,7 @@ class NWO_OT_SetAnimationName(bpy.types.Operator):
             row.prop(self, value_property)
         else:
             row.prop(self, value_property, text=text)
-        if picker_property == "mode_picker":
-            row.menu("NWO_MT_AnimationNameModePicker", text="", icon="DOWNARROW_HLT")
-        elif picker_property == "destination_mode_picker":
-            row.menu("NWO_MT_AnimationNameDestinationModePicker", text="", icon="DOWNARROW_HLT")
-        else:
-            row.prop(self, picker_property, text="", icon_only=True)
+        row.menu(ANIMATION_NAME_PICKER_MENUS[picker_property], text="", icon="DOWNARROW_HLT")
 
     def draw(self, context):
         layout = self.layout

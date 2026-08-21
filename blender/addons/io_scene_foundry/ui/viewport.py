@@ -516,9 +516,9 @@ class NWO_OT_ApplyTypeMarker(bpy.types.Operator):
             items.append(
                 utils.nwo_enum("game_instance", "Game Object", "", "game_object", index)
             ),
+            index += 1
+            items.append(utils.nwo_enum("airprobe", "Air Probe", "", "airprobe", index)),
             if not reach:
-                index += 1
-                items.append(utils.nwo_enum("airprobe", "Air Probe", "", "airprobe", index)),
                 index += 1
                 items.append(
                     utils.nwo_enum("envfx", "Environment Effect", "", "environment_effect", index)
