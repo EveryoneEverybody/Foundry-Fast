@@ -255,10 +255,10 @@ def _get_external_graph_info() -> ExternalGraphInfo:
                     with ObjectTag(path=path) as weapon:
                         rel_path = weapon.tag_path.RelativePathWithExtension
                         weapon_class = weapon.tag.SelectField(
-                            "Struct:weapon[0]/StringId:weapon class"
+                            "StringId:weapon class"
                         ).GetStringData()
                         weapon_type = weapon.tag.SelectField(
-                            "Struct:weapon[0]/StringId:weapon name"
+                            "StringId:weapon name"
                         ).GetStringData()
                         if weapon_class:
                             info.weapon_classes[weapon_class].add(rel_path)
