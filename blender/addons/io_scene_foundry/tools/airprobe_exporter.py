@@ -74,12 +74,14 @@ def _airprobe_items(airprobe_objects):
     if hasattr(airprobe_objects, "items"):
         return airprobe_objects.items()
 
-    return ((ob, ob.name) for ob in airprobe_objects)
+    return [(ob, ob.name) for ob in airprobe_objects]
 
 
 def _write_airprobes(airprobes, airprobe_objects):
     airprobes.RemoveAllElements()
-    for ob, name in _airprobe_items(airprobe_objects):
+    if len(airprobe_objects) > 512:
+        utils.print_warning(f"More than 512 airprobes found [Total {len(airprobe_objects)}]. Exported first 512 only")
+    for ob, name in _airprobe_items(airprobe_objects)[:512]:
         element = airprobes.AddElement()
         matrix = utils.halo_transforms_matrix(ob.matrix_world)
         element.SelectField("airprobe position").Data = matrix.translation
