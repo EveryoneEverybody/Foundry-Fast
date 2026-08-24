@@ -2,6 +2,7 @@ from collections import Counter, defaultdict
 import copy
 import ctypes
 from enum import Enum, IntEnum, auto
+from functools import partial
 import itertools
 import json
 from math import radians
@@ -1958,11 +1959,11 @@ def read_projects_list() -> list:
     foundry_folder = os.path.join(appdata, "Foundry")
 
     if not os.path.exists(foundry_folder):
-        return print("No Foundry Folder")
+        return projects_list
 
     projects = os.path.join(foundry_folder, "projects.json")
     if not os.path.exists(projects):
-        return print("No Foundry json")
+        return projects_list
     
     try:
         with open(projects, 'r') as file:
@@ -5190,13 +5191,35 @@ class MessageBox:
         if (self.mtype == MessageBoxType.YESNO or self.mtype == MessageBoxType.YESNOCXL) and result == 6:
             self.confirmed = True
             
-def set_foundry_panel_active():
+def set_foundry_panel_active(retries_remaining=10):
     '''Sets Foundry as the active panel'''
-    area = next((area for area in bpy.context.screen.areas if area.type == 'VIEW_3D'), None)
-    if area is not None:
-        tool_region = next((region for region in area.regions if region.type == 'UI'), None)
-        if tool_region is not None:
+    screen = getattr(bpy.context, "screen", None)
+    if screen is None:
+        return
+
+    area = next((area for area in screen.areas if area.type == 'VIEW_3D'), None)
+    if area is None:
+        return
+
+    tool_region = next((region for region in area.regions if region.type == 'UI'), None)
+    if tool_region is None:
+        return
+
+    # Blender builds this enum when the sidebar is drawn. Until then RNA reports
+    # the property as read-only, which is common on a slower Wine first launch.
+    if not tool_region.is_property_readonly("active_panel_category"):
+        try:
             tool_region.active_panel_category = "Foundry"
+            return
+        except (AttributeError, TypeError):
+            pass
+
+    area.tag_redraw()
+    if retries_remaining > 0:
+        bpy.app.timers.register(
+            partial(set_foundry_panel_active, retries_remaining - 1),
+            first_interval=0.1,
+        )
             
 def cut_out_mesh(ob: bpy.types.Object, cutter: bpy.types.Object):
     '''Cuts out mesh from the first object using the second'''

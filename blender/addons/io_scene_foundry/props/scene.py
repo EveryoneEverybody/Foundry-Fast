@@ -3951,7 +3951,7 @@ class NWO_ScenePropertiesGroup(PropertyGroup):
         if not bpy.data.filepath:
             return False
         project = utils.get_project(self.scene_project)
-        return project and bool(self.sidecar_path.strip())
+        return bool(project and self.sidecar_path.strip())
     
     is_valid_asset: bpy.props.BoolProperty(
         get=get_is_valid_asset,

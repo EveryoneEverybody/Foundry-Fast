@@ -188,20 +188,21 @@ def load_handler(dummy):
 
         # Validate ManagedBlam
         try:
-            project_path = Path(utils.get_project_path())
-
-            if not project_path.exists():
-                print(f"Project path does not exist: {project_path}")
+            project_path_value = utils.get_project_path()
+            if not project_path_value:
                 managed_blam.mb_operational = False
-                return
+            else:
+                project_path = Path(project_path_value)
+                mb_bin = project_path / "bin" / "managedblam.dll"
 
-            mb_bin = project_path / "bin" / "managedblam.dll"
-            if not mb_bin.exists():
-                print(f"ManagedBlam path missing: {mb_bin}")
-                managed_blam.mb_operational = False
-                return
-
-            managed_blam.mb_operational = True
+                if not project_path.exists():
+                    print(f"Project path does not exist: {project_path}")
+                    managed_blam.mb_operational = False
+                elif not mb_bin.exists():
+                    print(f"ManagedBlam path missing: {mb_bin}")
+                    managed_blam.mb_operational = False
+                else:
+                    managed_blam.mb_operational = True
 
         except Exception:
             managed_blam.mb_operational = False

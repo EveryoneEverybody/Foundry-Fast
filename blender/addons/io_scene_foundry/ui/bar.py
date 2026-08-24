@@ -1,4 +1,5 @@
 import multiprocessing
+from functools import partial
 from pathlib import Path
 import tempfile
 import bpy
@@ -55,14 +56,22 @@ def display_fading_text(text, position=(200, 200), size=50, fade_in_start=1, fad
     bpy.context.area.tag_redraw()
     bpy.ops.screen.animation_play()
     
-temp_area = None
-    
-def invoke_project_add():
-    try:
-        with bpy.context.temp_override(area=temp_area):
-            bpy.ops.nwo.project_add("INVOKE_DEFAULT")
-    except:
-        pass
+def invoke_project_add(window):
+    screen = getattr(window, "screen", None)
+    if screen is None:
+        return
+
+    area = next((area for area in screen.areas if area.type == "VIEW_3D"), None)
+    if area is None:
+        return
+
+    region = next((region for region in area.regions if region.type == "WINDOW"), None)
+    override = {"window": window, "area": area}
+    if region is not None:
+        override["region"] = region
+
+    with bpy.context.temp_override(**override):
+        bpy.ops.nwo.project_add("INVOKE_DEFAULT")
 
 class NWO_OT_StartFoundry(bpy.types.Operator):
     bl_idname = "nwo.launch_foundry"
@@ -79,15 +88,13 @@ class NWO_OT_StartFoundry(bpy.types.Operator):
         startup.load_set_output_state(context)
         startup.save_object_positions_to_tags(context)
         scene_nwo = utils.get_scene_props()
-        if context.space_data.type == 'VIEW_3D':
+        if context.space_data and context.space_data.type == 'VIEW_3D':
             context.space_data.show_region_ui = True
             
         bpy.app.timers.register(utils.set_foundry_panel_active, first_interval=0.01)
         projects = utils.get_prefs().projects
         if not projects:
-            global temp_area
-            temp_area = context.area
-            bpy.app.timers.register(invoke_project_add, first_interval=0.02)
+            bpy.app.timers.register(partial(invoke_project_add, context.window), first_interval=0.02)
         elif not scene_nwo.scene_project:
             scene_nwo.scene_project = projects[0].name
         # self.report({'INFO'}, "Welcome to Foundry!")
