@@ -58,8 +58,11 @@ def display_fading_text(text, position=(200, 200), size=50, fade_in_start=1, fad
 temp_area = None
     
 def invoke_project_add():
-    with bpy.context.temp_override(area=temp_area):
-        bpy.ops.nwo.project_add("INVOKE_DEFAULT")
+    try:
+        with bpy.context.temp_override(area=temp_area):
+            bpy.ops.nwo.project_add("INVOKE_DEFAULT")
+    except:
+        pass
 
 class NWO_OT_StartFoundry(bpy.types.Operator):
     bl_idname = "nwo.launch_foundry"
