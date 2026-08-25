@@ -48,6 +48,29 @@ def subscribe(owner):
 # Handlers
 # -----------------------------------------------------------------------------
 
+def load_projects():
+    """Reload persisted projects and ensure the current scene selects one."""
+    projects = utils.setup_projects_list()
+    if not getattr(bpy.context, "scene", None):
+        return projects
+
+    nwo = utils.get_scene_props()
+    blend_path = bpy.data.filepath
+    project_names = [p.name for p in projects]
+
+    if projects and (not nwo.scene_project or nwo.scene_project not in project_names):
+        if blend_path:
+            for project in projects:
+                if Path(blend_path).is_relative_to(project.project_path):
+                    nwo.scene_project = project.name
+                    break
+            else:
+                nwo.scene_project = projects[0].name
+        else:
+            nwo.scene_project = projects[0].name
+
+    return projects
+
 @persistent
 def load_set_output_state(dummy):
     utils.get_export_props().show_output = utils.foundry_output_state
@@ -108,20 +131,7 @@ def load_handler(dummy):
     nwo.export_in_progress = False
     nwo.camera_sync_active = False
 
-    projects = utils.setup_projects_list()
-    blend_path = bpy.data.filepath
-    project_names = [p.name for p in projects]
-
-    if projects and (not nwo.scene_project or nwo.scene_project not in project_names):
-        if blend_path:
-            for p in projects:
-                if Path(blend_path).is_relative_to(p.project_path):
-                    nwo.scene_project = p.name
-                    break
-            else:
-                nwo.scene_project = projects[0].name
-        else:
-            nwo.scene_project = projects[0].name
+    load_projects()
 
     # -------------------------------------------------------------------------
     # Resolve module reference
