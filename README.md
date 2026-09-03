@@ -17,7 +17,7 @@ Foundry only needs to be installed once. Thereafter, you can use Blender to down
 - Launch Blender and open Preferences <div align="left"> <img src="img/install0.png"> </div>
 - Navigate to the **Get Extensions** tab and then click **Repositories**
 - On the **Repositories** windows click the `+` icon and then **Add Remote Repository** <div align="left"> <img src="img/install1.png"> </div>
-- In the **Add New Extension Repository** window copy and paste the following text into the **URL** field: `https://iloveagoodcrisp.github.io/Foundry/api/v1/extensions/index.json`
+- In the **Add New Extension Repository** window copy and paste the following text into the **URL** field: `https://everyoneeverybody.github.io/Foundry/api/v1/extensions/index.json`
 - I recommend checking the **Check for Updates on Startup** box, but this is optional
 -  Now click **Create** to link the remote repository to Blender <div align="left"> <img src="img/install2.png"> </div>
 - Enter `Foundry` into the search box and you should see the **Foundry** addon show up with an option to install <div align="left"> <img src="img/install3.png"> </div>
@@ -26,7 +26,7 @@ Foundry only needs to be installed once. Thereafter, you can use Blender to down
 
 ## Standalone Installation
 
-- The standalone zip can be downloaded [here](https://iloveagoodcrisp.github.io/Foundry/api/v1/extensions/io_scene_foundry.zip)
+- The standalone zip can be downloaded [here](https://everyoneeverybody.github.io/Foundry/api/v1/extensions/io_scene_foundry.zip)
 
 - Locate the file you downloaded named `io_scene_foundry.zip` and then open Blender. Drag and drop the zip file into Blender and press **Ok** on the dialog box that appears
 
