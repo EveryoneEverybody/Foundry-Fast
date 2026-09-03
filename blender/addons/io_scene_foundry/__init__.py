@@ -9,6 +9,7 @@ from . import export
 from . import keymap
 from . import icons
 from . import preferences
+from . import perf_patch
 
 modules = [
     preferences,
@@ -18,6 +19,7 @@ modules = [
     export,
     keymap,
     icons,
+    perf_patch,
 ]
             
 def register():
