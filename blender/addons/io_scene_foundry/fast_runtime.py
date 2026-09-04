@@ -165,7 +165,9 @@ def _draw_preferences(self, context):
     box = self.layout.box()
     box.label(text="Performance")
     box.prop(context.window_manager, _WM_VERBOSE_PROP, text="Live Per-Item Import Output")
-    box.operator("nwo.open_foundry_detail_log")
+    row = box.row(align=True)
+    row.operator("nwo.show_foundry_output", text="Show Foundry Output")
+    row.operator("nwo.open_foundry_detail_log", text="Open Detailed Import Log")
 
 
 def register():
