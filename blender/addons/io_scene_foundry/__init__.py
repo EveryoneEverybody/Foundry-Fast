@@ -15,6 +15,7 @@ from . import fast_navigation
 from . import perf_material_cleanup
 from . import perf_bitmap_cache
 from . import perf_patch
+from . import fast_runtime
 
 modules = [
     preferences,
@@ -30,6 +31,7 @@ modules = [
     perf_material_cleanup,
     perf_bitmap_cache,
     perf_patch,
+    fast_runtime,
 ]
             
 def register():
