@@ -1,3 +1,16 @@
+# Foundry Fast
+
+> **Experimental fork of Foundry**
+>
+> This repository is an experimental fork focused primarily on import performance and workflow improvements.
+>
+> It may contain unfinished, unstable, or untested changes and is not intended to replace the official Foundry release.
+>
+> For the original project, documentation, releases, and support, please use:
+> **[ILoveAGoodCrisp/Foundry](https://github.com/ILoveAGoodCrisp/Foundry)**
+
+The rest of this README is inherited from the original Foundry project unless otherwise noted.
+
 <div align="center"> <img src="img/readme_banner.png"> </div>
 
 **Foundry** is a Blender extension that facilitates a complete asset import & export pipeline for Halo Reach, Halo 4, and Halo 2 Anniversary Multiplayer.
