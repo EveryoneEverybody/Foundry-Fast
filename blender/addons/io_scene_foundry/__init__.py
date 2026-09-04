@@ -10,6 +10,7 @@ from . import keymap
 from . import icons
 from . import preferences
 from . import perf_material_cleanup
+from . import perf_bitmap_cache
 from . import perf_patch
 
 modules = [
@@ -21,6 +22,7 @@ modules = [
     keymap,
     icons,
     perf_material_cleanup,
+    perf_bitmap_cache,
     perf_patch,
 ]
             
