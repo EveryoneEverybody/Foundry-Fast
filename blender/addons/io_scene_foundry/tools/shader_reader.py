@@ -12,7 +12,7 @@ from ..managed_blam.shader_terrain import ShaderTerrainTag
 from ..managed_blam.material import MaterialTag
 from ..managed_blam.shader import ShaderTag, build_templates
 from ..managed_blam.shader_decal import ShaderDecalTag
-from .. import utils
+from .. import foundry_output, utils
 
 class NWO_OT_BuildShaderTemplates(bpy.types.Operator):
     bl_idname = "nwo.build_shader_templates"
@@ -204,7 +204,7 @@ def tag_to_nodes(corinth: bool, mat: bpy.types.Material, tag_path: str, always_e
     if not Path(utils.get_tags_path(), utils.relative_path(tag_path)).exists():
         return
     
-    print(f"--- Building material nodes for: {mat.name}")
+    foundry_output.print_detail(f"--- Building material nodes for: {mat.name}")
     shader = None
     if corinth:
         with MaterialTag(path=tag_path) as shader:
