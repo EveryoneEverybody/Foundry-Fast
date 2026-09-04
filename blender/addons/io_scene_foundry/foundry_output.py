@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from time import perf_counter
 
 import bpy
 
@@ -16,13 +17,17 @@ _CREATE_NO_WINDOW = 0x08000000
 _SW_RESTORE = 9
 _SESSION_DIRECTORY = Path(tempfile.gettempdir(), "foundry_output", str(os.getpid()))
 _LOG_PATH = _SESSION_DIRECTORY / "foundry.log"
+_DETAIL_LOG_PATH = _SESSION_DIRECTORY / "foundry-detail.log"
 _WATCH_PATH = _SESSION_DIRECTORY / "watched_logs.jsonl"
 _CANCEL_PATH = _SESSION_DIRECTORY / "cancel.request"
 _VIEWER_PATH = Path(__file__).with_name("foundry_output_viewer.pyw")
 _WINDOW_TITLE = f"Foundry - {os.getpid()}"
 _TOOL_JOB_NAME = f"Foundry.ToolProcesses.{os.getpid()}"
+_CANCEL_POLL_INTERVAL_SECONDS = 0.10
+_DETAIL_ONLY_PREFIXES = ("--- Building material nodes for:",)
 
 _log_stream = None
+_detail_stream = None
 _stdout_proxy = None
 _stderr_proxy = None
 _viewer_process = None
@@ -31,6 +36,7 @@ _watched_paths = set()
 _mute_depth = 0
 _tool_job_handle = None
 _tool_kernel32 = None
+_last_cancel_poll = 0.0
 
 
 def _ensure_tool_job():
@@ -69,8 +75,15 @@ def register_tool_process(process):
 
 
 def _raise_if_cancel_requested():
+    global _last_cancel_poll
     if threading.current_thread() is not threading.main_thread():
         return
+
+    now = perf_counter()
+    if now - _last_cancel_poll < _CANCEL_POLL_INTERVAL_SECONDS:
+        return
+    _last_cancel_poll = now
+
     with _write_lock:
         try:
             requested = _CANCEL_PATH.read_text(encoding="utf-8").strip()
@@ -80,6 +93,52 @@ def _raise_if_cancel_requested():
         except OSError:
             return
     raise KeyboardInterrupt
+
+
+def _live_verbose_enabled():
+    try:
+        addon = bpy.context.preferences.addons.get(__package__)
+        prefs = getattr(addon, "preferences", None)
+        return bool(getattr(prefs, "live_verbose_import_output", False))
+    except Exception:
+        return False
+
+
+def _detail_only_text(text: str) -> bool:
+    return text.lstrip().startswith(_DETAIL_ONLY_PREFIXES)
+
+
+def _write_detail_bytes(data):
+    if not data:
+        return
+    with _write_lock:
+        if _detail_stream is not None:
+            try:
+                _detail_stream.write(data)
+            except (OSError, ValueError):
+                pass
+
+
+def print_detail(message=""):
+    text = str(message)
+    if _live_verbose_enabled():
+        print(text)
+        return
+    _write_detail_bytes((text + "\n").encode("utf-8", errors="replace"))
+
+
+def flush_detail():
+    with _write_lock:
+        if _detail_stream is not None:
+            try:
+                _detail_stream.flush()
+            except (OSError, ValueError):
+                pass
+
+
+def detail_log_path():
+    flush_detail()
+    return _DETAIL_LOG_PATH
 
 
 class _BinaryOutputProxy:
@@ -125,6 +184,7 @@ class _OutputProxy:
         self.buffer = _BinaryOutputProxy(self, original_buffer)
         self.encoding = getattr(original, "encoding", None) or "utf-8"
         self.errors = getattr(original, "errors", None) or "replace"
+        self._detail_only_pending = False
 
     def write(self, text):
         if not text:
@@ -132,6 +192,14 @@ class _OutputProxy:
         if not isinstance(text, str):
             text = str(text)
         if not is_muted():
+            if self._detail_only_pending or _detail_only_text(text):
+                if not _live_verbose_enabled():
+                    _write_detail_bytes(text.encode("utf-8", errors="replace"))
+                    self._detail_only_pending = not ("\n" in text or "\r" in text)
+                    _raise_if_cancel_requested()
+                    return len(text)
+                self._detail_only_pending = False
+
             if self.original is not None:
                 try:
                     self.original.write(text)
@@ -182,6 +250,11 @@ def _write_bytes(data):
         if _log_stream is not None:
             try:
                 _log_stream.write(data)
+            except (OSError, ValueError):
+                pass
+        if _detail_stream is not None:
+            try:
+                _detail_stream.write(data)
             except (OSError, ValueError):
                 pass
 
@@ -241,12 +314,14 @@ def _close_viewer():
 
 
 def register():
-    global _log_stream, _stdout_proxy, _stderr_proxy
+    global _log_stream, _detail_stream, _stdout_proxy, _stderr_proxy, _last_cancel_poll
     _SESSION_DIRECTORY.mkdir(parents=True, exist_ok=True)
     _watched_paths.clear()
     _WATCH_PATH.write_text("", encoding="utf-8")
     _CANCEL_PATH.write_text("", encoding="utf-8")
     _log_stream = open(_LOG_PATH, "wb", buffering=0)
+    _detail_stream = open(_DETAIL_LOG_PATH, "wb", buffering=262144)
+    _last_cancel_poll = 0.0
     _ensure_tool_job()
 
     original_stdout = _unwrap_proxy(sys.stdout)
@@ -259,7 +334,7 @@ def register():
 
 
 def unregister():
-    global _log_stream, _stdout_proxy, _stderr_proxy, _viewer_process, _mute_depth, _tool_job_handle
+    global _log_stream, _detail_stream, _stdout_proxy, _stderr_proxy, _viewer_process, _mute_depth, _tool_job_handle
     try:
         bpy.utils.unregister_class(NWO_OT_ShowFoundryOutput)
     except RuntimeError:
@@ -277,7 +352,13 @@ def unregister():
                 _log_stream.close()
             except OSError:
                 pass
+        if _detail_stream is not None:
+            try:
+                _detail_stream.close()
+            except OSError:
+                pass
         _log_stream = None
+        _detail_stream = None
 
     _stdout_proxy = None
     _stderr_proxy = None
@@ -334,11 +415,26 @@ def show():
 
 def clear():
     """Start a fresh visible output session without replacing the underlying file."""
+    global _last_cancel_poll
     try:
         _CANCEL_PATH.write_text("", encoding="utf-8")
     except OSError:
         pass
-    _write_bytes(b"\x0c")
+    _last_cancel_poll = 0.0
+
+    with _write_lock:
+        if _log_stream is not None:
+            try:
+                _log_stream.write(b"\x0c")
+            except (OSError, ValueError):
+                pass
+        if _detail_stream is not None:
+            try:
+                _detail_stream.flush()
+                _detail_stream.seek(0)
+                _detail_stream.truncate(0)
+            except (OSError, ValueError):
+                pass
 
 
 def child_stream():
