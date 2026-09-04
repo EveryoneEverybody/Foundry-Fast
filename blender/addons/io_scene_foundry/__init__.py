@@ -9,6 +9,7 @@ from . import export
 from . import keymap
 from . import icons
 from . import preferences
+from . import animation_fast
 from . import compat_fixes
 from . import fast_navigation
 from . import perf_material_cleanup
@@ -19,6 +20,7 @@ modules = [
     preferences,
     props,
     ui,
+    animation_fast,
     tools,
     export,
     keymap,
