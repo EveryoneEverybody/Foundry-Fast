@@ -40,6 +40,13 @@ jobs:
             -o /tmp/blender.tar.xz
           tar -xJf /tmp/blender.tar.xz -C .cache
 
+      - name: Download CoACD wheel
+        run: |
+          curl -L --fail --retry 3 \
+            https://files.pythonhosted.org/packages/00/83/c50472ce98175fddd86d4aba861fea89f30350a5487880b3a81d34915a85/coacd-1.0.11-cp39-abi3-win_amd64.whl \
+            -o blender/addons/io_scene_foundry/wheels/coacd-1.0.11-cp39-abi3-win_amd64.whl
+          echo "4de22f70d1a3fa8c44698c8006a223fe5fb0ee84b76adecf3726cf2003e9145f  blender/addons/io_scene_foundry/wheels/coacd-1.0.11-cp39-abi3-win_amd64.whl" | sha256sum -c -
+
       - name: Build extension repository
         run: |
           mkdir -p site/api/v1/extensions
