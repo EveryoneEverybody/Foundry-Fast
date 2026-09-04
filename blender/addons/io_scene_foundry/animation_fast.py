@@ -1,5 +1,7 @@
 import builtins
+from collections import defaultdict
 from contextlib import contextmanager
+from math import ceil, floor
 from time import perf_counter
 
 import bpy
@@ -17,8 +19,14 @@ _original_generate_renames = None
 _original_importer_bake = None
 _original_importer_init = None
 _original_draw_animation_manager = None
+_original_bake_control_rig_actions = None
+_original_blender_bake_action = None
+_original_correct_baked_ik_target_actions = None
+_original_correct_baked_head_look_target_actions = None
+_original_set_control_rig_inverted = None
 _original_bake_annotations = []
 _menu_types = []
+_bake_profiles = []
 
 
 def _detail_print(message):
@@ -100,7 +108,7 @@ def _to_blender(self, *args, **kwargs):
 
 def _events_to_blender(self, *args, **kwargs):
     start = perf_counter()
-    with _route_animation_details(route_bullet=True):
+    with _route_animation_details(route_step=True, route_bullet=True):
         result = _original_events_to_blender(self, *args, **kwargs)
     count = result if isinstance(result, int) else 0
     print(f"[Foundry perf] Frame events: {perf_counter() - start:.3f}s ({count} events)")
@@ -115,15 +123,118 @@ def _generate_renames(self, *args, **kwargs):
     return result
 
 
+def _current_bake_profile():
+    return _bake_profiles[-1] if _bake_profiles else None
+
+
+def _profile_call(label, original, *args, **kwargs):
+    profile = _current_bake_profile()
+    if profile is None:
+        return original(*args, **kwargs)
+
+    started = perf_counter()
+    try:
+        return original(*args, **kwargs)
+    finally:
+        profile["timings"][label] += perf_counter() - started
+        profile["calls"][label] += 1
+
+
+def _profiled_blender_bake_action(*args, **kwargs):
+    return _profile_call("blender bake_action", _original_blender_bake_action, *args, **kwargs)
+
+
+def _profiled_bake_control_rig_actions(*args, **kwargs):
+    return _profile_call("control bake", _original_bake_control_rig_actions, *args, **kwargs)
+
+
+def _profiled_correct_baked_ik_target_actions(*args, **kwargs):
+    return _profile_call("ik pole correction", _original_correct_baked_ik_target_actions, *args, **kwargs)
+
+
+def _profiled_correct_baked_head_look_target_actions(*args, **kwargs):
+    return _profile_call("head look correction", _original_correct_baked_head_look_target_actions, *args, **kwargs)
+
+
+def _profiled_set_control_rig_inverted(*args, **kwargs):
+    return _profile_call("rig inversion", _original_set_control_rig_inverted, *args, **kwargs)
+
+
+def _action_frame_count(action, armature):
+    try:
+        start, end = utils.get_frame_start_end_from_keyframes(action, armature)
+    except Exception:
+        return 0
+    if end < start:
+        return 0
+    return max(0, ceil(end) - floor(start) + 1)
+
+
+def _print_bake_profile(profile, total):
+    timings = profile["timings"]
+    frame_count = profile["frames"]
+    action_count = profile["actions"]
+    action_word = "action" if action_count == 1 else "actions"
+
+    control_total = timings.get("control bake", 0.0)
+    blender_bake = timings.get("blender bake_action", 0.0)
+    bake_setup = max(0.0, control_total - blender_bake)
+    ik_pole = timings.get("ik pole correction", 0.0)
+    head_look = timings.get("head look correction", 0.0)
+    inversion = timings.get("rig inversion", 0.0)
+    other = max(0.0, total - control_total - ik_pole - head_look - inversion)
+
+    print(f"[Foundry perf] Control rig bake: {total:.3f}s ({action_count} {action_word}, {frame_count} frames)")
+    stages = [
+        ("Blender visual bake", blender_bake),
+        ("Bake setup / restore", bake_setup),
+        ("IK / pole correction", ik_pole),
+        ("Head / look correction", head_look),
+        ("Rig inversion", inversion),
+        ("Other setup / updates", other),
+    ]
+
+    for label, elapsed in stages:
+        if elapsed <= 0.0005:
+            continue
+        percent = elapsed / total * 100.0 if total > 0.0 else 0.0
+        if frame_count:
+            per_frame = elapsed / frame_count * 1000.0
+            print(f"  {label:<24} {elapsed:8.3f}s  {percent:6.1f}%  {per_frame:8.2f} ms/frame")
+        else:
+            print(f"  {label:<24} {elapsed:8.3f}s  {percent:6.1f}%")
+
+
 def _bake_actions(context, armature, actions):
     actions = list(dict.fromkeys(action for action in actions if action is not None))
     if not actions:
         return 0
 
-    start = perf_counter()
-    with _route_control_rig_details():
-        result = _original_importer_bake(context, armature, actions)
-    print(f"[Foundry perf] Control rig bake: {perf_counter() - start:.3f}s ({len(actions)} actions)")
+    frame_counts = [(action.name, _action_frame_count(action, armature)) for action in actions]
+    profile = {
+        "actions": len(actions),
+        "frames": sum(count for _name, count in frame_counts),
+        "timings": defaultdict(float),
+        "calls": defaultdict(int),
+    }
+    for name, count in frame_counts:
+        _detail_print(f"Control rig bake action: {name} ({count} frames)")
+
+    _bake_profiles.append(profile)
+    started = perf_counter()
+    try:
+        with _route_control_rig_details():
+            result = _original_importer_bake(context, armature, actions)
+    finally:
+        total = perf_counter() - started
+        if _bake_profiles and _bake_profiles[-1] is profile:
+            _bake_profiles.pop()
+        else:
+            try:
+                _bake_profiles.remove(profile)
+            except ValueError:
+                pass
+        _print_bake_profile(profile, total)
     return result
 
 
@@ -217,6 +328,11 @@ def register():
     global _original_importer_bake
     global _original_importer_init
     global _original_draw_animation_manager
+    global _original_bake_control_rig_actions
+    global _original_blender_bake_action
+    global _original_correct_baked_ik_target_actions
+    global _original_correct_baked_head_look_target_actions
+    global _original_set_control_rig_inverted
 
     _set_bake_default_off()
 
@@ -229,6 +345,17 @@ def register():
     animation_module.AnimationTag.to_blender = _to_blender
     animation_module.AnimationTag.events_to_blender = _events_to_blender
     animation_module.AnimationTag.generate_renames = _generate_renames
+
+    _original_bake_control_rig_actions = create_rig_module.bake_control_rig_actions
+    _original_blender_bake_action = create_rig_module.anim_utils.bake_action
+    _original_correct_baked_ik_target_actions = create_rig_module.correct_baked_ik_target_actions
+    _original_correct_baked_head_look_target_actions = create_rig_module.correct_baked_head_look_target_actions
+    _original_set_control_rig_inverted = create_rig_module.set_control_rig_inverted
+    create_rig_module.bake_control_rig_actions = _profiled_bake_control_rig_actions
+    create_rig_module.anim_utils.bake_action = _profiled_blender_bake_action
+    create_rig_module.correct_baked_ik_target_actions = _profiled_correct_baked_ik_target_actions
+    create_rig_module.correct_baked_head_look_target_actions = _profiled_correct_baked_head_look_target_actions
+    create_rig_module.set_control_rig_inverted = _profiled_set_control_rig_inverted
 
     _original_importer_bake = importer_module.bake_imported_actions_to_control_rig
     importer_module.bake_imported_actions_to_control_rig = _bake_actions
@@ -251,6 +378,11 @@ def unregister():
     global _original_importer_bake
     global _original_importer_init
     global _original_draw_animation_manager
+    global _original_bake_control_rig_actions
+    global _original_blender_bake_action
+    global _original_correct_baked_ik_target_actions
+    global _original_correct_baked_head_look_target_actions
+    global _original_set_control_rig_inverted
 
     if _original_draw_animation_manager is not None:
         NWO_FoundryPanelProps.draw_animation_manager = _original_draw_animation_manager
@@ -271,6 +403,18 @@ def unregister():
     if _original_importer_bake is not None:
         importer_module.bake_imported_actions_to_control_rig = _original_importer_bake
         _original_importer_bake = None
+
+    if _original_bake_control_rig_actions is not None:
+        create_rig_module.bake_control_rig_actions = _original_bake_control_rig_actions
+        create_rig_module.anim_utils.bake_action = _original_blender_bake_action
+        create_rig_module.correct_baked_ik_target_actions = _original_correct_baked_ik_target_actions
+        create_rig_module.correct_baked_head_look_target_actions = _original_correct_baked_head_look_target_actions
+        create_rig_module.set_control_rig_inverted = _original_set_control_rig_inverted
+        _original_bake_control_rig_actions = None
+        _original_blender_bake_action = None
+        _original_correct_baked_ik_target_actions = None
+        _original_correct_baked_head_look_target_actions = None
+        _original_set_control_rig_inverted = None
 
     if _original_to_blender is not None:
         animation_module.AnimationTag.to_blender = _original_to_blender
