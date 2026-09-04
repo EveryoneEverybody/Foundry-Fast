@@ -1,28 +1,20 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+name: Build and deploy Foundry extension
 
 on:
-  # Runs on pushes targeting the default branch
   push:
     branches: ["master"]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
   deploy:
     environment:
       name: github-pages
@@ -31,12 +23,44 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache Blender
+        id: blender-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/blender-5.2.1-linux-x64
+          key: blender-5.2.1-linux-x64
+
+      - name: Download Blender
+        if: steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cache
+          curl -L --fail --retry 3 \
+            https://download.blender.org/release/Blender5.2/blender-5.2.1-linux-x64.tar.xz \
+            -o /tmp/blender.tar.xz
+          tar -xJf /tmp/blender.tar.xz -C .cache
+
+      - name: Build extension repository
+        run: |
+          mkdir -p site/api/v1/extensions
+          rm -f site/api/v1/extensions/io_scene_foundry.zip
+          rm -f site/api/v1/extensions/index.json
+          rm -f site/api/v1/extensions/index.html
+          .cache/blender-5.2.1-linux-x64/blender --command extension build \
+            --source-dir blender/addons/io_scene_foundry \
+            --output-filepath site/api/v1/extensions/io_scene_foundry.zip
+          .cache/blender-5.2.1-linux-x64/blender --command extension server-generate \
+            --repo-dir site/api/v1/extensions \
+            --html
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: './site'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
