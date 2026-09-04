@@ -9,6 +9,7 @@ from . import export
 from . import keymap
 from . import icons
 from . import preferences
+from . import compat_fixes
 from . import fast_navigation
 from . import perf_material_cleanup
 from . import perf_bitmap_cache
@@ -22,6 +23,7 @@ modules = [
     export,
     keymap,
     icons,
+    compat_fixes,
     fast_navigation,
     perf_material_cleanup,
     perf_bitmap_cache,
