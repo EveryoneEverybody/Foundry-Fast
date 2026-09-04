@@ -1,3 +1,4 @@
+from pathlib import Path
 from time import perf_counter
 
 import bpy
@@ -17,6 +18,7 @@ _original_finish_bake = None
 _original_live_verbose = None
 _original_preferences_draw = None
 _base_preferences_draw = None
+_original_viewer_path = None
 
 
 def _deferred_rigs(importer):
@@ -175,6 +177,10 @@ def register():
     global _original_live_verbose
     global _original_preferences_draw
     global _base_preferences_draw
+    global _original_viewer_path
+
+    _original_viewer_path = foundry_output._VIEWER_PATH
+    foundry_output._VIEWER_PATH = Path(__file__).with_name("foundry_output_viewer_fast.pyw")
 
     setattr(
         bpy.types.WindowManager,
@@ -207,6 +213,8 @@ def register():
 
 
 def unregister():
+    global _original_viewer_path
+
     if _original_import_render_model is not None:
         importer_module.NWOImporter.import_render_model = _original_import_render_model
         importer_module.NWOImporter.import_object = _original_import_object
@@ -219,6 +227,10 @@ def unregister():
 
     if _original_live_verbose is not None:
         foundry_output._live_verbose_enabled = _original_live_verbose
+
+    if _original_viewer_path is not None:
+        foundry_output._VIEWER_PATH = _original_viewer_path
+        _original_viewer_path = None
 
     try:
         delattr(bpy.types.WindowManager, _WM_VERBOSE_PROP)
