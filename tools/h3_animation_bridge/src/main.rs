@@ -1,6 +1,6 @@
 //! Read H3 animation tags into temporary source files. Never write tags.
 use anyhow::{bail, Context, Result};
-use blam_tags::animation::{JmaKind, NodeTransform, Pose, SizeLayout, Skeleton, SkeletonNode};
+use blam_tags::animation::{NodeTransform, Pose, SizeLayout, Skeleton, SkeletonNode};
 use blam_tags::extract::animation::{build_defaults, jma_kind_for};
 use blam_tags::{Animation, TagFile, TagStruct};
 use serde_json::{json, Value};
@@ -185,7 +185,7 @@ fn run() -> Result<()> {
             if a.movement_type_mismatch() { bail!("Header/resource movement types disagree"); }
             println!("Decoding {}", a.name.as_deref().unwrap_or("<unnamed>"));
             let clip = a.decode()?;
-            let pose = clip.pose(&skeleton, &defaults);
+            let pose = clip.pose(&skeleton, Some(&defaults));
             if pose.frames.is_empty() || pose.frames.len() != a.frame_count as usize { bail!("Decoded/header frame count mismatch"); }
             let kind = jma_kind_for(a);
             if kind.folds_movement() && clip.movement.frames.len() != pose.frames.len() { bail!("Movement sample count differs from pose frame count"); }
@@ -213,7 +213,7 @@ fn run() -> Result<()> {
         };
         match export() {
             Ok(data) => { record["status"] = json!("decoded"); record["decoded"] = data; }
-            Err(e) => { record["status"] = json!("error"); record["message"] = json!(format!("{e:#}")); }
+            Err(e) => { eprintln!("Animation {:?}: {e:#}", a.name); record["status"] = json!("error"); record["message"] = json!(format!("{e:#}")); }
         }
         results.push(record);
     }
@@ -241,6 +241,7 @@ fn main() { if let Err(e) = run() { eprintln!("{e:#}"); std::process::exit(1); }
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blam_tags::animation::JmaKind;
     #[test] fn source_path_guard() {
         for p in ["", "../a", "a/../b", "/a", "C:\\a", "\\\\server\\a", "a//b", "a/./b"] { assert!(safe_relative(p).is_err()); }
         assert_eq!(safe_relative("objects\\scarab.v2\\scarab").unwrap(), "objects/scarab.v2/scarab");

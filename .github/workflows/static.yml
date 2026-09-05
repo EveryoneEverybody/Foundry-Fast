@@ -50,6 +50,14 @@ jobs:
           if (Test-Path tools/h3_object_bridge/src/bin/h3-shader-bridge.rs) {
             $helpers += 'h3-shader-bridge.exe'
           }
+          if (Test-Path tools/h3_animation_bridge/Cargo.toml) {
+            cargo test --locked --manifest-path tools/h3_animation_bridge/Cargo.toml
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cargo build --locked --release --manifest-path tools/h3_animation_bridge/Cargo.toml
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item tools/h3_animation_bridge/target/release/h3-animation-bridge.exe tools/h3_object_bridge/target/release/
+            $helpers += 'h3-animation-bridge.exe'
+          }
           foreach ($helper in $helpers) {
             if (!(Test-Path "tools/h3_object_bridge/target/release/$helper")) {
               throw "Missing helper: $helper"
@@ -129,11 +137,15 @@ jobs:
           root = Path('blender/addons/io_scene_foundry')
           version = tomllib.loads((root / 'blender_manifest.toml').read_text())['version']
           sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          helpers = {
+              'h3-object-bridge': 'tools/h3_object_bridge/src/main.rs',
+              'h3-shader-bridge': 'tools/h3_object_bridge/src/bin/h3-shader-bridge.rs',
+              'h3-animation-bridge': 'tools/h3_animation_bridge/src/main.rs',
+          }
           with ZipFile('site/api/v1/extensions/io_scene_foundry.zip') as package:
               assert package.testzip() is None
-              for name in ('h3-object-bridge', 'h3-shader-bridge'):
-                  source = Path('tools/h3_object_bridge/src/main.rs') if name == 'h3-object-bridge' else Path('tools/h3_object_bridge/src/bin/h3-shader-bridge.rs')
-                  if source.exists():
+              for name, source in helpers.items():
+                  if Path(source).exists():
                       assert package.read(f'h3_import/bin/{name}.exe')[:2] == b'MZ', name
           Path('site/api/v1/extensions/build.json').write_text(json.dumps({'version': version, 'source_sha': sha}, indent=2))
           print(f'Pages package: Foundry {version}, source {sha}')
