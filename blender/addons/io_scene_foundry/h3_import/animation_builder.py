@@ -1,4 +1,4 @@
-"""Stage decoded base clips on a copy of the selected armature."""
+"""Stage decoded clips on a copy of the selected armature."""
 import json
 import math
 from pathlib import Path
@@ -172,6 +172,14 @@ class AnimationStager:
             expected = self.manifest['nodes'][n['parent']]['name'] if n['parent'] != -1 else None
             if (parent.name if parent else None) != expected:
                 raise ValueError('JMA hierarchy differs from manifest')
+        if d['kind'] == 'JMO':
+            reference = d['overlay']['reference_pose']
+            for node, transform in zip(self.manifest['nodes'], reference):
+                expected = _rest_matrix(transform, 100)
+                actual = jma.transforms[0][node_by_name[node['name']]]
+                if any(abs(actual[row][col] - expected[row][col]) > 1e-4 * max(1, abs(expected[row][col]))
+                       for row in range(4) for col in range(4)):
+                    raise ValueError('JMO leading reference disagrees with manifest for ' + node['name'])
         motion = None
         if d.get('motion_file'):
             motion = _read_jma(safe_file(self.folder, d['motion_file']), d['file_frame_count'], 1)
@@ -213,6 +221,10 @@ class AnimationStager:
         action['h3_animation_source_index'] = clip['index']
         action['h3_animation_source_record'] = json.dumps(clip)
         action['h3_animation_pedestal'] = self.pedestal
+        if clip['decoded']['kind'] == 'JMO':
+            action['h3_animation_reference_frame'] = 1
+            action['h3_animation_first_sample_frame'] = 2
+            action['h3_animation_preview'] = 'composed_on_fixed_reference'
         arm.animation_data_create()
         slot = action.slots.new('OBJECT', arm.name)
         arm.animation_data.action = action
@@ -234,7 +246,7 @@ class AnimationStager:
         animation.name = clip['name'].replace(':', ' ')
         animation.frame_start = 1
         animation.frame_end = clip['decoded']['file_frame_count']
-        animation.animation_type = 'base'
+        animation.animation_type = clip['animation_type']
         animation.animation_movement_data = KINDS[clip['decoded']['kind']]
         animation.export_this = False
         track = animation.action_tracks.add()
@@ -255,7 +267,7 @@ class AnimationStager:
                 self.results.append({'name': clip['name'], 'status': clip['status'], 'message': clip.get('message', '')})
                 continue
             self.build_action(clip)
-            self.results.append({'name': clip['name'], 'status': 'staged_base_action',
+            self.results.append({'name': clip['name'], 'status': 'staged_' + clip['animation_type'] + '_action',
                                  'frames': clip['decoded']['file_frame_count']})
             yield clip['name']
         arm = self.armature
@@ -271,7 +283,9 @@ class AnimationStager:
             'results': self.results, 'node_map': self.mapping, 'pedestal': self.pedestal,
             'notes': ['Source rig and actions unchanged. Staging collection and animations excluded from export.',
                       'Control constraints muted on the staging copy. Events retained, not converted.',
-                      'Reach-only bones retain their rest transforms relative to their animated parents.']}, indent=2))
+                      'Reach-only bones retain their rest transforms relative to their animated parents.',
+                      'JMO frame 1 is the composition reference; frames 2 onward are codec samples.',
+                      'Time overlays are standalone composed previews, not NLA layers.']}, indent=2))
         self.collection['h3_animation_report'] = report.name
         self.context.view_layer.update()
 

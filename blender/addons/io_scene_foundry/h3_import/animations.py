@@ -4,7 +4,7 @@ import math
 from pathlib import Path, PurePosixPath
 
 FORMAT = 'foundry.h3-animation'
-KINDS = {'JMM': 'none', 'JMA': 'xy', 'JMT': 'xyyaw', 'JMZ': 'xyzyaw'}
+KINDS = {'JMM': 'none', 'JMA': 'xy', 'JMT': 'xyyaw', 'JMZ': 'xyzyaw', 'JMO': 'none'}
 CONTROL_PREFIXES = ('CTRL_', 'FK_', 'IK_', 'PT_')
 
 
@@ -34,7 +34,7 @@ def _vector(value, count):
 
 
 def validate_manifest(data):
-    if not isinstance(data, dict) or data.get('format') != FORMAT or data.get('version') != 1:
+    if not isinstance(data, dict) or data.get('format') != FORMAT or type(data.get('version')) is not int or data.get('version') not in (1, 2):
         raise ValueError('Unsupported H3 animation manifest')
     expected = {'game': 'halo3_mcc', 'units': 'halo_world', 'jma_units': 'halo_world_x100',
                 'quaternion_order': 'wxyz', 'rest_space': 'parent_local'}
@@ -78,26 +78,70 @@ def validate_manifest(data):
             continue
         d = clip.get('decoded', {})
         kind = d.get('kind')
-        if kind not in KINDS or clip.get('animation_type') != 'base' or clip.get('world_relative'):
+        if kind not in KINDS or clip.get('animation_type') != ('overlay' if kind == 'JMO' else 'base') or clip.get('world_relative'):
             raise ValueError('Unsupported decoded animation type')
-        movement = {'JMM': 'none', 'JMA': 'dx,dy', 'JMT': 'dx,dy,dyaw', 'JMZ': 'dx,dy,dz,dyaw'}
+        movement = {'JMM': 'none', 'JMA': 'dx,dy', 'JMT': 'dx,dy,dyaw', 'JMZ': 'dx,dy,dz,dyaw', 'JMO': 'none'}
         if clip.get('frame_info_type') != movement[kind]:
             raise ValueError('Animation kind and movement metadata disagree')
         count = d.get('decoded_frame_count')
         if type(count) is not int or not 0 < count <= 32767 or clip.get('source_frame_count') != count:
             raise ValueError('Animation frame counts disagree')
-        if d.get('file_frame_count') != count + 1 or d.get('frame_layout') != 'codec_frames_then_held_terminal':
-            raise ValueError('Invalid held-terminal frame layout')
+        layout = 'reference_then_codec_frames' if kind == 'JMO' else 'codec_frames_then_held_terminal'
+        if d.get('file_frame_count') != count + 1 or d.get('frame_layout') != layout:
+            raise ValueError('Invalid animation frame layout')
+        if kind == 'JMO':
+            validate_overlay(clip, nodes, data['version'], clips)
         if d.get('fps') != 30 or clip.get('source_node_count') != len(nodes):
             raise ValueError('Unexpected animation rate or node count')
         for field in ('jma_file', 'motion_file'):
             rel = d.get(field)
-            if rel is None and field == 'motion_file' and kind == 'JMM':
+            if rel is None and field == 'motion_file' and kind in ('JMM', 'JMO'):
                 continue
             safe_file('.', rel)
             if Path(rel).suffix.lower() != '.' + kind.lower():
                 raise ValueError('Animation extension differs from its kind')
     return data
+
+
+def validate_overlay(clip, nodes, version, clips):
+    d = clip['decoded']
+    if version != 2 or clip.get('blend_screen') != -1 or clip.get('object_space_parent_count') != 0:
+        raise ValueError('Only schema-2 time overlays without blend-screen or object-space data are supported')
+    if d.get('motion_file') is not None or d.get('movement_samples') != []:
+        raise ValueError('Time overlay must not contain movement data')
+    overlay = d.get('overlay', {})
+    if (overlay.get('composition') != 'static_reference_then_parent_local_delta'
+            or overlay.get('preview') != 'composed_on_fixed_reference'
+            or overlay.get('reference_frame') != 1 or overlay.get('first_sample_frame') != 2):
+        raise ValueError('Unknown overlay composition or reference layout')
+    base = overlay.get('base', {})
+    index = base.get('animation_index')
+    if (base.get('method') != 'graph_action_candidate_first_frame' or base.get('graph_index') != -1
+            or base.get('frame') != 0 or type(index) is not int or index < 0 or index == clip['index']
+            or not isinstance(base.get('state'), str) or not base['state']):
+        raise ValueError('Overlay requires an identified local graph base')
+    records = [row for row in clips if row.get('index') == index]
+    if (len(records) != 1 or records[0].get('name') != base.get('animation_name')
+            or records[0].get('animation_type') != 'base' or records[0].get('world_relative')
+            or records[0].get('source_node_count') != len(nodes)):
+        raise ValueError('Overlay base identity disagrees with source animation records')
+    for label in ('base_pose', 'reference_pose'):
+        pose = overlay.get(label)
+        if not isinstance(pose, list) or len(pose) != len(nodes):
+            raise ValueError('Missing per-node overlay ' + label)
+        for t in pose:
+            if (not isinstance(t, dict) or not _vector(t.get('position'), 3) or not _vector(t.get('rotation'), 4)
+                    or abs(sum(v*v for v in t['rotation']) - 1) > 0.01
+                    or not _number(t.get('scale')) or t['scale'] <= 0):
+                raise ValueError('Invalid overlay reference transform')
+    flags = overlay.get('node_flags', {})
+    for component in ('rotation', 'translation', 'scale'):
+        for prefix in ('static_', 'animated_'):
+            bits = flags.get(prefix + component)
+            if not isinstance(bits, list) or len(bits) != len(nodes) or any(type(bit) is not bool for bit in bits):
+                raise ValueError('Invalid overlay component flags')
+        if any(a and b for a, b in zip(flags['static_' + component], flags['animated_' + component])):
+            raise ValueError('Overlapping static and animated overlay flags')
 
 
 def load_manifest(path):

@@ -16,8 +16,13 @@ class AnimationManifestTests(unittest.TestCase):
         p = payload()
         self.assertIs(a.validate_manifest(p), p)
 
+    def test_version_two_base(self):
+        p = payload()
+        p['version'] = 2
+        self.assertIs(a.validate_manifest(p), p)
+
     def test_format(self):
-        for key, value in [('format','foreign'), ('version',2), ('game','haloreach'), ('rest_space','world'), ('units','meters'), ('quaternion_order','xyzw')]:
+        for key, value in [('format','foreign'), ('version',3), ('game','haloreach'), ('rest_space','world'), ('units','meters'), ('quaternion_order','xyzw')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 p=payload();p[key]=value;a.validate_manifest(p)
 

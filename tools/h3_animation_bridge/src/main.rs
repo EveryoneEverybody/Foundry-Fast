@@ -1,4 +1,5 @@
 //! Read H3 animation tags into temporary source files. Never write tags.
+mod overlay;
 use anyhow::{bail, Context, Result};
 use blam_tags::animation::{NodeTransform, Pose, SizeLayout, Skeleton, SkeletonNode};
 use blam_tags::extract::animation::{build_defaults, jma_kind_for};
@@ -99,9 +100,14 @@ fn transform_json(t: &NodeTransform) -> Value {
 fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut values = BTreeMap::new();
+    let mut include_overlays = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--version" => { println!("h3-animation-bridge 0.1.0; schema 1; decoder {DECODER}"); return Ok(()); }
+            "--version" => { println!("h3-animation-bridge 0.1.0; schema 2; decoder {DECODER}"); return Ok(()); }
+            "--include-overlays" => {
+                if include_overlays { bail!("Duplicate option: {arg}"); }
+                include_overlays = true;
+            }
             "--tags-root" | "--input" | "--output" | "--animation" => {
                 if values.contains_key(&arg) { bail!("Duplicate option: {arg}"); }
                 values.insert(arg, args.next().context("Missing option value")?);
@@ -159,6 +165,7 @@ fn run() -> Result<()> {
         }
     }
     let defaults = build_defaults(&skeleton, &tag, render.as_ref(), false);
+    let mut overlays = overlay::OverlayExtractor::new(&tag);
     let filter = values.get("--animation").filter(|s| !s.is_empty());
     if filter.is_some_and(|s| !animations.iter().any(|a| a.name.as_ref() == Some(s))) {
         bail!("Animation name not found: {}", filter.unwrap());
@@ -171,13 +178,33 @@ fn run() -> Result<()> {
             "node_list_checksum":a.node_list_checksum, "resource_group":a.resource_group,
             "resource_group_member":a.resource_group_member, "codec_byte":a.codec_byte,
             "resource_bytes":a.blob.len(), "status":"not_selected"});
-        if let Some(e) = tag.root().descend(&format!("definitions/animations[{}]", a.index)) {
-            record["source_fields"] = snapshot(e, 0);
-        }
+        let source_fields = tag.root().descend(&format!("definitions/animations[{}]", a.index));
+        let blend_screen = source_fields.as_ref().and_then(|e|
+            e.field("blend screen").map(|_| e.read_block_index("blend screen")));
+        record["blend_screen"] = json!(blend_screen);
+        record["object_space_parent_count"] = json!(a.object_space_parents.len());
+        if let Some(e) = source_fields { record["source_fields"] = snapshot(e, 0); }
         if filter.is_some_and(|f| a.name.as_ref() != Some(f)) { results.push(record); continue; }
+        if a.animation_type.as_deref() == Some("overlay") {
+            if !include_overlays {
+                record["status"] = json!("unsupported");
+                record["message"] = json!("Enable Import Time Overlays to decode this overlay");
+            } else if a.world_relative || a.frame_info_type.as_deref() != Some("none")
+                || blend_screen != Some(-1) || !a.object_space_parents.is_empty() {
+                record["status"] = json!("unsupported");
+                record["message"] = json!("Blend-screen, object-space, world-relative and movement-bearing overlays retain metadata only");
+            } else {
+                println!("Decoding time overlay {}", a.name.as_deref().unwrap_or("<unnamed>"));
+                match overlays.export(&animations, a, &skeleton, &defaults, &output, blend_screen) {
+                    Ok(data) => { record["status"] = json!("decoded"); record["decoded"] = data; }
+                    Err(e) => { eprintln!("Overlay {:?}: {e:#}", a.name); record["status"] = json!("error"); record["message"] = json!(format!("{e:#}")); }
+                }
+            }
+            results.push(record); continue;
+        }
         if !supported(a.animation_type.as_deref(), a.frame_info_type.as_deref(), a.world_relative) {
             record["status"] = json!("unsupported");
-            record["message"] = json!("First pass imports base clips only; overlays, replacements and world-space clips retain metadata");
+            record["message"] = json!("Replacements, world-space clips and unsupported movement types retain metadata only");
             results.push(record); continue;
         }
         let export = || -> Result<Value> {
@@ -218,9 +245,9 @@ fn run() -> Result<()> {
         results.push(record);
     }
     let count = results.iter().filter(|r| r["status"] == "decoded").count();
-    let metadata: BTreeMap<_,_> = ["definitions", "contents"] .into_iter()
+    let metadata: BTreeMap<_,_> = ["definitions", "content", "contents"] .into_iter()
         .filter_map(|name| tag.root().field(name).and_then(|f| f.as_struct()).map(|s| (name, snapshot(s,0)))).collect();
-    let payload = json!({"format":FORMAT, "version":1, "game":"halo3_mcc", "decoder":DECODER,
+    let payload = json!({"format":FORMAT, "version":2, "game":"halo3_mcc", "decoder":DECODER,
         "source_tag":relative(&input), "source_graph":relative(&graph_path),
         "source_render_model":render_path.as_ref().map(|p|relative(p)),
         "units":"halo_world", "jma_units":"halo_world_x100", "quaternion_order":"wxyz",
@@ -228,7 +255,8 @@ fn run() -> Result<()> {
         "nodes":skeleton.nodes.iter().zip(&defaults).map(|(n,t)| json!({"name":n.name,"parent":n.parent,"rest":transform_json(t)})).collect::<Vec<_>>(),
         "animations":results, "source_metadata":metadata,
         "warnings":["Events and graph routing are retained as source metadata, not converted to Reach events.",
-            "Base clips only. Decoding does not establish Reach Tool or in-game compatibility."]});
+            "Time overlays are composed previews with a leading reference, not runtime NLA layers.",
+            "Decoding does not establish Reach Tool or in-game compatibility."]});
     let mut out = writer(&output.join("animations.h3anim.json"))?;
     serde_json::to_writer(&mut out, &payload)?;
     out.flush()?;

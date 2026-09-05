@@ -1,4 +1,4 @@
-"""Add H3 base actions to an existing rig without duplicating geometry."""
+"""Add H3 actions to an existing rig without duplicating geometry."""
 import json
 import bpy
 from mathutils import Quaternion
@@ -121,7 +121,7 @@ class AnimationAppender(AnimationStager):
                 self.results.append({'name': clip['name'], 'status': clip['status'], 'message': clip.get('message', '')})
                 continue
             self.build_action(clip)
-            self.results.append({'name': clip['name'], 'status': 'appended_base_action',
+            self.results.append({'name': clip['name'], 'status': 'appended_' + clip['animation_type'] + '_action',
                                  'frames': clip['decoded']['file_frame_count']})
             yield clip['name']
         arm = self.armature
@@ -141,7 +141,9 @@ class AnimationAppender(AnimationStager):
                       'Existing actions retained; the first new action is active.',
                       'New animation entries excluded from export. Existing exclusions unchanged.',
                       'Source-root movement stays folded on H3 rigs without a pedestal.',
-                      'Events retained, not converted. No Reach tags written.']}, indent=2))
+                      'Events retained, not converted. No Reach tags written.',
+                      'JMO frame 1 is the composition reference; frames 2 onward are codec samples.',
+                      'Time overlays are standalone composed previews, not NLA layers.']}, indent=2))
         arm['h3_animation_report'] = report.name
         self.context.view_layer.update()
 

@@ -19,7 +19,7 @@ _active = []
 class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
     bl_idname = 'nwo.import_halo3_animations'
     bl_label = 'Import Halo 3 Animations (Experimental)'
-    bl_description = 'Add H3 base actions to an existing armature, or optionally create a staging copy; write no tags'
+    bl_description = 'Add H3 actions to an existing armature, or optionally create a staging copy; write no tags'
     bl_options = {'REGISTER', 'UNDO'}
     filename_ext = ''
     # Blender's extension matcher truncates individual patterns to 15 characters.
@@ -27,8 +27,10 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
     target_armature: StringProperty(name='Target Armature', options={'SKIP_SAVE'})
     create_staging_copy: BoolProperty(name='Create Staging Copy', default=False, options={'SKIP_SAVE'},
         description='Duplicate the target rig and its bound objects for isolated playback; otherwise add actions to the existing rig')
+    include_overlays: BoolProperty(name='Import Time Overlays', default=False,
+        description='Import local time overlays as composed JMO actions with a leading reference; blend screens and replacements remain unsupported')
     animation_name: StringProperty(name='Exact Animation Name', default='combat:move_front',
-        description='Exact source graph name, including colons. Blank imports all supported base clips')
+        description='Exact source graph name, including colons. Blank imports all supported clips enabled below')
 
     @classmethod
     def poll(cls, context):
@@ -39,10 +41,11 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
         self.layout.prop_search(self, 'target_armature', context.scene, 'objects', text='Armature')
         self.layout.prop(self, 'create_staging_copy')
         self.layout.prop(self, 'animation_name')
+        self.layout.prop(self, 'include_overlays')
         self.layout.label(text='Copy rig and meshes' if self.create_staging_copy else 'Actions only; no duplicate meshes')
         self.layout.label(text='H3 .model: preferred rest-pose source')
         self.layout.label(text='.model_animation_graph also accepted')
-        self.layout.label(text='Base clips only; no Reach tag writes')
+        self.layout.label(text='Base clips and enabled time overlays; no tag writes')
         if not self.target_armature:
             self.layout.label(text='Choose an imported armature above', icon='INFO')
 
@@ -92,6 +95,8 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 command = [str(helper.resolve()), '--tags-root', str(root), '--input', str(source), '--output', str(output)]
                 if self.animation_name.strip():
                     command += ['--animation', self.animation_name.strip()]
+                if self.include_overlays:
+                    command.append('--include-overlays')
                 self._process = subprocess.Popen(command, cwd=str(temp), stdout=self._log, stderr=subprocess.STDOUT,
                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             self._settings.export_in_progress = True
@@ -140,6 +145,11 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                     raise RuntimeError(f'H3 animation helper failed ({code}): {log[-1600:]}')
             if self._steps is None:
                 manifest = load_manifest(self._manifest)
+                if not self.include_overlays:
+                    for clip in manifest['animations']:
+                        if clip['status'] == 'decoded' and clip['animation_type'] == 'overlay':
+                            clip['status'] = 'not_selected'
+                            clip['message'] = 'Import Time Overlays is disabled'
                 builder = AnimationStager if self.create_staging_copy else AnimationAppender
                 self._stager = builder(context, manifest, self._manifest.parent, self._target)
                 self._steps = iter(self._stager.build())
@@ -150,7 +160,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 self._finish(context)
                 print(f'[Foundry perf] H3 animation staging: {count} clips, {elapsed:.3f}s')
                 target = 'a staging copy' if self.create_staging_copy else self._target.name
-                self.report({'INFO'}, f'{count} base animations added to {target}. No Reach tags written')
+                self.report({'INFO'}, f'{count} animations added to {target}. No Reach tags written')
                 return {'FINISHED'}
         except Exception as exc:
             traceback.print_exc()
