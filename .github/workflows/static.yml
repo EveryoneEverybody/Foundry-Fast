@@ -2,7 +2,7 @@ name: Build and deploy Foundry extension
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "release/foundry-fast"]
   workflow_dispatch:
     inputs:
       source_ref:
@@ -28,7 +28,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.ref_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.sha }}
       - name: Identify source and helper
         id: source
         shell: pwsh
@@ -150,3 +150,55 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify published extension feed
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import time
+          from urllib.request import Request, urlopen
+
+          directory = Path('site/api/v1/extensions')
+          expected = json.loads((directory / 'build.json').read_text())
+          archive = (directory / 'io_scene_foundry.zip').read_bytes()
+          digest = 'sha256:' + hashlib.sha256(archive).hexdigest()
+          base = os.environ['PAGE_URL'].rstrip('/') + '/api/v1/extensions/'
+
+          def fetch(name):
+              request = Request(base + name, headers={'Cache-Control': 'no-cache'})
+              with urlopen(request, timeout=30) as response:
+                  data = response.read(128 * 1024 * 1024 + 1)
+              if len(data) > 128 * 1024 * 1024:
+                  raise ValueError('Published response exceeds 128 MiB')
+              return data
+
+          for attempt in range(12):
+              try:
+                  actual = json.loads(fetch('build.json'))
+                  if actual != expected:
+                      raise ValueError(f'Build metadata mismatch: {actual}')
+                  index = json.loads(fetch('index.json'))
+                  entries = [e for e in index['data'] if e['id'] == 'io_scene_foundry']
+                  if len(entries) != 1:
+                      raise ValueError('Expected one Foundry extension entry')
+                  entry = entries[0]
+                  if (entry['version'] != expected['version'] or entry['archive_hash'] != digest
+                          or entry['archive_size'] != len(archive)
+                          or entry['archive_url'] != './io_scene_foundry.zip'):
+                      raise ValueError('Published index does not match the built extension')
+                  downloaded = fetch('io_scene_foundry.zip')
+                  if len(downloaded) != len(archive) or 'sha256:' + hashlib.sha256(downloaded).hexdigest() != digest:
+                      raise ValueError('Published package does not match the built extension')
+                  print('FEED_VERIFIED ' + json.dumps({**expected, 'index_url': base + 'index.json',
+                                                       'archive_hash': digest, 'archive_size': len(archive)}))
+                  break
+              except (OSError, ValueError, KeyError, TypeError) as exc:
+                  if attempt == 11:
+                      raise
+                  print(f'Waiting for Pages propagation ({attempt + 1}/12): {exc}', flush=True)
+                  time.sleep(10)
+          PY

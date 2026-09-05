@@ -17,16 +17,22 @@ Foundry only needs to be installed once. Thereafter, you can use Blender to down
 - Launch Blender and open Preferences <div align="left"> <img src="img/install0.png"> </div>
 - Navigate to the **Get Extensions** tab and then click **Repositories**
 - On the **Repositories** windows click the `+` icon and then **Add Remote Repository** <div align="left"> <img src="img/install1.png"> </div>
-- In the **Add New Extension Repository** window copy and paste the following text into the **URL** field: `https://everyoneeverybody.github.io/Foundry/api/v1/extensions/index.json`
+- In the **Add New Extension Repository** window copy and paste the following text into the **URL** field: `https://everyoneeverybody.github.io/Foundry-Fast/api/v1/extensions/index.json`
 - I recommend checking the **Check for Updates on Startup** box, but this is optional
 -  Now click **Create** to link the remote repository to Blender <div align="left"> <img src="img/install2.png"> </div>
 - Enter `Foundry` into the search box and you should see the **Foundry** addon show up with an option to install <div align="left"> <img src="img/install3.png"> </div>
 - Once installed, you should have a **Launch Foundry** button show in the top right of the 3D viewport. Click this button to load the addon <div align="left"> <img src="img/install4.png"> </div>
 - To use Foundry you'll need at least one project loaded (Editing Kit). When launching Foundry for the first time you'll be prompted to select a project. Use the file dialog that opened to navigate to the folder containing either your HREK, H4EK, or H2AMP editing kit and then hit the Add Project button. Should you wish to add more projects, or reopen the project dialog, new projects can be added from either Foundry preferences or the Foundry Scene Properties panel <div align="left"> <img src="img/install5.png"> </div>
 
+## Development builds and publication
+
+A shader-test workflow artifact is not a Blender repository update. The **Build and deploy Foundry extension** workflow publishes the Pages feed after building the helpers and passing the importer tests. Pushes to `release/foundry-fast` publish that exact commit without merging experimental importer changes into `master`. Manual runs still accept `source_ref`; select the workflow branch containing the H3 helper build steps.
+
+The published `api/v1/extensions/build.json` records the package version and source commit. The deployment verifies the live index and package checksum before reporting success.
+
 ## Standalone Installation
 
-- The standalone zip can be downloaded [here](https://everyoneeverybody.github.io/Foundry/api/v1/extensions/io_scene_foundry.zip)
+- The standalone zip can be downloaded [here](https://everyoneeverybody.github.io/Foundry-Fast/api/v1/extensions/io_scene_foundry.zip)
 
 - Locate the file you downloaded named `io_scene_foundry.zip` and then open Blender. Drag and drop the zip file into Blender and press **Ok** on the dialog box that appears
 
