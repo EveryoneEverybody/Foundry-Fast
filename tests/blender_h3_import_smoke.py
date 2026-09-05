@@ -36,16 +36,22 @@ for part, path in [('managed_blam', ROOT / 'managed_blam'), ('h3_import', ROOT /
     module.__path__ = [str(path)]
     sys.modules[module.__name__] = module
 
-class TestObjectProps(bpy.types.PropertyGroup):
+class TestMeshProps(bpy.types.PropertyGroup):
     mesh_type: bpy.props.StringProperty()
+
+class TestObjectProps(bpy.types.PropertyGroup):
+    def get_mesh_type(self):
+        return self.id_data.data.nwo.mesh_type if self.id_data.type == 'MESH' else ''
+    mesh_type: bpy.props.StringProperty(get=get_mesh_type)
     marker_type: bpy.props.StringProperty()
     node_order_source: bpy.props.StringProperty()
 
 class TestCollectionProps(bpy.types.PropertyGroup):
     type: bpy.props.StringProperty()
 
-for cls in (TestObjectProps, TestCollectionProps):
+for cls in (TestMeshProps, TestObjectProps, TestCollectionProps):
     bpy.utils.register_class(cls)
+bpy.types.Mesh.nwo = bpy.props.PointerProperty(type=TestMeshProps)
 bpy.types.Object.nwo = bpy.props.PointerProperty(type=TestObjectProps)
 bpy.types.Collection.nwo = bpy.props.PointerProperty(type=TestCollectionProps)
 core = importlib.import_module(NAME + '.h3_import.core')
@@ -75,6 +81,9 @@ for scale, forward in [('blender', 'x'), ('blender', 'y'), ('max', 'x')]:
     assert armature.nwo.node_order_source == ''
     near(armature.data.bones['b_panel'].head_local, session.position([150, 200, 0]))
     render = next(o for o in bpy.data.objects if o.name.startswith('render:'))
+    assert render.data.nwo.mesh_type == '_connected_geometry_mesh_type_default'
+    collision = next(o for o in bpy.data.objects if o.name.startswith('collision:'))
+    assert collision.data.nwo.mesh_type == '_connected_geometry_mesh_type_collision'
     near(render.data.vertices[0].co, session.position([150, 200, 0]))
     assert len(render.data.uv_layers) == 1
     assert render.vertex_groups['b_panel'].weight(0) == 1

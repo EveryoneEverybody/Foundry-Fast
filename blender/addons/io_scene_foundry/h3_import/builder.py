@@ -117,7 +117,7 @@ class BuildSession:
         mesh.from_pydata([self.position(v["position"]) for v in vertices], [], faces)
         mesh.update()
         ob = self.object(name, mesh, collection)
-        ob.nwo.mesh_type = f"_connected_geometry_mesh_type_{'collision' if role == 'collision' else 'default'}"
+        mesh.nwo.mesh_type = f"_connected_geometry_mesh_type_{'collision' if role == 'collision' else 'default'}"
         utils.set_region(ob, region, utils.SetType.MODEL)
         utils.set_permutation(ob, permutation, utils.SetType.MODEL)
         ob["h3_source_lod"] = lod
