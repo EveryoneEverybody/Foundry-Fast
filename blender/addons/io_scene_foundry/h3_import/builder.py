@@ -1,6 +1,7 @@
 """Construct Foundry objects from a validated, read-only H3 extraction."""
 from collections import defaultdict
 import json
+from pathlib import Path
 import bpy
 import bmesh
 from mathutils import Matrix, Quaternion, Vector
@@ -10,7 +11,7 @@ from .core import compact_mesh, groups, shader_candidates
 
 
 class BuildSession:
-    def __init__(self, context, payload, source_path, reference_only=True):
+    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True):
         self.context = context
         self.payload = payload
         self.source_path = str(source_path)
@@ -21,6 +22,9 @@ class BuildSession:
         self.created = []
         self.warnings = list(payload.get("warnings", []))
         self.armature = None
+        self.preview_materials = preview_materials
+        self.flip_normal_green = flip_normal_green
+        self.render_materials = []
 
     def remember(self, store, value):
         self.created.append((store, value))
@@ -104,6 +108,8 @@ class BuildSession:
                     material["h3_source_shader"] = candidates[0]
                 elif len(candidates) > 1:
                     self.warnings.append(f"Ambiguous shader for material {source['name']}: {candidates}")
+            if role == "render":
+                self.render_materials.append(material)
             materials.append(material)
         return materials
 
@@ -249,7 +255,10 @@ class BuildSession:
             for shape in self.payload["physics"]["shapes"]:
                 self.build_physics_reference(shape, physics)
                 yield "Physics reference: " + shape["name"]
-        self.warnings.append("Materials are placeholders. Halo 3 shader paths are stored as metadata only. Assign valid Reach shader paths before an export test.")
+        if self.preview_materials:
+            yield from self.build_material_previews(root)
+        else:
+            self.warnings.append("Materials are placeholders. Halo 3 shader paths are stored as metadata only. Assign valid Reach shader paths before an export test.")
         if self.reference_only:
             self.warnings.append("Reference Only is enabled. The H3 root collection is excluded from Foundry export.")
         report = self.remember(bpy.data.texts, bpy.data.texts.new("H3 import - " + self.payload["name"]))
@@ -265,6 +274,30 @@ class BuildSession:
             self.context.view_layer.objects.active = self.armature
         self.context.view_layer.update()
         yield "Complete"
+
+    def build_material_previews(self, root):
+        from .materials import load_manifest
+        from .material_builder import PreviewBuilder
+        path = Path(self.source_path).parent / 'shader_manifest.json'
+        try:
+            manifest = load_manifest(path, self.payload['source_tag'])
+        except (OSError, ValueError, TypeError) as exc:
+            self.warnings.append(f"H3 material metadata unavailable: {exc}. Geometry retained with placeholders.")
+            return
+        source = self.remember(bpy.data.texts, bpy.data.texts.new("H3 shader source - " + self.payload['name']))
+        source.write(json.dumps(manifest, indent=2))
+        root['h3_shader_manifest'] = source.name
+        builder = PreviewBuilder(manifest, path.parent, self.remember, self.flip_normal_green)
+        for i, material in enumerate(self.render_materials):
+            material['h3_shader_manifest'] = source.name
+            builder.build(material)
+            yield f"Material preview: {i + 1} / {len(self.render_materials)}"
+        report = self.remember(bpy.data.texts, bpy.data.texts.new("H3 material report - " + self.payload['name']))
+        report.write(json.dumps(builder.results, indent=2))
+        root['h3_material_report'] = report.name
+        built = sum(r['status'] == 'approximate_preview' for r in builder.results)
+        print(f"[Foundry perf] H3 materials: {built} previews, {len(builder.results) - built} placeholders, {len(builder.images)} packed images")
+        self.warnings.append("Blender material previews are approximations. Reach shader paths remain unassigned; no Reach shader tags were generated. See the H3 material report for unsupported features.")
 
     def rollback(self):
         if self.context.object is not None and self.context.object.mode != 'OBJECT':
