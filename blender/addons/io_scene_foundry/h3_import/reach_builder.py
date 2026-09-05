@@ -80,7 +80,11 @@ class ReachStager:
         image.nwo.bitmap_type = key[3]
         image.nwo.reexport_tiff = False
         image['h3_reach_staged_image'] = True
-        image.pack()
+        # Image.copy retains packed bytes. Repacking would reopen a deleted extraction path.
+        if image.packed_file is None:
+            image.pack()
+        if image.packed_file is None:
+            raise ValueError('Staged image has no packed source data')
         image.filepath = ''
         self.images[cache_key] = image
         return image

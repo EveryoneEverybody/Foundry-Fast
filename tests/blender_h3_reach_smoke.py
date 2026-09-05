@@ -84,7 +84,8 @@ def group_of(material):
 
 def source_snapshot(material):
     return ([(n.name, n.type) for n in material.node_tree.nodes],
-            [(n.image.name, n.image.colorspace_settings.name, n.image.nwo.filepath)
+            [(n.image.name, n.image.colorspace_settings.name, n.image.nwo.filepath,
+              bytes(n.image.packed_file.data))
              for n in material.node_tree.nodes if n.type == 'TEX_IMAGE'],
             bpy.data.texts[material['h3_shader_manifest']].as_string())
 
@@ -92,14 +93,11 @@ def source_snapshot(material):
 data = manifest()
 source = build_source(data)
 snapshot = source_snapshot(source)
-print('SOURCE_IMAGES', [(n.image.name, n.image.get('h3_source_bitmap'), n.image.get('h3_bitmap_index'), n.image.has_data, n.image.packed_file is not None) for n in source.node_tree.nodes if n.type == 'TEX_IMAGE'])
 stager = module.ReachStager(load_resource, no_aliases)
 native = stager.build(source)
 assert native, stager.results
 print('REACH_STAGING_RESULT', json.dumps(stager.results[-1]))
-print('SOURCE_IMAGES_AFTER', [(n.image.name, n.image.get('h3_source_bitmap'), n.image.get('h3_bitmap_index'), n.image.has_data, n.image.packed_file is not None) for n in source.node_tree.nodes if n.type == 'TEX_IMAGE'])
 group = group_of(native)
-print('REACH_ACTIVE_INPUTS', [(s.name, s.type) for s in group.inputs if s.is_icon_visible])
 assert group.inputs['self_illumination'].default_value == 'illum_detail'
 assert group.inputs['albedo'].default_value == 'constant_color'
 assert group.inputs['material_model'].default_value == 'none'
@@ -162,12 +160,14 @@ body_source = build_source(body, 'metal body')
 body_native = stager.build(body_source)
 assert body_native, stager.results
 body_group = group_of(body_native)
+print('REACH_BODY_INPUTS', [(s.name, s.type) for s in body_group.inputs if s.is_icon_visible])
 assert body_group.inputs['material_model'].default_value == 'two_lobe_phong'
-assert body_group.inputs['bump_map.rgb'].links[0].from_node.type == 'TEX_IMAGE'
-assert body_group.inputs['bump_detail_map.rgb'].is_linked
+# Normal textures use unsuffixed vector inputs in the bundled group.
+assert body_group.inputs['bump_map'].links[0].from_node.type == 'TEX_IMAGE'
+assert body_group.inputs['bump_detail_map'].is_linked
 assert abs(body_group.inputs['albedo_color_alpha'].default_value - .8) < 1e-6
 assert body_group.inputs['diffuse_coefficient'].default_value == 0
-tex = body_group.inputs['bump_map.rgb'].links[0].from_node
+tex = body_group.inputs['bump_map'].links[0].from_node
 assert tex.image.colorspace_settings.name == 'Non-Color'
 assert tex.image.nwo.bitmap_type == 'Normal Map (aka zbump)'
 assert tex.image != body_group.inputs['base_map.rgb'].links[0].from_node.image
