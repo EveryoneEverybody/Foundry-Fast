@@ -2,7 +2,7 @@
 import json
 import bpy
 from .. import utils
-from .materials import validate_manifest
+from .materials import _object_pairs, validate_manifest
 from .reach_materials import (CATEGORIES, GROUP_NAME, normalized,
                              parameter_bindings, stage_name, staged_image_key,
                              staged_image_name, validate_shader)
@@ -37,7 +37,7 @@ class ReachStager:
                 raise ValueError('Source manifest is missing; re-import with Material Previews enabled')
             if len(text.as_string()) > 64 * 1024 * 1024:
                 raise ValueError('Source manifest exceeds 64 MiB')
-            manifest = json.loads(text.as_string())
+            manifest = json.loads(text.as_string(), object_pairs_hook=_object_pairs)
             validate_manifest(manifest, material.get('h3_source_object', ''))
             self.manifests[text_name] = manifest
         manifest = self.manifests[text_name]
@@ -58,11 +58,16 @@ class ReachStager:
         if source.node_tree:
             candidates = [n.image for n in source.node_tree.nodes
                           if n.type == 'TEX_IMAGE' and n.image]
-        candidates += list(bpy.data.images)
+        for other in bpy.data.materials:
+            if other == source or other.get('h3_shader_manifest') != source.get('h3_shader_manifest'):
+                continue
+            if other.node_tree:
+                candidates.extend(n.image for n in other.node_tree.nodes
+                                  if n.type == 'TEX_IMAGE' and n.image)
         image = next((image for image in candidates
                       if image.get('h3_source_bitmap', '').replace('\\', '/').casefold() == key[0]
                       and image.get('h3_bitmap_index') == key[1]
-                      and (image.packed_file or image.has_data)), None)
+                      and (image.packed_file is not None or image.has_data)), None)
         if image is None:
             raise ValueError('No loaded source pixels; re-import with Material Previews enabled')
         # Destination export properties must not change an H3 preview image.
@@ -76,6 +81,7 @@ class ReachStager:
         image.nwo.reexport_tiff = False
         image['h3_reach_staged_image'] = True
         image.pack()
+        image.filepath = ''
         self.images[cache_key] = image
         return image
 
