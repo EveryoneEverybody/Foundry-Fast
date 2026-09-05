@@ -12,11 +12,18 @@ from .animations import KINDS, CONTROL_PREFIXES, canonical_node, node_mapping, s
 
 def find_armature(context):
     ob = context.object
-    if ob is None:
-        return None
-    if ob.type == 'ARMATURE':
-        return ob
-    return ob.find_armature() if ob.type == 'MESH' else (ob.parent if ob.parent and ob.parent.type == 'ARMATURE' else None)
+    seen = set()
+    while ob is not None and ob.as_pointer() not in seen:
+        seen.add(ob.as_pointer())
+        if ob.type == 'ARMATURE':
+            return ob
+        if ob.type == 'MESH':
+            armature = ob.find_armature()
+            if armature is not None:
+                return armature
+        # Bone-parented reference meshes may have no armature modifier.
+        ob = ob.parent
+    return None
 
 
 def _ordered(bones):

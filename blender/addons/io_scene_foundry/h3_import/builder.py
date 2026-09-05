@@ -8,6 +8,7 @@ from mathutils import Matrix, Quaternion, Vector
 from .. import utils
 from ..managed_blam import import_transform
 from .core import compact_mesh, groups, shader_candidates
+from .volume_display import configure_material, configure_object
 
 
 class BuildSession:
@@ -25,6 +26,7 @@ class BuildSession:
         self.preview_materials = preview_materials
         self.flip_normal_green = flip_normal_green
         self.render_materials = []
+        self.physics_material = None
 
     def remember(self, store, value):
         self.created.append((store, value))
@@ -110,6 +112,8 @@ class BuildSession:
                     self.warnings.append(f"Ambiguous shader for material {source['name']}: {candidates}")
             if role == "render":
                 self.render_materials.append(material)
+            if role == "collision":
+                configure_material(material, "collision")
             materials.append(material)
         return materials
 
@@ -159,7 +163,7 @@ class BuildSession:
         if role == "collision":
             bone = source["nodes"][rigid_index]["name"] if rigid_index != -1 else None
             self.parent_rigid(ob, bone, Matrix.Identity(4))
-            ob.display_type = 'WIRE'
+            configure_object(ob, "collision")
             ob.hide_render = True
         elif self.armature is not None:
             ob.parent = self.armature
@@ -220,7 +224,11 @@ class BuildSession:
             bm.free()
         ob = self.object("physics reference:" + shape["name"], mesh, collection)
         ob["h3_physics_source"] = json.dumps(shape)
-        ob.display_type = 'WIRE'
+        if self.physics_material is None:
+            self.physics_material = self.remember(bpy.data.materials, bpy.data.materials.new("H3 Physics Reference"))
+            configure_material(self.physics_material, "physics")
+        mesh.materials.append(self.physics_material)
+        configure_object(ob, "physics")
         ob.hide_render = True
         node = shape["node"]
         bone = self.payload["physics"]["nodes"][node]["name"] if node != -1 else None
