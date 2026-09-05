@@ -59,6 +59,8 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: xvfb-run -a .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_illumination_smoke.py
+      - name: Test native Reach material staging
+        run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_reach_smoke.py
 
   package:
     needs: [helper, blender]
@@ -91,7 +93,7 @@ jobs:
           sha256sum io_scene_foundry_h3_shaders_test.zip > io_scene_foundry_h3_shaders_test.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: Foundry-H3-shaders-test-1.9.28
+          name: Foundry-H3-shaders-test-1.9.29
           path: |
             io_scene_foundry_h3_shaders_test.zip
             io_scene_foundry_h3_shaders_test.sha256

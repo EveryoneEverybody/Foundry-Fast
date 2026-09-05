@@ -286,11 +286,15 @@ def menu_import(self, context):
 
 
 def register():
+    from . import reach_ops
+    reach_ops.register()
     bpy.utils.register_class(NWO_OT_ImportHalo3Object)
     bpy.types.TOPBAR_MT_file_import.append(menu_import)
 
 
 def unregister():
+    from . import reach_ops
+    reach_ops.unregister()
     for operator in list(_active):
         operator._finish(bpy.context, rollback=True)
     bpy.types.TOPBAR_MT_file_import.remove(menu_import)
