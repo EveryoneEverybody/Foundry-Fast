@@ -284,4 +284,5 @@ class MaterialNodes:
             node.location = ((i % 5) * 230, -(i // 5) * 230)
         output.location = (1400, 0); surface.location = (1100, 0)
         if hasattr(self.material, 'surface_render_method'):
-            self.material.surface_render_method = 'DITHERED'
+            # Dithered coverage discards zero-alpha additive emission in Eevee.
+            self.material.surface_render_method = 'BLENDED' if self.illumination_surface == 'additive' else 'DITHERED'
