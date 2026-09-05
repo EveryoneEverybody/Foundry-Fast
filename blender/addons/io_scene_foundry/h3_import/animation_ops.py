@@ -1,4 +1,4 @@
-"""Modal H3 animation extraction and isolated armature staging."""
+"""Modal H3 animation import with optional isolated staging."""
 import os
 from pathlib import Path
 import subprocess
@@ -6,11 +6,12 @@ import tempfile
 import time
 import traceback
 import bpy
-from bpy.props import StringProperty
+from bpy.props import BoolProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 from .. import utils
 from .animations import load_manifest
 from .animation_builder import AnimationStager, find_armature
+from .animation_append import AnimationAppender
 
 _active = []
 
@@ -18,28 +19,36 @@ _active = []
 class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
     bl_idname = 'nwo.import_halo3_animations'
     bl_label = 'Import Halo 3 Animations (Experimental)'
-    bl_description = 'Read H3 base animations onto a copy of the selected armature; preserve source rig and write no tags'
+    bl_description = 'Add H3 base actions to an existing armature, or optionally create a staging copy; write no tags'
     bl_options = {'REGISTER', 'UNDO'}
     filename_ext = ''
-    filter_glob: StringProperty(default='*.model;*.model_animation_graph;*.giant;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3anim.json', options={'HIDDEN'})
+    # Blender's extension matcher truncates individual patterns to 15 characters.
+    filter_glob: StringProperty(default='*.model;*.model*graph;*.giant;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device*;*.equipment;*.h3anim.json', options={'HIDDEN'})
+    target_armature: StringProperty(name='Target Armature', options={'SKIP_SAVE'})
+    create_staging_copy: BoolProperty(name='Create Staging Copy', default=False, options={'SKIP_SAVE'},
+        description='Duplicate the target rig and its bound objects for isolated playback; otherwise add actions to the existing rig')
     animation_name: StringProperty(name='Exact Animation Name', default='combat:move_front',
         description='Exact source graph name, including colons. Blank imports all supported base clips')
 
     @classmethod
     def poll(cls, context):
-        return (context.mode == 'OBJECT' and find_armature(context) is not None
-                and utils.current_project_valid() and not utils.is_corinth(context)
+        return (context.mode == 'OBJECT' and utils.current_project_valid() and not utils.is_corinth(context)
                 and not utils.get_scene_props().export_in_progress and not _active)
 
     def draw(self, context):
+        self.layout.prop_search(self, 'target_armature', context.scene, 'objects', text='Armature')
+        self.layout.prop(self, 'create_staging_copy')
         self.layout.prop(self, 'animation_name')
-        self.layout.label(text='Select the H3 .model for complete rest transforms')
-        self.layout.label(text='Target: copy of selected armature and bound objects')
-        self.layout.label(text='Base clips only; overlays and events retain metadata')
-        self.layout.label(text='H3 paths: Foundry Preferences > Halo 3 Import')
+        self.layout.label(text='Copy rig and meshes' if self.create_staging_copy else 'Actions only; no duplicate meshes')
+        self.layout.label(text='H3 .model: preferred rest-pose source')
+        self.layout.label(text='.model_animation_graph also accepted')
+        self.layout.label(text='Base clips only; no Reach tag writes')
+        if not self.target_armature:
+            self.layout.label(text='Choose an imported armature above', icon='INFO')
 
     def invoke(self, context, event):
-        self._target = find_armature(context)
+        selected = find_armature(context)
+        self.target_armature = selected.name if selected else ''
         if not self.filepath:
             configured = utils.get_prefs().h3_tags_root.strip()
             if configured:
@@ -59,9 +68,12 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                              context.scene.render.fps, context.scene.render.fps_base)
         self._phase = 'Reading source animation resources'
         try:
-            self._target = getattr(self, '_target', None) or find_armature(context)
-            if self._target is None:
-                raise ValueError('Select the H3 or Reach armature before importing animations')
+            self._target = (context.scene.objects.get(self.target_armature)
+                            if self.target_armature else find_armature(context))
+            if self._target is None or self._target.type != 'ARMATURE':
+                raise ValueError('Choose a target armature. This command imports actions, not mesh geometry')
+            if not self.poll(context):
+                raise ValueError('Animation import requires an idle Reach project in Object Mode')
             source = Path(bpy.path.abspath(self.filepath)).resolve(strict=True)
             if source.name.endswith('.h3anim.json'):
                 self._manifest = source
@@ -128,7 +140,8 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                     raise RuntimeError(f'H3 animation helper failed ({code}): {log[-1600:]}')
             if self._steps is None:
                 manifest = load_manifest(self._manifest)
-                self._stager = AnimationStager(context, manifest, self._manifest.parent, self._target)
+                builder = AnimationStager if self.create_staging_copy else AnimationAppender
+                self._stager = builder(context, manifest, self._manifest.parent, self._target)
                 self._steps = iter(self._stager.build())
             try:
                 self._phase = next(self._steps)
@@ -136,7 +149,8 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 count = len(self._stager.animations)
                 self._finish(context)
                 print(f'[Foundry perf] H3 animation staging: {count} clips, {elapsed:.3f}s')
-                self.report({'INFO'}, f'{count} base animations staged on a copy. No Reach tags written')
+                target = 'a staging copy' if self.create_staging_copy else self._target.name
+                self.report({'INFO'}, f'{count} base animations added to {target}. No Reach tags written')
                 return {'FINISHED'}
         except Exception as exc:
             traceback.print_exc()

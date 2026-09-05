@@ -13,7 +13,8 @@ root = Path(__file__).resolve().parents[1]
 addon = root / 'blender/addons/io_scene_foundry'
 version = tomllib.loads((addon / 'blender_manifest.toml').read_text())['version']
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
-files = ['__init__.py', 'h3_import/animations.py', 'h3_import/animation_builder.py', 'h3_import/animation_ops.py']
+files = ['__init__.py', 'h3_import/animations.py', 'h3_import/animation_builder.py',
+         'h3_import/animation_append.py', 'h3_import/animation_ops.py']
 helpers = ['h3-object-bridge', 'h3-shader-bridge', 'h3-animation-bridge']
 result = {'version': version, 'source_commit': commit, 'archive': path.name,
           'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'helpers': {}, 'source_files': {}}
