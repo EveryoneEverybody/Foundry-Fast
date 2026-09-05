@@ -5,6 +5,7 @@ from pathlib import Path
 
 FORMAT = 'foundry.h3-shaders'
 DETAIL_MULTIPLIER = 4.59479
+ILLUMINATION_MODES = {'simple', 'simple_with_alpha_mask', 'from_albedo', 'illum_detail'}
 ALBEDO_MODES = {'default', 'constant_color', 'detail_blend', 'two_change_color', 'four_change_color'}
 
 
@@ -60,6 +61,8 @@ def validate_manifest(data, source_tag):
     for path, shader in shaders.items():
         if not isinstance(shader, dict) or shader.get('source') != path:
             raise ValueError('Shader source identity mismatch')
+        if 'source_description' in shader:
+            validate_source_description(shader['source_description'], path)
         if shader.get('status') != 'resolved_snapshot':
             continue
         categories = named(shader.get('categories'), 'category')
@@ -134,11 +137,25 @@ def color_space(bitmap, role):
     return 'sRGB'
 
 
+def illumination_surface(categories, group):
+    """Select an unlit preview only when no lighting or coverage pass is needed."""
+    if (group != 'rmsh' or categories.get('self_illumination') not in ILLUMINATION_MODES
+            or categories.get('material_model') != 'none'
+            or categories.get('environment_mapping', 'none') not in {'none', 'off'}
+            or categories.get('alpha_test', 'none') not in {'none', 'off'}):
+        return 'principled'
+    blend = categories.get('blend_mode', 'opaque')
+    return {'opaque': 'emission', 'additive': 'additive'}.get(blend, 'principled')
+
+
 def plan(shader):
     if shader.get('status') != 'resolved_snapshot':
         raise ValueError(shader.get('error', 'Shader metadata is unresolved'))
     categories = {k: v['option'] for k, v in named(shader['categories'], 'category').items()}
     diagnostics = list(shader.get('diagnostics', []))
+    if 'source_description' in shader:
+        description = validate_source_description(shader['source_description'], shader['source'])
+        diagnostics.extend(f"Source {d['code']}: {d['message']}" for d in description['diagnostics'])
     albedo = categories.get('albedo', 'default')
     if albedo not in ALBEDO_MODES:
         diagnostics.append(f'Albedo {albedo}: base texture preview only')
@@ -148,4 +165,55 @@ def plan(shader):
     if any(p.get('has_functions') for p in shader['parameters']):
         diagnostics.append('Material functions use their time-zero sample; source curves remain in metadata')
     return {'categories': categories, 'parameters': named(shader['parameters'], 'name'),
-            'albedo': albedo, 'diagnostics': diagnostics}
+            'albedo': albedo, 'diagnostics': diagnostics,
+            'illumination_surface': illumination_surface(categories, shader.get('group'))}
+
+
+def source_material_key(path):
+    """Normalize a source identity without interpreting it as a Reach path."""
+    if not isinstance(path, str) or not path or '\x00' in path:
+        raise ValueError('Material source path must be nonempty text')
+    normalized = path.replace('\\', '/')
+    if ':' in normalized or any(p in {'', '.', '..'} for p in normalized.split('/')):
+        raise ValueError('Unsafe material source path')
+    if '.' not in normalized.rsplit('/', 1)[-1]:
+        raise ValueError('Material source path needs its tag class')
+    return normalized.casefold()
+
+
+def validate_source_description(record, source):
+    """Validate optional provenance separately from preview values."""
+    if not isinstance(record, dict) or (record.get('format'), record.get('version'), record.get('game')) != (
+        'foundry.h3-material', 1, 'halo3_mcc'
+    ) or type(record.get('version')) is not int:
+        raise ValueError('Unsupported H3 source material description')
+    _finite(record)
+    key = source_material_key(record.get('source_shader'))
+    if key != source_material_key(source):
+        raise ValueError('Material description belongs to a different source shader')
+    if record.get('source_class') != key.rsplit('.', 1)[-1]:
+        raise ValueError('Material source class does not match its path')
+    status = record.get('description_status')
+    if status not in {'resolved', 'partial', 'failed', 'unsupported'}:
+        raise ValueError('Unknown material description status')
+    if record.get('conversion_status') != 'source_only' or 'destination_shader' not in record or record['destination_shader'] is not None:
+        raise ValueError('Source descriptions cannot assign destination shaders')
+    diagnostics = record.get('diagnostics')
+    if not isinstance(diagnostics, list) or any(not isinstance(d, dict) or
+        not isinstance(d.get('code'), str) or not isinstance(d.get('message'), str) for d in diagnostics):
+        raise ValueError('Invalid source material diagnostics')
+    if status in {'resolved', 'partial'}:
+        definition = source_material_key(record.get('definition'))
+        if not definition.endswith('.render_method_definition'):
+            raise ValueError('Invalid source render-method definition class')
+        for name in ('categories', 'parameters', 'declarations', 'source_parameters'):
+            if not isinstance(record.get(name), list):
+                raise ValueError(f'Missing material {name} list')
+        for parameter in named(record['parameters'], 'name').values():
+            transform = parameter.get('texture_transform')
+            if transform is not None:
+                if not isinstance(transform, dict):
+                    raise ValueError('Invalid source texture transform')
+                _vector(transform.get('scale'), 2)
+                _vector(transform.get('translation'), 2)
+    return record
