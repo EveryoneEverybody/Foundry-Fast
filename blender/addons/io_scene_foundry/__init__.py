@@ -16,6 +16,7 @@ from . import perf_material_cleanup
 from . import perf_bitmap_cache
 from . import perf_patch
 from . import fast_runtime
+from . import h3_import
 
 modules = [
     preferences,
@@ -32,6 +33,7 @@ modules = [
     perf_bitmap_cache,
     perf_patch,
     fast_runtime,
+    h3_import,
 ]
             
 def register():

@@ -377,6 +377,14 @@ def draw_foundry_preferences(layout, prefs, context=None, show_save_button=False
     col.operator("nwo.project_move", text="", icon="TRIA_UP").direction = 'up'
     col.operator("nwo.project_move", icon="TRIA_DOWN", text="").direction = 'down'
 
+    box = _settings_box(layout, "Halo 3 Import (Experimental)")
+    box.prop(prefs, "h3_tags_root")
+    box.label(text="Source tags only. No project.xml or Projects entry required.")
+    box.label(text="Leave blank to detect the tags directory from the selected file.")
+    box.prop(prefs, "h3_extraction_helper")
+    box.label(text="Leave blank to use the bundled extraction helper.")
+    box.label(text="The active Reach project remains selected under Projects.")
+
     box = _settings_box(layout, "Halo Tools")
     row = box.row(align=True, heading="Tool Version")
     row.prop(prefs, "tool_type", expand=True)
@@ -456,6 +464,20 @@ def draw_foundry_preferences(layout, prefs, context=None, show_save_button=False
 
 class FoundryPreferences(AddonPreferences):
     bl_idname = __package__
+
+    h3_tags_root: StringProperty(
+        name="Halo 3 Tags Directory",
+        description="H3EK source tags directory, separate from the active Reach project. Leave blank to detect from the selected tag. No project.xml is required",
+        subtype='DIR_PATH',
+        options=set(),
+    )
+
+    h3_extraction_helper: StringProperty(
+        name="Extraction Helper Override",
+        description="Optional path to h3-object-bridge.exe. Leave blank to use the helper bundled with the H3 test build",
+        subtype='FILE_PATH',
+        options=set(),
+    )
 
     tool_type: EnumProperty(
         name="Tool Type",
