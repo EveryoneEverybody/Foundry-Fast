@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use blam_tags::{Bitmap, TagFile};
 use blam_tags::render_method::{
     compile_real_constant, ParameterSource, RenderMethod, RenderMethodChoices,
-    RenderMethodDefinition, RenderMethodOption, RenderMethodParameter,
+    RenderMethodDefinition, RenderMethodParameter,
     RenderMethodParameterType, ResolvedRenderMethod, ResolvedValue,
 };
 use serde_json::{json, Value};
@@ -12,6 +12,10 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Component, Path, PathBuf};
+
+#[path = "../material_description.rs"]
+mod material_description;
+use material_description::OptionSource;
 
 fn resolve(root: &Path, name: &str, ext: Option<&str>) -> Result<PathBuf> {
     let name = name.replace('\\', "/");
@@ -62,7 +66,7 @@ struct Reader {
     root: PathBuf,
     output: PathBuf,
     reach: Option<PathBuf>,
-    options: BTreeMap<PathBuf, RenderMethodOption>,
+    options: BTreeMap<PathBuf, OptionSource>,
     definitions: BTreeMap<PathBuf, RenderMethodDefinition>,
     bitmaps: BTreeMap<String, Value>,
 }
@@ -76,10 +80,10 @@ impl Reader {
         Ok(value)
     }
 
-    fn option(&mut self, root: &Path, name: &str) -> Result<RenderMethodOption> {
+    fn option(&mut self, root: &Path, name: &str) -> Result<OptionSource> {
         let path = resolve(root, name, Some("render_method_option"))?;
         if let Some(value) = self.options.get(&path) { return Ok(value.clone()); }
-        let value = RenderMethodOption::from_tag(&TagFile::read(&path)?)?;
+        let value = OptionSource::from_tag(&TagFile::read(&path)?)?;
         self.options.insert(path, value.clone());
         Ok(value)
     }
@@ -136,22 +140,77 @@ impl Reader {
 
     fn shader(&mut self, source: &str) -> Result<Value> {
         let tag = TagFile::read(resolve(&self.root, source, None)?)?;
-        let rm = RenderMethod::from_tag(&tag)?;
+        let mut result = json!({"source":source,"status":"unresolved"});
+        let outcome = catch_unwind(AssertUnwindSafe(|| self.shader_from_tag(source, &tag, &mut result)));
+        let error = match outcome {
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(format!("{e:#}")),
+            Err(_) => Some("Shader decoder panicked; source fields and geometry retained".into()),
+        };
+        if let Some(error) = error {
+            result["status"] = json!("error");
+            result["error"] = json!(error);
+        }
+        let description = result.as_object_mut().unwrap().remove("source_description")
+            .unwrap_or_else(|| material_description::failed("material_not_resolved",
+                result["error"].as_str().unwrap_or("Source material has no resolved description")));
+        result["source_description"] = material_description::finish(source, Some(&tag), description);
+        Ok(result)
+    }
+
+    fn shader_from_tag(&mut self, source: &str, tag: &TagFile, result: &mut Value) -> Result<()> {
+        let rm = RenderMethod::from_tag(tag)?;
         let root = tag.root();
         let rm_struct = root.descend("render_method").unwrap_or(root);
         let reference = rm_struct.read_tag_ref_path("reference").unwrap_or_default();
-        let mut result = json!({"source":source,"group":String::from_utf8_lossy(&rm.group_tag.to_be_bytes()).to_string(),
+        *result = json!({"source":source,"group":String::from_utf8_lossy(&rm.group_tag.to_be_bytes()).to_string(),
             "definition":rm.definition_path,"reference":reference,"options_raw":rm.options,
             "authored_parameters":rm.parameters.iter().map(authored).collect::<Vec<_>>(),
             "material_names":rm.material_names,"status":"unresolved","categories":[],"parameters":[]});
         // The convenience walker does not traverse reference shaders.
         if !reference.is_empty() {
             result["error"] = json!("Reference shader inheritance is retained but not flattened in this build");
-            return Ok(result);
+            result["source_description"] = json!({"description_status":"unsupported",
+                "diagnostics":[{"code":"reference_inheritance_not_flattened", "message":reference}]});
+            return Ok(());
         }
         let source_root = self.root.clone();
         let mut definition = self.definition(&source_root, &rm.definition_path)?;
         let mut diagnostics = Vec::<String>::new();
+        let mut selected = BTreeMap::new();
+        let mut required_failures = Vec::new();
+        let mut paths = BTreeSet::new();
+        for (i, category) in definition.categories.iter().enumerate() {
+            let index = rm.options.get(i).copied().unwrap_or(0).max(0) as usize;
+            if let Some(option) = category.options.get(index).filter(|o| !o.option_path.is_empty()) {
+                paths.insert(option.option_path.clone());
+            }
+        }
+        for path in paths {
+            match catch_unwind(AssertUnwindSafe(|| self.option(&source_root, &path))) {
+                Ok(Ok(option)) => { selected.insert(path, option); }
+                other => {
+                    let error = match other { Ok(Err(e)) => format!("{e:#}"), _ => "Option decoder panicked".into() };
+                    required_failures.push(format!("{path}: {error}"));
+                }
+            }
+        }
+        if !definition.global_options_path.is_empty() && !selected.contains_key(&definition.global_options_path) {
+            match catch_unwind(AssertUnwindSafe(|| self.option(&source_root, &definition.global_options_path))) {
+                Ok(Ok(option)) => { selected.insert(definition.global_options_path.clone(), option); }
+                _ => diagnostics.push(format!("Global option declarations unavailable: {}", definition.global_options_path)),
+            }
+        }
+        result["source_description"] = if rm.group_tag.to_be_bytes() == *b"rmsh" {
+            match catch_unwind(AssertUnwindSafe(|| material_description::describe(&rm, &definition, &selected))) {
+                Ok(value) => value,
+                Err(_) => material_description::failed("description_decoder_failed", "Source description decoder panicked"),
+            }
+        } else {
+            json!({"description_status":"unsupported", "diagnostics":[{
+                "code":"unsupported_shader_class", "message":"Resolved descriptions currently cover ordinary object shaders"}]})
+        };
+        if !required_failures.is_empty() { bail!("{}", required_failures.join("; ")); }
         let mut seen = BTreeSet::new();
         for (i, c) in definition.categories.iter().enumerate() {
             if c.category_name.is_empty() || !seen.insert(c.category_name.clone()) {
@@ -161,13 +220,6 @@ impl Reader {
             if n < -1 || n.max(0) as usize >= c.options.len() { bail!("Invalid option for {}: {n}",c.category_name); }
         }
         let choices = RenderMethodChoices::resolve(&rm, &definition);
-        let mut selected = BTreeMap::new();
-        for (c, choice) in definition.categories.iter().zip(choices.choices()) {
-            let o = &c.options[choice.option_index as usize];
-            if !o.option_path.is_empty() {
-                selected.insert(o.option_path.clone(), self.option(&source_root, &o.option_path)?);
-            }
-        }
         result["categories"] = json!(choices.choices().iter().map(|c| json!({
             "category":c.category_name,"option":c.option_name,"source_index":c.option_index
         })).collect::<Vec<_>>());
@@ -177,10 +229,10 @@ impl Reader {
         }
         // Globals are retained above; the selected-category walker stays unchanged.
         definition.global_options_path.clear();
-        let resolved = ResolvedRenderMethod::resolve(&rm, &definition, |p| selected.get(p).cloned());
+        let resolved = ResolvedRenderMethod::resolve(&rm, &definition, |p| selected.get(p).map(|s| s.option.clone()));
         let declarations: Vec<_> = definition.categories.iter().zip(choices.choices()).flat_map(|(c, choice)| {
             let path = &c.options[choice.option_index as usize].option_path;
-            selected.get(path).into_iter().flat_map(|op| op.parameters.iter())
+            selected.get(path).into_iter().flat_map(|s| s.option.parameters.iter())
         }).collect();
         let mut parameters = Vec::new();
         for p in &resolved.parameters {
@@ -221,7 +273,7 @@ impl Reader {
                 Err(e) => json!({"status":"unresolved","error":format!("{e:#}")}),
             };
         }
-        Ok(result)
+        Ok(())
     }
 }
 
@@ -265,7 +317,7 @@ fn run() -> Result<()> {
             "--tags-root" | "--asset" | "--output" | "--reach-tags-root" => {
                 values.insert(arg,args.next().context("Missing argument value")?);
             }
-            "--version" => { println!("h3-shader-bridge 0.1.0; material schema 1"); return Ok(()); }
+            "--version" => { println!("h3-shader-bridge 0.2.0; material schema 1; source description schema 1"); return Ok(()); }
             _ => bail!("Unknown argument: {arg}"),
         }
     }
@@ -292,11 +344,15 @@ fn run() -> Result<()> {
         let source = source.as_str().context("Shader path is not text")?;
         if shaders.contains_key(source) { continue; }
         let result = catch_unwind(AssertUnwindSafe(||reader.shader(source)));
-        let record = match result {
+        let mut record = match result {
             Ok(Ok(value)) => value,
             Ok(Err(e)) => json!({"source":source,"status":"error","error":format!("{e:#}")}),
             Err(_) => json!({"source":source,"status":"error","error":"Shader decoder panicked; geometry retained"}),
         };
+        if record.get("source_description").is_none() {
+            record["source_description"] = material_description::finish(source, None,
+                material_description::failed("material_read_failed", record["error"].as_str().unwrap_or("Material read failed")));
+        }
         shaders.insert(source.to_string(),record);
         if i % 10 == 0 || i+1 == paths.len() { println!("H3 shader metadata: {} / {}",i+1,paths.len()); }
     }
