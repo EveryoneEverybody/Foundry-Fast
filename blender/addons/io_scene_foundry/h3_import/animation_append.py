@@ -93,7 +93,7 @@ class AnimationAppender(AnimationStager):
                 quat = Quaternion([curve.keyframe_points[index].co.y for curve in source])
                 quat.normalize()
                 if mode == 'AXIS_ANGLE':
-                    angle, axis = quat.to_axis_angle()
+                    axis, angle = quat.to_axis_angle()
                     values = (angle, *axis)
                 else:
                     values = quat.to_euler(mode, previous) if previous is not None else quat.to_euler(mode)
