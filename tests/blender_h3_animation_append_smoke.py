@@ -22,6 +22,14 @@ def geometry_snapshot():
                                  bpy.data.armatures, bpy.data.collections))
 
 
+def scene_bindings():
+    return sorted((ob.name, ob.type, ob.data.name if ob.data else '',
+                   ob.parent.name if ob.parent else '',
+                   tuple((m.name, m.object.name if m.object else '')
+                         for m in ob.modifiers if m.type == 'ARMATURE'))
+                  for ob in bpy.context.scene.objects)
+
+
 def make_clip(folder, nodes, kind='JMT', name='combat:move_front'):
     manifest = base.payload()
     manifest['nodes'] = copy.deepcopy(nodes)
@@ -175,7 +183,8 @@ with tempfile.TemporaryDirectory() as directory:
     stage = Appender(bpy.context, manifest, folder, arm)
     list(stage.build())
     arm_name, mesh_name, old_name = arm.name, mesh.name, old.name
-    armature_count, object_count = len(bpy.data.armatures), len(bpy.data.objects)
+    # Unused datablocks from earlier fixtures are not saved. Check live scene bindings.
+    saved_bindings = scene_bindings()
     bpy.context.scene.frame_set(3)
     expected = arm.pose.bones[stage.mapping['hull']].matrix.copy()
     bpy.ops.wm.save_as_mainfile(filepath=str(folder / 'appended.blend'))
@@ -185,7 +194,7 @@ with tempfile.TemporaryDirectory() as directory:
     bpy.ops.wm.open_mainfile(filepath=str(folder / 'appended.blend'))
     base.settings.animations = bpy.context.scene.test_nwo.animations
     arm, mesh = bpy.data.objects[arm_name], bpy.data.objects[mesh_name]
-    assert len(bpy.data.armatures) == armature_count and len(bpy.data.objects) == object_count
+    assert scene_bindings() == saved_bindings
     assert mesh.parent == arm and mesh.modifiers[0].object == arm
     assert bpy.data.actions.get(old_name) is not None
     assert arm.animation_data.action_slot is not None
