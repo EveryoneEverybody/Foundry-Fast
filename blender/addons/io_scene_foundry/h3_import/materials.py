@@ -5,6 +5,7 @@ from pathlib import Path
 
 FORMAT = 'foundry.h3-shaders'
 DETAIL_MULTIPLIER = 4.59479
+ILLUMINATION_MODES = {'simple', 'simple_with_alpha_mask', 'from_albedo', 'illum_detail'}
 ALBEDO_MODES = {'default', 'constant_color', 'detail_blend', 'two_change_color', 'four_change_color'}
 
 
@@ -136,6 +137,17 @@ def color_space(bitmap, role):
     return 'sRGB'
 
 
+def illumination_surface(categories, group):
+    """Select an unlit preview only when no lighting or coverage pass is needed."""
+    if (group != 'rmsh' or categories.get('self_illumination') not in ILLUMINATION_MODES
+            or categories.get('material_model') != 'none'
+            or categories.get('environment_mapping', 'none') not in {'none', 'off'}
+            or categories.get('alpha_test', 'none') not in {'none', 'off'}):
+        return 'principled'
+    blend = categories.get('blend_mode', 'opaque')
+    return {'opaque': 'emission', 'additive': 'additive'}.get(blend, 'principled')
+
+
 def plan(shader):
     if shader.get('status') != 'resolved_snapshot':
         raise ValueError(shader.get('error', 'Shader metadata is unresolved'))
@@ -153,7 +165,8 @@ def plan(shader):
     if any(p.get('has_functions') for p in shader['parameters']):
         diagnostics.append('Material functions use their time-zero sample; source curves remain in metadata')
     return {'categories': categories, 'parameters': named(shader['parameters'], 'name'),
-            'albedo': albedo, 'diagnostics': diagnostics}
+            'albedo': albedo, 'diagnostics': diagnostics,
+            'illumination_surface': illumination_surface(categories, shader.get('group'))}
 
 
 def source_material_key(path):

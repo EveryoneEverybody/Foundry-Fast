@@ -1,7 +1,7 @@
 """Packed Blender previews for decoded H3 object materials."""
 import json
 import bpy
-from .materials import DETAIL_MULTIPLIER, color_space, image_key, plan, preview_path
+from .materials import DETAIL_MULTIPLIER, ILLUMINATION_MODES, color_space, image_key, plan, preview_path
 
 
 class PreviewBuilder:
@@ -58,6 +58,7 @@ class MaterialNodes:
         self.p = recipe['parameters']
         self.c = recipe['categories']
         self.albedo = recipe['albedo']
+        self.illumination_surface = recipe['illumination_surface']
         self.diagnostics = recipe['diagnostics']
         material.use_nodes = True
         self.tree = material.node_tree
@@ -210,7 +211,7 @@ class MaterialNodes:
                 alpha = self.math('MULTIPLY', alpha, coverage, 'Cutout x blend alpha')
             self.feed(alpha, surface.inputs['Alpha'])
             self.diagnostics.append(f'{blend}: Blender alpha preview, not Halo pass compositing')
-        elif blend != 'opaque':
+        elif blend != 'opaque' and self.illumination_surface != 'additive':
             self.diagnostics.append(f'Blend mode {blend} is not reproduced')
         bump = self.c.get('bump_mapping', 'off')
         if bump not in {'off', 'none'}:
@@ -232,10 +233,16 @@ class MaterialNodes:
             if bump != 'standard':
                 self.diagnostics.append(f'Bump option {bump}: base normal only; detail combination is not reproduced')
         illum = self.c.get('self_illumination', 'none')
-        if illum in {'simple', 'simple_with_alpha_mask', 'from_albedo'}:
+        emission, intensity = (0, 0, 0), 0.0
+        if illum in ILLUMINATION_MODES:
             color = self.color('self_illum_color')
             intensity = self.scalar('self_illum_intensity', 1.0)
             emission, ea = (rgb, 1.0) if illum == 'from_albedo' else self.sample('self_illum_map', fallback=(0, 0, 0))
+            if illum == 'illum_detail':
+                # H3 self_illumination.fx returns RGB without alpha masking for this option.
+                detail, _ = self.sample('self_illum_detail_map', fallback=(0, 0, 0))
+                detail = self.vector('MULTIPLY', detail, (DETAIL_MULTIPLIER,) * 3, 'Illum detail multiplier')
+                emission = self.vector('MULTIPLY', emission, detail, 'Self illum x detail')
             emission = self.vector('MULTIPLY', emission, color[:3], 'Emission tint')
             if illum == 'simple_with_alpha_mask':
                 intensity = self.math('MULTIPLY', intensity, self.math('MULTIPLY', ea, color[3], 'Emission alpha'), 'Masked emission')
@@ -243,9 +250,25 @@ class MaterialNodes:
             self.feed(intensity, surface.inputs['Emission Strength'])
             if illum == 'from_albedo':
                 rgb = (0, 0, 0)
-        elif illum != 'none':
+        elif illum not in {'none', 'off'}:
             self.diagnostics.append(f'Self illumination {illum} is not reproduced')
         self.feed(rgb, surface.inputs['Base Color']) if hasattr(rgb, 'node') else self.feed((*rgb[:3], 1), surface.inputs['Base Color'])
+        if self.illumination_surface != 'principled':
+            unlit = self.node('ShaderNodeEmission', 'H3 unlit self illumination')
+            self.feed(emission, unlit.inputs['Color'])
+            self.feed(intensity, unlit.inputs['Strength'])
+            result = unlit.outputs['Emission']
+            if self.illumination_surface == 'additive':
+                transparent = self.node('ShaderNodeBsdfTransparent', 'Additive background transmission')
+                transparent.inputs['Color'].default_value = (1, 1, 1, 1)
+                add = self.node('ShaderNodeAddShader', 'Additive self illumination preview')
+                self.tree.links.new(result, add.inputs[0])
+                self.tree.links.new(transparent.outputs['BSDF'], add.inputs[1])
+                result = add.outputs[0]
+                self.diagnostics.append('Additive self illumination uses emission plus transparency; Halo exposure and pass ordering are not reproduced')
+            self.tree.links.new(result, output.inputs['Surface'])
+            self.tree.nodes.remove(surface)
+            surface = unlit
         # Keep other decoded textures accessible without pretending they affect the preview.
         for name, p in self.p.items():
             if p['type'] == 'bitmap' and name not in self.used:
