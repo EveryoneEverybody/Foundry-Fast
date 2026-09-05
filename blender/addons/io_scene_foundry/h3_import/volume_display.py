@@ -76,6 +76,7 @@ class VolumeDisplayUpdate:
 
     def apply(self, targets):
         # Validate all targets before changing any display state.
+        targets = list(targets)
         for ob, role in targets:
             if ob.library or ob.data.library:
                 raise ValueError('Volume display requires local editable objects')
@@ -100,7 +101,9 @@ class VolumeDisplayUpdate:
                 slot.link = link
                 slot.material = material
         for mesh in reversed(self.added_slots):
-            mesh.materials.pop(index=len(mesh.materials) - 1)
+            # These meshes started empty. Clear also synchronizes every object's slot array.
+            # Popping the last slot can leave a stale object slot in Blender 5.2.1.
+            mesh.materials.clear()
         for material in reversed(self.created):
             bpy.data.materials.remove(material, do_unlink=True)
         self.saved.clear()

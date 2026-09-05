@@ -102,9 +102,56 @@ second.rollback()
 update.rollback()
 assert snapshot() == old_snapshot
 assert tuple(collision.data.materials) == tuple(legacy_materials)
-assert len(physics.material_slots) == 0
+assert len(physics.data.materials) == 0 and len(physics.material_slots) == 0
 assert collision.display_type == 'WIRE' and collision.show_wire and not collision.show_transparent
 assert all(slot.link == 'DATA' for slot in collision.material_slots)
+
+# Empty shared meshes must restore both mesh and object slot arrays for every user.
+shared = session.remember(bpy.data.objects, physics.copy())
+shared.name = 'shared physics volume'
+root.objects.link(shared)
+bystander = session.object('unselected shared mesh user', physics.data, bpy.context.scene.collection)
+shared_state = {ob: geometry_state(ob) for ob in (physics, shared, bystander)}
+shared_snapshot = snapshot()
+for attempt in range(2):
+    update = D.VolumeDisplayUpdate()
+    assert update.apply(iter([(physics, 'physics'), (shared, 'physics')])) == 2
+    assert len(physics.data.materials) == 1
+    assert physics.material_slots[0].material == shared.material_slots[0].material
+    assert bystander.material_slots[0].material is None
+    update.rollback()
+    assert snapshot() == shared_snapshot
+    for ob in (physics, shared, bystander):
+        assert not ob.data.materials and not ob.material_slots, ob.name
+        assert geometry_state(ob) == shared_state[ob]
+    update.rollback()
+    assert snapshot() == shared_snapshot
+
+# Failure after slot creation restores the first target and the originally empty mesh.
+real_configure_object = D.configure_object
+
+def fail_after_slot_creation(ob, role):
+    if ob == physics:
+        raise RuntimeError('Injected display failure')
+    real_configure_object(ob, role)
+
+update = D.VolumeDisplayUpdate()
+D.configure_object = fail_after_slot_creation
+try:
+    try:
+        update.apply([(collision, 'collision'), (physics, 'physics')])
+        raise AssertionError('Expected injected failure')
+    except RuntimeError as exc:
+        assert str(exc) == 'Injected display failure'
+finally:
+    D.configure_object = real_configure_object
+    update.rollback()
+assert snapshot() == shared_snapshot
+assert tuple(collision.data.materials) == tuple(legacy_materials)
+assert geometry_state(collision) == original[collision]
+for ob in (physics, shared, bystander):
+    assert not ob.material_slots and not ob.data.materials
+    assert geometry_state(ob) == shared_state[ob]
 
 # The refresh operator works on the selected import, not unrelated Reach objects.
 D.register()
@@ -118,6 +165,7 @@ objects_before = len(bpy.data.objects)
 assert bpy.ops.nwo.refresh_h3_volume_display() == {'FINISHED'}
 assert len(bpy.data.objects) == objects_before
 assert tuple(collision.data.materials) == tuple(legacy_materials)
+assert not bystander.show_transparent and bystander.material_slots[0].material is None
 D.unregister()
 
 # Reopened data retains the display, source material slots and exclusions.
@@ -133,4 +181,4 @@ with tempfile.TemporaryDirectory() as directory:
     assert collision.data.materials[0]['h3_source_name'] == 'physical material 0'
     assert all(c.nwo.type == 'exclude' for c in physics.users_collection)
     assert physics['h3_physics_source'] == physics_metadata
-print('H3 volume tests passed: native colors/alpha, solid display, separate material identities, retained slots, geometry, names, exclusions, parent lookup, repeat refresh, rollback and reopen')
+print('H3 volume tests passed: native colors/alpha, solid display, separate material identities, retained slots, geometry, names, exclusions, parent lookup, repeat refresh, empty shared slots, partial failure, rollback and reopen')
