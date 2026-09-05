@@ -1,0 +1,24 @@
+name: Test Halo 3 object importer
+
+on:
+  push:
+    branches: ["feature/h3-object-import"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helper:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build extraction helper
+        run: cargo build --release --manifest-path tools/h3_object_bridge/Cargo.toml
+      - name: Test extraction helper
+        run: cargo test --manifest-path tools/h3_object_bridge/Cargo.toml
+      - name: Upload test helper
+        uses: actions/upload-artifact@v4
+        with:
+          name: h3-object-bridge-windows
+          path: tools/h3_object_bridge/target/release/h3-object-bridge.exe
