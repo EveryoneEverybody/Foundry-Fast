@@ -128,6 +128,33 @@ class CoreTests(unittest.TestCase):
             path.write_text('fixture')
             self.assertEqual(core.find_tags_root(path), path.parents[1])
 
+    def test_instance_labels_stay_separate(self):
+        data = payload()
+        data['render']['materials'][0]['label'] = '(1) armor_left'
+        data['render']['materials'][1]['label'] = '(2) armor_right'
+        core.validate_payload(data)
+        self.assertEqual(len(core.groups(data['render'])), 2)
+        self.assertEqual(core.material_partition('(1) armor_left'), ('default', 'default', ''))
+
+    def test_physics_uses_its_own_node_indices(self):
+        data = payload()
+        core.validate_payload(data)
+        data['physics']['shapes'][0]['node'] = 1
+        with self.assertRaises(ValueError):
+            core.validate_payload(data)
+
+    def test_physics_space(self):
+        data = payload()
+        data['physics']['shape_space'] = 'world'
+        with self.assertRaises(ValueError):
+            core.validate_payload(data)
+
+    def test_physics_missing_bone(self):
+        data = payload()
+        data['physics']['nodes'][0]['name'] = 'missing'
+        with self.assertRaises(ValueError):
+            core.validate_payload(data)
+
     def test_invalid_physics(self):
         data = payload()
         data['physics']['shapes'][0]['size'] = [0, 1, 2]

@@ -53,6 +53,8 @@ class BuildSession:
         data = self.remember(bpy.data.armatures, bpy.data.armatures.new(self.payload["name"]))
         armature = self.object(self.payload["name"], data, collection)
         self.armature = armature
+        for selected in self.context.selected_objects:
+            selected.select_set(False)
         self.context.view_layer.objects.active = armature
         armature.select_set(True)
         bpy.ops.object.mode_set(mode='EDIT')
@@ -106,9 +108,11 @@ class BuildSession:
         return materials
 
     def build_mesh(self, source, key, triangles, materials, collection, role):
-        region, permutation, lod, rigid_index = key
+        region, permutation, lod, rigid_index, placement = key
         vertices, faces = compact_mesh(source, triangles)
         name = f"{role}:{region}:{permutation}" + (f":{lod}" if lod else "")
+        if placement:
+            name += ":" + placement
         mesh = self.remember(bpy.data.meshes, bpy.data.meshes.new(name))
         mesh.from_pydata([self.position(v["position"]) for v in vertices], [], faces)
         mesh.update()
@@ -117,6 +121,9 @@ class BuildSession:
         utils.set_region(ob, region, utils.SetType.MODEL)
         utils.set_permutation(ob, permutation, utils.SetType.MODEL)
         ob["h3_source_lod"] = lod
+        if placement:
+            ob["h3_source_instance_label"] = placement
+            self.warnings.append(f"Instance {placement} uses a provisional default region/permutation. The source placement name is retained; its variant mapping is not reconstructed.")
         if lod:
             self.warnings.append(f"LOD {lod} on {name} is retained as metadata, not translated to a Reach LOD setting")
         material_ids = list(dict.fromkeys(t["material"] for t in triangles))
@@ -210,8 +217,12 @@ class BuildSession:
         ob.display_type = 'WIRE'
         ob.hide_render = True
         node = shape["node"]
-        bone = self.payload["render"]["nodes"][node]["name"] if node != -1 else None
-        self.parent_rigid(ob, bone, self.matrix(shape))
+        bone = self.payload["physics"]["nodes"][node]["name"] if node != -1 else None
+        if bone is not None and self.armature is not None:
+            matrix = self.armature.data.bones[bone].matrix_local @ self.matrix(shape, rotate=False)
+        else:
+            matrix = self.matrix(shape)
+        self.parent_rigid(ob, bone, matrix)
 
     def build(self):
         root = self.collection("H3 " + self.payload["name"], self.context.scene.collection, self.reference_only)

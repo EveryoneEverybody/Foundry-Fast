@@ -51,6 +51,9 @@ def validate_nodes(nodes):
 
 def material_partition(label):
     parts = label.split()
+    if len(parts) == 2 and parts[0].startswith("(") and parts[0].endswith(")"):
+        # The decoder emits a placement name without region/permutation fields.
+        return "default", "default", ""
     if len(parts) == 3 and parts[0].startswith("(") and parts[0].endswith(")"):
         return parts[2], parts[1], ""
     if len(parts) == 4 and parts[0].startswith("(") and parts[0].endswith(")"):
@@ -113,9 +116,15 @@ def validate_payload(payload):
     if payload.get("collision") is not None:
         validate_mesh(payload["collision"], names)
     if payload.get("physics") is not None:
+        if payload["physics"].get("shape_space") != "node_local":
+            raise ValueError("Unsupported physics coordinate space")
+        physics_nodes = payload["physics"]["nodes"]
+        validate_nodes(physics_nodes)
+        if any(n["name"] not in names for n in physics_nodes):
+            raise ValueError("Physics bone is absent from the render skeleton")
         for shape in payload["physics"]["shapes"]:
             transform(shape, "physics shape")
-            index(shape["node"], len(skeleton), "physics bone", True)
+            index(shape["node"], len(physics_nodes), "physics bone", True)
             if shape["kind"] == "sphere":
                 vector([shape["radius"]], 1, "sphere radius")
                 if shape["radius"] <= 0:
@@ -157,7 +166,9 @@ def groups(mesh, collision=False):
                 raise ValueError("Collision triangle spans several bones")
             if bones:
                 node = bones.pop()
-        key = region, permutation, lod, node
+        parts = material["label"].split()
+        placement = material["label"] if len(parts) == 2 else ""
+        key = region, permutation, lod, node, placement
         result.setdefault(key, []).append(triangle)
     return result
 

@@ -5,7 +5,7 @@ use blam_tags::math::{RealPoint3d, RealQuaternion};
 use blam_tags::paths::{group_tag_to_extension, tag_ref_path};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 
@@ -85,7 +85,10 @@ fn physics_json(j: &JmsFile) -> Value {
             "position":pos(s.translation), "rotation":quat(s.rotation),
             "vertices":s.vertices.iter().map(|p| pos(*p)).collect::<Vec<_>>()}));
     }
-    json!({"shapes":shapes, "capsules_in_source":j.capsules.len(),
+    json!({"shape_space":"node_local",
+        "nodes": j.nodes.iter().map(|n| json!({"name": n.name, "parent": n.parent,
+            "position": pos(n.translation), "rotation": quat(n.rotation)})).collect::<Vec<_>>(),
+        "shapes":shapes, "capsules_in_source":j.capsules.len(),
         "ragdolls_in_source":j.ragdolls.len(), "hinges_in_source":j.hinges.len()})
 }
 
@@ -219,6 +222,18 @@ mod tests {
         assert!(value["nodes"].as_array().unwrap().is_empty());
         assert!(value["vertices"].as_array().unwrap().is_empty());
         assert!(value["triangles"].as_array().unwrap().is_empty());
+    }
+    #[test]
+    fn physics_space_and_node_names_are_explicit() {
+        let mut jms = JmsFile::default();
+        jms.nodes.push(blam_tags::jms::JmsNode {
+            name:"b_panel".into(), parent:-1,
+            rotation:RealQuaternion { w:1.0, i:0.0, j:0.0, k:0.0 },
+            translation:RealPoint3d { x:150.0, y:200.0, z:0.0 },
+        });
+        let value = physics_json(&jms);
+        assert_eq!(value["shape_space"], "node_local");
+        assert_eq!(value["nodes"][0]["name"], "b_panel");
     }
     #[test]
     fn quaternion_order_is_explicit() {

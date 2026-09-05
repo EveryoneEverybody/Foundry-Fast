@@ -26,6 +26,8 @@ An animated viewport header displays the current construction stage and elapsed 
 - Independent material slots with source metadata. Ambiguous shader basenames remain unresolved. Foreign shader paths never populate Reach's Halo Shader Path field.
 - An import report in Blender's Text Editor, plus reconstructed JMS source files beside the extraction JSON.
 
+Decoded instance attachments without region/permutation fields remain separate meshes with provisional default labels and an explicit report entry. Their original placement labels are retained.
+
 The H3 root collection stores the source tag, dependency references, extraction path and report name. Skeleton node names and creation order are retained; the H3 render-model path is not installed as a Reach node-order source.
 
 ## Not included yet
@@ -42,7 +44,7 @@ Materials are placeholders. Assign valid Reach shader paths before an export tes
 
 `tools/h3_object_bridge` is a small Rust executable using Zoephie's `blam-tags` fork at commit `5d0509fb75eadb96ac7774542ca0b2c10aed7b00`. The pinned decoder supplies geometry extraction. No source game tags or game assets are included.
 
-The bridge writes a versioned JSON description with explicit JMS-times-100 units and WXYZ quaternions. Blender uses Foundry's existing import scale and forward-axis helpers. JSON is validated before construction. There is no H3 ManagedBlam load inside Blender and no write path into H3 tags.
+The bridge writes a versioned JSON description with explicit JMS-times-100 units and WXYZ quaternions. Physics shapes are explicitly node-local and resolve attachments by the physics skeleton's bone names rather than assuming the render skeleton has the same node indices. Blender uses Foundry's existing import scale and forward-axis helpers. JSON is validated before construction. There is no H3 ManagedBlam load inside Blender and no write path into H3 tags.
 
 The dependency remains separate from the addon. Its redistribution terms need to be settled before a public release of the helper; the pinned dependency does not declare a license in its Cargo manifest or root file listing.
 

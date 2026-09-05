@@ -14,5 +14,6 @@ def payload():
     return {'format': 'foundry.h3-object', 'version': 1, 'units': 'jms_x100', 'game': 'halo3_mcc',
         'name': 'test_panel', 'source_tag': 'objects/test/panel.scenery', 'dependencies': {'render_model': 'objects/test/panel.render_model'},
         'shader_paths': ['objects/a/metal.shader', 'objects/b/metal.shader'], 'warnings': [], 'render': render,
-        'collision': None, 'physics': {'shapes': [{'kind': 'box', 'name': 'panel', 'node': 1, 'material': 0,
-            'position': [150, 200, 0], 'rotation': [1, 0, 0, 0], 'size': [20, 40, 60]}]}}
+        'collision': None, 'physics': {'shape_space': 'node_local', 'nodes': [node('b_panel', -1, 150)],
+            'shapes': [{'kind': 'box', 'name': 'panel', 'node': 0, 'material': 0,
+            'position': [0, 0, 0], 'rotation': [1, 0, 0, 0], 'size': [20, 40, 60]}]}}
