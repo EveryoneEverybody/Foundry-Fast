@@ -15,6 +15,47 @@ from .builder import BuildSession
 _active = []
 
 
+def _bundled_helper_path():
+    filename = "h3-object-bridge.exe" if os.name == 'nt' else "h3-object-bridge"
+    return Path(__file__).parent / "bin" / filename
+
+
+def _source_paths(source):
+    """Resolve source settings without loading an H3 project or changing Reach."""
+    prefs = utils.get_prefs()
+    configured_root = prefs.h3_tags_root.strip()
+    if configured_root:
+        root = Path(bpy.path.abspath(configured_root)).resolve()
+        if not root.is_dir():
+            raise NotADirectoryError(
+                "Halo 3 Tags Directory is not a directory. "
+                "Set it in Foundry preferences > Halo 3 Import"
+            )
+    else:
+        try:
+            root = find_tags_root(source)
+        except ValueError as exc:
+            raise ValueError(
+                "No tags directory in source path. "
+                "Set Halo 3 Tags Directory in Foundry preferences > Halo 3 Import"
+            ) from exc
+    if not source.is_relative_to(root):
+        raise ValueError(
+            "Selected tag is outside the configured Halo 3 Tags Directory. "
+            "Change or clear that directory in Foundry preferences > Halo 3 Import"
+        )
+    if root == Path(utils.get_tags_path()).resolve():
+        raise ValueError("Halo 3 source tags and the active Reach tags directory must be different")
+    override = prefs.h3_extraction_helper.strip()
+    helper = Path(bpy.path.abspath(override)) if override else _bundled_helper_path()
+    if not helper.is_file():
+        raise FileNotFoundError(
+            "H3 extraction helper not found. Install the H3 test build or set "
+            "Extraction Helper Override in Foundry preferences > Halo 3 Import"
+        )
+    return root, helper.resolve()
+
+
 class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     bl_idname = "nwo.import_halo3_object"
     bl_label = "Import Halo 3 Object (Experimental)"
@@ -22,8 +63,6 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     bl_options = {'REGISTER', 'UNDO'}
     filename_ext = ""
     filter_glob: StringProperty(default="*.model;*.render_model;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3asset.json", options={'HIDDEN'})
-    tags_root: StringProperty(name="Halo 3 Tags Directory", subtype='DIR_PATH', description="Source H3EK tags directory. Detected from the selected file when blank")
-    helper_path: StringProperty(name="Extraction Helper", subtype='FILE_PATH', description="Optional override for h3-object-bridge.exe. The H3 test build includes a helper")
     import_collision: BoolProperty(name="Collision Geometry", default=True)
     import_physics: BoolProperty(name="Physics Reference Shapes", default=True, description="Excluded reference shapes, not a conversion of rigid-body simulation settings")
     reference_only: BoolProperty(name="Reference Only", default=True, description="Exclude the imported root collection from Foundry export until inspected")
@@ -37,13 +76,24 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     def draw(self, context):
         layout = self.layout
         layout.label(text="H3EK source tags, not .map files")
-        layout.prop(self, "tags_root")
-        layout.prop(self, "helper_path")
+        prefs = utils.get_prefs()
+        layout.label(text="Paths: Foundry Preferences > Halo 3 Import")
+        layout.label(text="H3 tags: " + ("Saved preference" if prefs.h3_tags_root.strip() else "Auto-detect"))
+        layout.label(text="Helper: " + ("Preference override" if prefs.h3_extraction_helper.strip() else "Bundled"))
         layout.prop(self, "import_collision")
         layout.prop(self, "import_physics")
         layout.prop(self, "reference_only")
         layout.label(text="Materials: placeholders with source references")
         layout.label(text="Animation import is not included in this pass")
+
+    def invoke(self, context, event):
+        if not self.filepath:
+            configured_root = utils.get_prefs().h3_tags_root.strip()
+            if configured_root:
+                root = Path(bpy.path.abspath(configured_root))
+                if root.is_dir():
+                    self.filepath = str(root.resolve()) + os.sep
+        return ImportHelper.invoke(self, context, event)
 
     def execute(self, context):
         self._process = None
@@ -67,17 +117,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             if source.name.lower().endswith('.h3asset.json'):
                 self._payload_path = source
             else:
-                root = (Path(bpy.path.abspath(self.tags_root)).resolve(strict=True)
-                        if self.tags_root else find_tags_root(source))
-                if not root.is_dir() or not source.is_relative_to(root):
-                    raise ValueError("Selected tag is outside the Halo 3 tags directory")
-                destination = Path(utils.get_tags_path()).resolve()
-                if root == destination:
-                    raise ValueError("Halo 3 source tags and the active Reach tags directory must be different")
-                helper = (Path(bpy.path.abspath(self.helper_path)) if self.helper_path else
-                          Path(__file__).parent / "bin" / ("h3-object-bridge.exe" if os.name == 'nt' else "h3-object-bridge"))
-                if not helper.is_file():
-                    raise FileNotFoundError("H3 extraction helper not found. Install the H3 test artifact or set Extraction Helper")
+                root, helper = _source_paths(source)
                 output = Path(tempfile.mkdtemp(prefix="foundry_h3_"))
                 self._payload_path = output / "asset.h3asset.json"
                 self._log_path = output / "helper.log"

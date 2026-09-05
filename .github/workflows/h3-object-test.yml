@@ -27,8 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test bridge validation
-        run: python3 -m unittest discover -s tests -p test_h3_import_core.py -v
+      - name: Test bridge validation and source preferences
+        run: python3 -m unittest discover -s tests -p 'test_h3_import*.py' -v
       - name: Cache Blender
         id: cache
         uses: actions/cache@v4
@@ -43,6 +43,8 @@ jobs:
           tar -xJf /tmp/blender.tar.xz -C .cache
       - name: Test Blender construction
         run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_import_smoke.py
+      - name: Test Blender preference integration
+        run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_preferences_smoke.py
 
   package:
     needs: [helper, blender]
@@ -75,7 +77,7 @@ jobs:
           sha256sum io_scene_foundry_h3_test.zip > io_scene_foundry_h3_test.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: Foundry-H3-test-1.9.24
+          name: Foundry-H3-test-1.9.25
           path: |
             io_scene_foundry_h3_test.zip
             io_scene_foundry_h3_test.sha256
