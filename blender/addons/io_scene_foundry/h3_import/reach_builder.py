@@ -73,7 +73,8 @@ class ReachStager:
         # Destination export properties must not change an H3 preview image.
         image = self.remember(bpy.data.images, image.copy())
         image.name = staged_image_name(bitmap, parameter['name'])
-        image.colorspace_settings.name = key[2]
+        if image.colorspace_settings.name != key[2]:
+            image.colorspace_settings.name = key[2]
         image.alpha_mode = 'CHANNEL_PACKED'
         image.nwo.filepath = ''
         image.nwo.source_name = ''
@@ -85,7 +86,8 @@ class ReachStager:
             image.pack()
         if image.packed_file is None:
             raise ValueError('Staged image has no packed source data')
-        image.filepath = ''
+        # Clear export identity without requesting an image reload.
+        image.filepath_raw = ''
         self.images[cache_key] = image
         return image
 
