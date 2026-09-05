@@ -65,6 +65,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     filter_glob: StringProperty(default="*.model;*.render_model;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3asset.json", options={'HIDDEN'})
     import_collision: BoolProperty(name="Collision Geometry", default=True)
     import_physics: BoolProperty(name="Physics Reference Shapes", default=True, description="Excluded reference shapes, not a conversion of rigid-body simulation settings")
+    preview_materials: BoolProperty(name="Material Previews", default=True, description="Extract shader metadata and packed textures; no Reach tags are generated")
+    flip_normal_green: BoolProperty(name="Flip Normal Green", default=True, description="Invert the green channel in preview nodes only; extracted pixels stay unchanged")
     reference_only: BoolProperty(name="Reference Only", default=True, description="Exclude the imported root collection from Foundry export until inspected")
 
     @classmethod
@@ -83,7 +85,11 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         layout.prop(self, "import_collision")
         layout.prop(self, "import_physics")
         layout.prop(self, "reference_only")
-        layout.label(text="Materials: placeholders with source references")
+        layout.prop(self, "preview_materials")
+        row = layout.row()
+        row.enabled = self.preview_materials
+        row.prop(self, "flip_normal_green")
+        layout.label(text="Materials: Blender previews, not Reach shader tags")
         layout.label(text="Animation import is not included in this pass")
 
     def invoke(self, context, event):
@@ -112,12 +118,15 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._previous_busy = self._settings.export_in_progress
         self._phase = "Reading source"
         self._finished = False
+        self._shader_started = False
+        self._source_root = None
         try:
             source = Path(bpy.path.abspath(self.filepath)).resolve(strict=True)
             if source.name.lower().endswith('.h3asset.json'):
                 self._payload_path = source
             else:
                 root, helper = _source_paths(source)
+                self._source_root = root
                 output = Path(tempfile.mkdtemp(prefix="foundry_h3_"))
                 self._payload_path = output / "asset.h3asset.json"
                 self._log_path = output / "helper.log"
@@ -173,14 +182,22 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 print(text)
                 self._process = None
                 if code != 0:
-                    raise RuntimeError(f"H3 helper failed ({code}). {text[-1200:]}")
+                    if self._shader_started:
+                        utils.print_warning(f"H3 shader extraction failed ({code}); geometry retained. {text[-1200:]}")
+                    else:
+                        raise RuntimeError(f"H3 helper failed ({code}). {text[-1200:]}")
+            if self.preview_materials and not self._shader_started:
+                self._shader_started = True
+                if self._start_shader_helper():
+                    return {'RUNNING_MODAL'}
             if self._steps is None:
                 payload = load_payload(self._payload_path)
                 if not self.import_collision:
                     payload['collision'] = None
                 if not self.import_physics:
                     payload['physics'] = None
-                self._session = BuildSession(context, payload, self._payload_path, self.reference_only)
+                self._session = BuildSession(context, payload, self._payload_path, self.reference_only,
+                    self.preview_materials, self.flip_normal_green)
                 self._steps = iter(self._session.build())
             deadline = time.monotonic() + 0.025
             while time.monotonic() < deadline:
@@ -197,6 +214,33 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             self.report({'ERROR'}, str(exc))
             self._finish(context, rollback=True)
             return {'CANCELLED'}
+
+    def _start_shader_helper(self):
+        # Existing extractions can reuse their sidecar without starting a reader.
+        output = self._payload_path.parent
+        if (output / "shader_manifest.json").is_file() or self._source_root is None:
+            return False
+        helper = Path(__file__).parent / "bin" / ("h3-shader-bridge.exe" if os.name == 'nt' else "h3-shader-bridge")
+        if not helper.is_file():
+            utils.print_warning("H3 shader helper is missing; geometry will use placeholder materials")
+            return False
+        self._phase = "Reading shaders and bitmaps"
+        self._log_path = output / 'shader-helper.log'
+        self._log = self._log_path.open('w', encoding='utf-8')
+        command = [str(helper.resolve()), '--tags-root', str(self._source_root),
+                   '--asset', str(self._payload_path), '--output', str(output)]
+        reach = Path(utils.get_tags_path())
+        if reach.is_dir():
+            command.extend(['--reach-tags-root', str(reach.resolve())])
+        try:
+            self._process = subprocess.Popen(command, stdout=self._log, stderr=subprocess.STDOUT,
+                cwd=str(output), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except OSError as exc:
+            self._log.close()
+            self._log = None
+            utils.print_warning(f"H3 shader helper could not start: {exc}; geometry retained")
+            return False
+        return True
 
     def _finish(self, context, rollback=False):
         if self._finished:

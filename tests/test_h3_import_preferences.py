@@ -21,12 +21,16 @@ class Layout:
     def __init__(self):
         self.properties = []
         self.labels = []
+        self.enabled = True
 
     def label(self, *, text):
         self.labels.append(text)
 
     def prop(self, owner, name):
         self.properties.append(name)
+
+    def row(self):
+        return self
 
 
 def load_functions(namespace):
@@ -119,8 +123,8 @@ class PreferenceTests(unittest.TestCase):
 
     def test_import_draw_has_no_path_widgets(self):
         layout = Layout()
-        self.ns['draw'](SimpleNamespace(layout=layout), None)
-        self.assertEqual(layout.properties, ['import_collision', 'import_physics', 'reference_only'])
+        self.ns['draw'](SimpleNamespace(layout=layout, preview_materials=True), None)
+        self.assertEqual(layout.properties, ['import_collision', 'import_physics', 'reference_only', 'preview_materials', 'flip_normal_green'])
         self.assertIn('H3 tags: Auto-detect', layout.labels)
         self.assertIn('Helper: Bundled', layout.labels)
 
@@ -128,9 +132,14 @@ class PreferenceTests(unittest.TestCase):
         self.prefs.h3_tags_root = str(self.root)
         self.prefs.h3_extraction_helper = str(self.helper)
         layout = Layout()
-        self.ns['draw'](SimpleNamespace(layout=layout), None)
+        self.ns['draw'](SimpleNamespace(layout=layout, preview_materials=True), None)
         self.assertIn('H3 tags: Saved preference', layout.labels)
         self.assertIn('Helper: Preference override', layout.labels)
+
+    def test_normal_toggle_disabled_without_previews(self):
+        layout = Layout()
+        self.ns['draw'](SimpleNamespace(layout=layout, preview_materials=False), None)
+        self.assertFalse(layout.enabled)
 
     def test_file_browser_starts_at_saved_directory(self):
         self.prefs.h3_tags_root = str(self.root)
