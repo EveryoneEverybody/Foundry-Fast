@@ -151,6 +151,7 @@ for c in body['shaders'][SHADER]['categories']:
     c['option'] = choices.get(c['category'], c['option'])
 body['shaders'][SHADER]['parameters'] = [
     {'name': 'albedo_color', 'type': 'argb color', 'value': [.2, .4, .6, .8]},
+    {'name': 'specular_coefficient', 'type': 'real', 'value': 0.0},
     {'name': 'diffuse_coefficient', 'type': 'real', 'value': 0.0}]
 for name, key, transform in [('base_map', MAP, [1, 1, 0, 0]), ('detail_map', MAP, [20, 20, 0, 0]),
                              ('bump_map', MAP, [1, 1, 0, 0]), ('bump_detail_map', DETAIL, [10, 10, .25, -.5])]:
@@ -162,17 +163,29 @@ assert body_native, stager.results
 body_group = group_of(body_native)
 print('REACH_BODY_INPUTS', [(s.name, s.type) for s in body_group.inputs if s.is_icon_visible])
 assert body_group.inputs['material_model'].default_value == 'two_lobe_phong'
-# Normal textures use unsuffixed vector inputs in the bundled group.
+# Normal textures use unsuffixed inputs in the bundled group.
 assert body_group.inputs['bump_map'].links[0].from_node.type == 'TEX_IMAGE'
 assert body_group.inputs['bump_detail_map'].is_linked
 assert abs(body_group.inputs['albedo_color_alpha'].default_value - .8) < 1e-6
-assert body_group.inputs['diffuse_coefficient'].default_value == 0
+assert body_group.inputs['specular_coefficient'].default_value == 0
+assert any(p['name'] == 'diffuse_coefficient' and p['status'] == 'unmapped'
+           for p in stager.results[-1]['parameters'])
 tex = body_group.inputs['bump_map'].links[0].from_node
 assert tex.image.colorspace_settings.name == 'Non-Color'
 assert tex.image.nwo.bitmap_type == 'Normal Map (aka zbump)'
 assert tex.image != body_group.inputs['base_map.rgb'].links[0].from_node.image
 assert tex.extension == 'EXTEND' and tex.interpolation == 'Closest'
 assert not any(n.type == 'NORMAL_MAP' for n in body_native.node_tree.nodes)
+
+# Exercise a supplied option UI alias without claiming a real Reach tag read.
+aliased_stager = module.ReachStager(load_resource,
+    lambda selected, cache: ({'diffuse_coefficient': ['diffuse_contribution']}, []))
+aliased = aliased_stager.build(body_source)
+assert aliased, aliased_stager.results
+assert group_of(aliased).inputs['diffuse_contribution'].default_value == 0
+assert any(p['name'] == 'diffuse_coefficient' and p['status'] == 'mapped'
+           and p['sockets'] == ['diffuse_contribution']
+           for p in aliased_stager.results[-1]['parameters'])
 
 # Linked duplicate geometry outside the staged selection keeps its original assignments.
 bpy.ops.mesh.primitive_cube_add()
@@ -256,4 +269,4 @@ with tempfile.TemporaryDirectory() as d:
         actual = tuple(bpy.data.images[name].pixels[:])
         assert len(actual) == len(expected)
         assert all(abs(a - b) < .0001 for a, b in zip(actual, expected)), name
-print('H3 Reach staging passed: native resources, named options, textures, tiling, colors, zero scalars, normal roles, independent materials, packed images, source preservation, slot isolation, rollback and reopen')
+print('H3 Reach staging passed: native resources, named options, textures, tiling, colors, zero scalars, option UI aliases, normal roles, independent materials, packed images, source preservation, slot isolation, rollback and reopen')
