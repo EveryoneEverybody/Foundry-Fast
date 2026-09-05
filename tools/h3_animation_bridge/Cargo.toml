@@ -1,0 +1,12 @@
+[package]
+name = "h3-animation-bridge"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"
+blam-tags = { git = "https://github.com/camden-smallwood/blam-tags", rev = "23f5252a60d6ceb1ee22bd152679de93c66bc3b9", default-features = false }

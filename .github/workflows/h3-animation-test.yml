@@ -1,0 +1,112 @@
+name: Test Halo 3 animation importer
+
+on:
+  push:
+    branches: ["feature/h3-animation-import"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h3-animation-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  helper:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test existing extraction helpers
+        run: |
+          cargo test --manifest-path tools/h3_object_bridge/Cargo.toml
+          cargo build --release --manifest-path tools/h3_object_bridge/Cargo.toml
+      - name: Resolve animation lockfile
+        run: cargo generate-lockfile --manifest-path tools/h3_animation_bridge/Cargo.toml
+      - name: Build and test animation helper
+        run: |
+          cargo test --locked --manifest-path tools/h3_animation_bridge/Cargo.toml
+          cargo build --locked --release --manifest-path tools/h3_animation_bridge/Cargo.toml
+      - name: Report animation lockfile
+        if: always()
+        run: Get-Content tools/h3_animation_bridge/Cargo.lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h3-animation-helpers-windows
+          path: |
+            tools/h3_object_bridge/target/release/h3-object-bridge.exe
+            tools/h3_object_bridge/target/release/h3-shader-bridge.exe
+            tools/h3_animation_bridge/target/release/h3-animation-bridge.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h3-animation-lockfile
+          path: tools/h3_animation_bridge/Cargo.lock
+
+  blender:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test validation and planning
+        run: python3 -m unittest discover -s tests -p 'test_h3_import*.py' -v
+      - name: Cache Blender
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/blender-5.2.1-linux-x64
+          key: blender-5.2.1-linux-x64
+      - name: Download Blender
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cache
+          curl -L --fail --retry 3 https://download.blender.org/release/Blender5.2/blender-5.2.1-linux-x64.tar.xz -o /tmp/blender.tar.xz
+          tar -xJf /tmp/blender.tar.xz -C .cache
+      - name: Test animation staging
+        run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_animation_smoke.py
+      - name: Test existing H3 import paths
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          for test in import preferences materials provenance illumination reach; do
+            xvfb-run -a .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_${test}_smoke.py
+          done
+
+  package:
+    needs: [helper, blender]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: h3-animation-helpers-windows
+          path: .cache/helpers
+      - name: Install built helpers
+        run: |
+          mkdir -p blender/addons/io_scene_foundry/h3_import/bin
+          find .cache/helpers -name '*.exe' -exec cp {} blender/addons/io_scene_foundry/h3_import/bin/ \;
+          test -f blender/addons/io_scene_foundry/h3_import/bin/h3-animation-bridge.exe
+      - name: Cache Blender
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/blender-5.2.1-linux-x64
+          key: blender-5.2.1-linux-x64
+      - name: Download Blender
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cache
+          curl -L --fail --retry 3 https://download.blender.org/release/Blender5.2/blender-5.2.1-linux-x64.tar.xz -o /tmp/blender.tar.xz
+          tar -xJf /tmp/blender.tar.xz -C .cache
+      - name: Download CoACD wheel
+        run: |
+          curl -L --fail --retry 3 https://files.pythonhosted.org/packages/00/83/c50472ce98175fddd86d4aba861fea89f30350a5487880b3a81d34915a85/coacd-1.0.11-cp39-abi3-win_amd64.whl -o blender/addons/io_scene_foundry/wheels/coacd-1.0.11-cp39-abi3-win_amd64.whl
+          echo "4de22f70d1a3fa8c44698c8006a223fe5fb0ee84b76adecf3726cf2003e9145f  blender/addons/io_scene_foundry/wheels/coacd-1.0.11-cp39-abi3-win_amd64.whl" | sha256sum -c -
+      - name: Build test extension
+        run: |
+          .cache/blender-5.2.1-linux-x64/blender --command extension build --source-dir blender/addons/io_scene_foundry --output-filepath Foundry-Fast-1.9.30-H3-animations.zip
+          sha256sum Foundry-Fast-1.9.30-H3-animations.zip > Foundry-Fast-1.9.30-H3-animations.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Foundry-H3-animations-test-1.9.30
+          path: |
+            Foundry-Fast-1.9.30-H3-animations.zip
+            Foundry-Fast-1.9.30-H3-animations.sha256
