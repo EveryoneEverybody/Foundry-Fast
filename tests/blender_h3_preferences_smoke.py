@@ -33,6 +33,9 @@ sys.modules[utils.__name__] = utils
 managed = ModuleType(NAME + '.managed_blam')
 managed.__path__ = [str(ROOT / 'managed_blam')]
 sys.modules[managed.__name__] = managed
+tools = ModuleType(NAME + '.tools')
+tools.__path__ = [str(ROOT / 'tools')]
+sys.modules[tools.__name__] = tools
 preferences = importlib.import_module(NAME + '.preferences')
 preferences.register()
 addon = bpy.context.preferences.addons.new()
