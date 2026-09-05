@@ -63,7 +63,7 @@ jobs:
         run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_reach_smoke.py
 
   package:
-    needs: [helper, blender]
+    needs: [helper]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
