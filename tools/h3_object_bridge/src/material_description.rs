@@ -301,4 +301,5 @@ pub fn finish(source: &str, tag: Option<&TagFile>, mut value: Value) -> Value {
 }
 
 #[cfg(test)]
+#[path = "material_description/tests.rs"]
 mod tests;
