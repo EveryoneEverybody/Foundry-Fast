@@ -70,7 +70,8 @@ def build_source(data, name='source'):
             image['h3_bitmap_index'] = bitmap['index']
             image.nwo.filepath = 'must_not_change.tif'
             image.pack()
-            assert image.packed_file is not None and image.has_data
+            assert image.packed_file is not None
+            assert len(image.pixels) == 64
             assert image.get('h3_source_bitmap') == bitmap['path']
             assert image.get('h3_bitmap_index') == bitmap['index']
             tex = material.node_tree.nodes.new('ShaderNodeTexImage'); tex.image = image
