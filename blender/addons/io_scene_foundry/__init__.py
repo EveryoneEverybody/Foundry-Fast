@@ -15,6 +15,7 @@ from . import fast_navigation
 from . import perf_material_cleanup
 from . import perf_bitmap_cache
 from . import perf_patch
+from . import scenario_reference
 from . import fast_runtime
 from . import h3_import
 from .h3_import import volume_display
@@ -35,12 +36,14 @@ modules = [
     perf_bitmap_cache,
     perf_patch,
     fast_runtime,
+    scenario_reference,
     h3_import,
     volume_display,
     animation_ops,
 ]
             
 def register():
+    scenario_reference.prepare()
     foundry_output.register()
     bpy.app.handlers.exit_pre.append(startup.managed_blam_exit)
     bpy.app.handlers.load_post.append(startup.load_handler)
