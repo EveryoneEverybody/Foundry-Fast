@@ -380,8 +380,9 @@ def register():
         if _live(template, bpy.data.collections):
             session.counts['render cache hits'] += 1
             with session.time('render hierarchy reuse'):
-                collection, mapping = backend.clone_collection_hierarchy(template, model_collection,
-                                                                         copy_object_data=True)
+                collection, mapping = backend.clone_collection_hierarchy(
+                    template, model_collection, copy_object_data=True,
+                    collection_name=model_collection.name + "_render_reuse")
                 result = list(collection.all_objects)
                 armature = next((ob for ob in result if ob.type == 'ARMATURE' and ob.parent is None), None)
                 return result, armature
