@@ -78,17 +78,22 @@ class OutputTests(unittest.TestCase):
             self.assertEqual(len(tail.tail), 2000)
 
     def test_new_helper_resets_tail_and_offset(self):
-        with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / 'helper.log'
-            path.write_text('object output\n')
-            tail = output.HelperLogTail()
-            with redirect_stdout(io.StringIO()):
-                tail.follow(path)
-                tail.poll(final=True)
-                path.write_text('shader output\n')
-                tail.follow(path)
-                tail.poll(final=True)
-            self.assertEqual(tail.tail, 'shader output\n')
+        for ending in (b'\n', b'\r\n'):
+            with self.subTest(ending=ending), tempfile.TemporaryDirectory() as d:
+                path = Path(d) / 'helper.log'
+                first = b'object output' + ending
+                second = b'shader output' + ending
+                path.write_bytes(first)
+                tail = output.HelperLogTail()
+                with redirect_stdout(io.StringIO()) as text:
+                    tail.follow(path)
+                    tail.poll(final=True)
+                    path.write_bytes(second)
+                    tail.follow(path)
+                    tail.poll(final=True)
+                self.assertEqual(tail.tail, second.decode())
+                self.assertEqual(text.getvalue(), (first + second).decode())
+                self.assertEqual(tail.offset, len(second))
 
 
 if __name__ == '__main__':
