@@ -57,8 +57,8 @@ jobs:
           mkdir -p .cache
           curl -L --fail --retry 3 https://download.blender.org/release/Blender5.2/blender-5.2.1-linux-x64.tar.xz -o /tmp/blender.tar.xz
           tar -xJf /tmp/blender.tar.xz -C .cache
-      - name: Test scenario reference construction and persistence
-        run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_scenario_reference_smoke.py
+      - name: Test scenario references, material drivers and persistence
+        run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_scenario_reference_drivers_smoke.py
       - name: Test existing animation paths
         run: |
           for test in animation_persistence animation_append overlay blend_screen; do
