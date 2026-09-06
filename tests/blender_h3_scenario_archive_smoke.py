@@ -46,6 +46,8 @@ for units, forward in [('blender', 'x'), ('blender', 'y'), ('max', 'x')]:
         assert all(not ob.nwo.export_this for ob in collection.all_objects)
         assert session.counts['inventory_records'] == len(original)
         assert session.counts['inventory_chunks'] == len(encoded['chunks'])
+        packed_entries = json.loads(bpy.data.texts[collection['h3_packed_inventory']].as_string())
+        assert all(max(map(len, bpy.data.texts[e['text']].as_string().splitlines()), default=0) <= 76 for e in packed_entries)
         assert session.counts['sectors'] == 1 and session.counts['rails'] == 1
         assert session.counts['bsp_meshes'] == 1 and session.counts['bsp_placements'] == 2
         assert source.hint_plan(restore(collection)) == source.hint_plan(legacy)

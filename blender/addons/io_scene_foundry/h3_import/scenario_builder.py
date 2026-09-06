@@ -55,7 +55,9 @@ class ScenarioBuildSession:
 
     def text(self, name, data):
         value = self.remember(bpy.data.texts, bpy.data.texts.new(name))
-        value.write(data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, allow_nan=False))
+        # Blender Text insertion is costly for enormous single lines. JSON
+        # whitespace changes neither source values nor strings within records.
+        value.write(data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, allow_nan=False, separators=(',\n', ':')))
         value.use_fake_user = True
         return value
 
@@ -171,6 +173,7 @@ class ScenarioBuildSession:
             if self.counts['bsp_placements'] % 64 == 0:
                 yield f"BSP {entry['index']}: {self.counts['bsp_placements']} placements"
         # Keep decoded geometry as a source record, including unsupported definitions.
+        yield f"Retaining BSP {entry['index']} source geometry"
         text = self.text(f'H3 BSP source - {name}', bsp)
         collection['h3_bsp_manifest'] = text.name
         self.warnings.extend(f"{bsp['source_tag']}: {v}" for v in bsp.get('limitations', []))
@@ -239,7 +242,7 @@ class ScenarioBuildSession:
             for chunk in self.inventory['chunks']:
                 content = self.inventory.chunk_bytes(chunk)
                 text = self.text(f"H3 inventory chunk {len(chunks):04d} - {self.root.name}",
-                                 base64.b64encode(content).decode('ascii'))
+                                 base64.encodebytes(content).decode('ascii'))
                 chunks.append(dict(chunk, encoding='gzip+base64', text=text.name,
                                    sha256=hashlib.sha256(content).hexdigest()))
                 yield f"Retaining source inventory: {len(chunks)}/{len(self.inventory['chunks'])} chunks"
@@ -252,7 +255,7 @@ class ScenarioBuildSession:
                 content = source.within(self.directory, row['file']).read_bytes()
                 if len(content) != row['bytes']:
                     raise ValueError('Source data blob changed during import')
-                packed = self.text(f"H3 source data {len(blobs):04d} - {self.root.name}", base64.b64encode(content).decode('ascii'))
+                packed = self.text(f"H3 source data {len(blobs):04d} - {self.root.name}", base64.encodebytes(content).decode('ascii'))
                 blobs.append({'address': row['address'], 'file': row['file'], 'bytes': len(content), 'encoding': 'base64', 'text': packed.name})
         self.root['h3_packed_data'] = self.text('H3 packed source data index - ' + self.root.name, blobs).name
         if self.preview:

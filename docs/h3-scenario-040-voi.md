@@ -48,5 +48,10 @@ Changed log messages are throttled to one per second; header updates continue
 independently. Validation reports actual fields processed, retention reports
 chunks retained/total, and no spinner frames are added to the detailed log.
 
+The full real-data construction check also exposed slow Blender Text insertion:
+the first BSP's source JSON alone is about 67 MB. Source JSON now uses whitespace
+line breaks, and retained base64 wraps at 76 columns. Source values and binary
+checksums are unchanged; the archive reader accepts both old and wrapped text.
+
 The normal release branch and extension feed are outside this prototype change.
 The packaging job depends on successful Windows helper and Blender CI jobs.

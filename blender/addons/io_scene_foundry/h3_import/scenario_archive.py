@@ -201,7 +201,12 @@ def from_packed(data, entries, text):
     def provider(chunk):
         entry = by_file[chunk['file']]
         encoded = text(entry['text'])
-        if len(encoded) > ((chunk['bytes'] + 2) // 3) * 4:
+        limit = ((chunk['bytes'] + 2) // 3) * 4
+        # New retained text wraps at 76 columns; keep reading old single lines.
+        if len(encoded) > limit + (limit + 75) // 76:
+            raise legacy.InspectionError('Packed inventory exceeds byte limit')
+        encoded = encoded.replace('\n', '')
+        if len(encoded) > limit:
             raise legacy.InspectionError('Packed inventory exceeds byte limit')
         content = base64.b64decode(encoded, validate=True)
         if hashlib.sha256(content).hexdigest() != entry['sha256']:
