@@ -184,7 +184,13 @@ mod tests {
         if let Ok(dest) = std::env::var("H3_LARGE_INVENTORY_OUTPUT") {
             let dest = PathBuf::from(dest);
             fs::create_dir_all(&dest).unwrap();
-            fs::rename(p.join("records"), dest.join("records")).unwrap();
+            // The runner's artifact directory can be on a different drive from TEMP.
+            fs::create_dir(dest.join("records")).unwrap();
+            for chunk in &out.chunks {
+                let relative = chunk["file"].as_str().unwrap();
+                let copied = fs::copy(p.join(relative), dest.join(relative)).unwrap();
+                assert_eq!(copied, chunk["bytes"].as_u64().unwrap());
+            }
             let mut manifest = json!({"format":"foundry.h3-scenario-inspection","version":2,
                 "source_group":"scnr","source_tag":"levels/test/test.scenario",
                 "coordinate_encoding":"source_world_units_unmodified","destination_tags_written":false,
