@@ -126,7 +126,8 @@ class CoreTests(unittest.TestCase):
             path = Path(temp) / 'tags/objects/test.scenery'
             path.parent.mkdir(parents=True)
             path.write_text('fixture')
-            self.assertEqual(core.find_tags_root(path), path.parents[1])
+            # The reader returns a canonical path, including Windows short-name expansion.
+            self.assertEqual(core.find_tags_root(path), path.parents[1].resolve(strict=True))
 
     def test_instance_labels_stay_separate(self):
         data = payload()
