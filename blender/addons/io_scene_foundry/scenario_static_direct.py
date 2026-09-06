@@ -1,9 +1,8 @@
 """Direct construction for rigid scenario references.
 
-This path is intentionally conservative. It handles childless rigid render models
-without creating a Blender armature. Skinned meshes, render-model instances,
-permutation clones, scenario poses, and variant children fall back to the normal
-reference path.
+Childless rigid render models bypass Blender armature construction.
+Skinned meshes, render-model instances, permutation clones, scenario poses,
+and variant children retain the normal reference path.
 """
 from pathlib import Path
 
@@ -65,8 +64,8 @@ def _allowed_pair(allowed, region, permutation):
     return not allowed or (region, permutation) in allowed
 
 
-def build_rigid_render(render_model, collection, allowed_region_permutations, importer):
-    """Build selected rigid render geometry directly into Blender without a rig."""
+def _rigid_selection(render_model, allowed_region_permutations):
+    """Reject unsupported definitions before allocating materials or meshes."""
     if not render_model.block_compression_info.Elements.Count:
         raise DirectStaticUnsupported("render model has no compression info")
 
@@ -77,6 +76,36 @@ def build_rigid_render(render_model, collection, allowed_region_permutations, im
     if instance_mesh_index > -1 and instance_placements.Elements.Count:
         raise DirectStaticUnsupported("render-model instance geometry needs the live reference path")
 
+    selected = []
+    mesh_count = render_model.block_meshes.Elements.Count
+    node_count = render_model.block_nodes.Elements.Count
+    for region in regions:
+        for permutation in region.permutations:
+            if not _allowed_pair(allowed, region.name, permutation.name):
+                continue
+            if permutation.mesh_index < 0:
+                continue
+            if permutation.clone_name:
+                raise DirectStaticUnsupported("permutation material clones need the live reference path")
+            for offset in range(permutation.mesh_count):
+                index = permutation.mesh_index + offset
+                if not 0 <= index < mesh_count:
+                    raise DirectStaticUnsupported(f"invalid render mesh index {index}")
+                element = render_model.block_meshes.Elements[index]
+                node_index = element.SelectField("rigid node index").Data
+                if node_index < 0:
+                    raise DirectStaticUnsupported("skinned render geometry needs the live reference path")
+                if node_index >= node_count:
+                    raise DirectStaticUnsupported(f"invalid rigid node index {node_index}")
+                selected.append((region, permutation, index))
+    if not selected:
+        raise DirectStaticUnsupported("selected render model has no rigid geometry")
+    return selected
+
+
+def build_rigid_render(render_model, collection, allowed_region_permutations, importer):
+    """Build selected rigid render geometry directly into Blender without a rig."""
+    selected = _rigid_selection(render_model, allowed_region_permutations)
     nodes = _read_nodes(render_model)
     node_matrices = _node_world_matrices(nodes, importer.scene_nwo)
     bounds = CompressionBounds(render_model.block_compression_info.Elements[0])
@@ -86,42 +115,22 @@ def build_rigid_render(render_model, collection, allowed_region_permutations, im
     mesh_node_map = render_model.tag.SelectField("Struct:render geometry[0]/Block:per mesh node map")
 
     objects = []
-    for region in regions:
-        for permutation in region.permutations:
-            if not _allowed_pair(allowed, region.name, permutation.name):
-                continue
-            if permutation.mesh_index < 0:
-                continue
-            for offset in range(permutation.mesh_count):
-                mesh = Mesh(
-                    render_model.block_meshes.Elements[permutation.mesh_index + offset],
-                    bounds,
-                    permutation,
-                    materials_by_index,
-                    mesh_node_map,
-                    from_vert_normals=importer.from_vert_normals,
-                    tag_path=render_model.tag_path.RelativePathWithExtension,
-                )
-                if mesh.permutation.clone_name:
-                    raise DirectStaticUnsupported("permutation material clones need the live reference path")
-                if mesh.rigid_node_index < 0:
-                    raise DirectStaticUnsupported("skinned render geometry needs the live reference path")
-                node_matrix = node_matrices.get(mesh.rigid_node_index)
-                if node_matrix is None:
-                    raise DirectStaticUnsupported(f"invalid rigid node index {mesh.rigid_node_index}")
-                created = mesh.create(
-                    game_render_model,
-                    render_model.block_per_mesh_temporary,
-                    nodes,
-                    None,
-                )
-                for ob in created:
-                    ob.matrix_world = node_matrix.copy()
-                    ob.nwo.export_this = False
-                    utils.set_region(ob, region.name, utils.SetType.MODEL)
-                    utils.set_permutation(ob, permutation.name, utils.SetType.MODEL)
-                    collection.objects.link(ob)
-                objects.extend(created)
+    for region, permutation, index in selected:
+        mesh = Mesh(
+            render_model.block_meshes.Elements[index], bounds, permutation,
+            materials_by_index, mesh_node_map,
+            from_vert_normals=importer.from_vert_normals,
+            tag_path=render_model.tag_path.RelativePathWithExtension,
+        )
+        node_matrix = node_matrices[mesh.rigid_node_index]
+        created = mesh.create(game_render_model, render_model.block_per_mesh_temporary, nodes, None)
+        for ob in created:
+            ob.matrix_world = node_matrix.copy()
+            ob.nwo.export_this = False
+            utils.set_region(ob, region.name, utils.SetType.MODEL)
+            utils.set_permutation(ob, permutation.name, utils.SetType.MODEL)
+            collection.objects.link(ob)
+        objects.extend(created)
 
     if not objects:
         raise DirectStaticUnsupported("selected render model has no rigid geometry")
@@ -159,7 +168,6 @@ def try_build(importer, game_object, pose, session):
                 if not model_path or not Path(model_path).exists():
                     return None, "object has no readable model tag"
                 change_colors = obj.get_change_colors(variant)
-                functions = obj.functions_to_blender()
 
                 with utils.TagImportMover(importer.tags_dir, model_path) as model_mover:
                     with backend.ModelTag(path=model_mover.tag_path, raise_on_error=False) as model:
@@ -188,6 +196,7 @@ def try_build(importer, game_object, pose, session):
                                 with session.time('direct rigid geometry'):
                                     render_objects = build_rigid_render(render_model, render_collection, allowed, importer)
 
+                        functions = obj.functions_to_blender()
                         for ob in render_objects:
                             if ob.type != 'MESH':
                                 continue
