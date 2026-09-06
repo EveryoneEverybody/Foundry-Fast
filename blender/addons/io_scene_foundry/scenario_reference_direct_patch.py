@@ -87,6 +87,8 @@ def register():
         if not reference._scopes:
             return original_functions(tag, *args, **kwargs)
         session = reference._scopes[-1]
+        if not session.enabled:
+            return original_functions(tag, *args, **kwargs)
         key = _function_key(tag)
         if key is None:
             return original_functions(tag, *args, **kwargs)
