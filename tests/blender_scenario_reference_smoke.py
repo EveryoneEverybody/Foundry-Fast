@@ -228,9 +228,10 @@ reference.prepare()
 for cls in (NWO_Import,NWO_OT_ImportFromDrop):bpy.utils.register_class(cls)
 reference.register()
 try:
-    for cls in (NWO_Import,NWO_OT_ImportFromDrop):
-        assert reference.PROPERTY in cls.bl_rna.properties
-        assert not cls.bl_rna.properties[reference.PROPERTY].default
+    for operator in (bpy.ops.nwo.foundry_import, bpy.ops.nwo.reference_drop_test):
+        properties = operator.get_rna_type().properties
+        assert reference.PROPERTY in properties, tuple(properties.keys())
+        assert not properties[reference.PROPERTY].default
     assert bpy.ops.nwo.foundry_import(tag_scenario_static_reference=False)=={'FINISHED'}
     live_objects=set(bpy.data.objects); live_rigs=set(bpy.data.armatures)
     assert live_rigs and not any(s.name.startswith('Foundry reference work') for s in bpy.data.scenes)
