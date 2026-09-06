@@ -13,7 +13,12 @@ report_path = path.with_suffix('.verification.json')
 report = json.loads(report_path.read_text())
 addon = folder.parent / 'blender/addons/io_scene_foundry'
 with ZipFile(path) as archive:
-    for name in ('scenario_reference.py', 'perf_bitmap_cache.py'):
+    for name in (
+        'scenario_reference.py',
+        'scenario_static_direct.py',
+        'scenario_reference_direct_patch.py',
+        'perf_bitmap_cache.py',
+    ):
         data = archive.read(name)
         assert data == (addon / name).read_bytes(), name
         report['source_files'][name] = hashlib.sha256(data).hexdigest()
