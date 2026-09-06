@@ -29,6 +29,13 @@ min max round enumerate zip isinstance ValueError open
 PREFIXES = ('BITMAP_FORMAT_', 'UNCOMPRESSED_BITMAP_', 'COMPRESSED_BITMAP_')
 
 
+def _numpy_import(name, globals=None, locals=None, fromlist=(), level=0):
+    """Allow NumPy C helpers to resolve their own modules through PyImport_Import."""
+    if level or not isinstance(name, str) or not (name == 'numpy' or name.startswith('numpy.')):
+        raise ImportError(f'Bitmap codec runtime import not allowed: {name!r}')
+    return builtins.__import__(name, globals, locals, fromlist, level)
+
+
 def load_codec(source_path=None):
     """Compile only allowlisted constants and static/class numerical methods."""
     path = Path(source_path) if source_path else Path(__file__).parents[1] / 'managed_blam/bitmap.py'
@@ -65,7 +72,7 @@ def load_codec(source_path=None):
     check(symbols)
     # The original codec remains the single source. No Tag class or add-on import executes.
     namespace = {'__builtins__': {name: getattr(builtins, name) for name in BUILTINS} |
-                 {'__build_class__': builtins.__build_class__},
+                 {'__build_class__': builtins.__build_class__, '__import__': _numpy_import},
                  '__name__': 'detached_bitmap_codec', 'np': np, 'math': math, 'struct': struct}
     exec(compile(module, str(path), 'exec'), namespace)
     return namespace['BitmapTag'], hashlib.sha256(text.encode()).hexdigest()

@@ -45,6 +45,8 @@ jobs:
       - name: Test detached workers on Windows
         shell: pwsh
         run: |
+          & .cache/blender-5.2.1-windows-x64/5.2/python/bin/python.exe -m unittest discover -s tests -p test_bitmap_codec_runtime.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .cache/blender-5.2.1-windows-x64/5.2/python/bin/python.exe -m unittest discover -s tests -p test_bitmap_workers.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .cache/blender-5.2.1-windows-x64/blender.exe --background --factory-startup --python-exit-code 1 --python tests/blender_parallel_bitmaps_smoke.py
@@ -80,6 +82,7 @@ jobs:
           tar -xJf /tmp/blender.tar.xz -C .cache
       - name: Test detached workers and Blender image loading
         run: |
+          .cache/blender-5.2.1-linux-x64/5.2/python/bin/python3.13 -m unittest discover -s tests -p test_bitmap_codec_runtime.py -v
           .cache/blender-5.2.1-linux-x64/5.2/python/bin/python3.13 -m unittest discover -s tests -p test_bitmap_workers.py -v
           .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_parallel_bitmaps_smoke.py
       - name: Test direct reference dispatch and UI
