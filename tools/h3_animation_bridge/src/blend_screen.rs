@@ -18,7 +18,10 @@ impl BlendScreen {
             .context("Blend-screen index is outside the H3 definitions block")?;
         let aiming = element.field("aiming screen").and_then(|f| f.as_struct())
             .context("Blend screen has no supported H3 aiming-screen definition")?;
-        let integer = |name: &str| aiming.read_int_any(name).with_context(|| format!("Missing screen field: {name}"));
+        let integer = |name: &str| -> Result<i64> {
+            let value = aiming.read_int_any(name).with_context(|| format!("Missing screen field: {name}"))?;
+            i64::try_from(value).with_context(|| format!("Screen field is out of range: {name}"))
+        };
         let angle = |name: &str| aiming.read_real(name).with_context(|| format!("Missing screen angle: {name}"));
         let screen = Self {
             index,

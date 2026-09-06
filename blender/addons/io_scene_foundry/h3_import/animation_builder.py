@@ -41,6 +41,13 @@ def _rest_matrix(rest, factor):
                               Quaternion(rest['rotation']), Vector.Fill(3, rest['scale']))
 
 
+def bind_pose_error(source, target, factor):
+    """Compare basis elements directly and translation in Blender-scale units."""
+    basis_error = max(abs(source[r][c] - target[r][c]) for r in range(3) for c in range(3))
+    position_error = max(abs(source[r][3] - target[r][3]) for r in range(3)) * 0.03048 / factor
+    return max(basis_error, position_error)
+
+
 def source_rest_world(manifest, factor, rotation):
     world = {}
     for node in manifest['nodes']:
@@ -147,7 +154,7 @@ class AnimationStager:
         rest = source_rest_world(self.manifest, self.factor * 100, self.rotation)
         errors = []
         for name, target in mapping.items():
-            error = max(abs(rest[name][r][c] - arm.data.bones[target].matrix_local[r][c]) for r in range(4) for c in range(4))
+            error = bind_pose_error(rest[name], arm.data.bones[target].matrix_local, self.factor)
             if error > 0.002:
                 errors.append(f'{name} -> {target}: {error:.6g}')
         if errors:

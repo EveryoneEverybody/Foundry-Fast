@@ -59,11 +59,23 @@ def verify(stage, expected, manifest):
     assert action.frame_start == 1 and action.frame_end == 10
 
 
+# The same physical mismatch must have the same result in either scene scale.
+for factor in (0.03048, 1.0):
+    rest = Matrix.Identity(4)
+    for offset, acceptable in ((0.001, True), (0.003, False)):
+        candidate = rest.copy()
+        candidate.translation.x = offset * factor / 0.03048
+        assert (B.bind_pose_error(rest, candidate, factor) <= 0.002) == acceptable
+    candidate = rest.copy()
+    candidate[0][0] += 0.003
+    assert B.bind_pose_error(rest, candidate, factor) > 0.002
+
 fixture = base.fixture
 for native, staging, scale, forward, mode in [
     (False,False,'blender','x','QUATERNION'), (True,False,'blender','x','QUATERNION'),
     (False,True,'blender','y','QUATERNION'), (True,True,'max','x','QUATERNION'),
     (True,False,'max','y','XYZ'), (False,False,'blender','y','AXIS_ANGLE')]:
+    print('H3_AIM_CASE', native, staging, scale, forward, mode)
     settings.scale, settings.forward_direction = scale, forward
     arm, mesh, keep = base.rig(fixture['target_nodes'] if native else fixture['source_nodes'])
     for pb in arm.pose.bones: pb.rotation_mode = mode

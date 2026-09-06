@@ -2,7 +2,7 @@
 import json
 import bpy
 from mathutils import Quaternion
-from .animation_builder import AnimationStager, _ordered, source_rest_world
+from .animation_builder import AnimationStager, _ordered, bind_pose_error, source_rest_world
 from .animations import CONTROL_PREFIXES, node_mapping
 
 
@@ -37,8 +37,7 @@ class AnimationAppender(AnimationStager):
         rest = source_rest_world(self.manifest, self.factor * 100, self.rotation)
         errors = []
         for name, target in self.mapping.items():
-            error = max(abs(rest[name][r][c] - arm.data.bones[target].matrix_local[r][c])
-                        for r in range(4) for c in range(4))
+            error = bind_pose_error(rest[name], arm.data.bones[target].matrix_local, self.factor)
             if error > 0.002:
                 errors.append(f'{name} -> {target}: {error:.6g}')
         if errors:
