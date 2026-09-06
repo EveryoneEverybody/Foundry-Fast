@@ -71,7 +71,7 @@ class Element:
     ElementIndex=0
     def __init__(self,fixture,index=0):self.fixture=fixture;self.ElementIndex=index
     def SelectField(self,name):
-        field=name.partition(':')[-1]
+        field=name.rsplit(':',1)[-1]
         spec=self.fixture
         values={'width':spec['width'],'height':spec['height'],'format':spec['format'],
                 'type':spec.get('type',0),'curve':spec.get('curve',0),'pixels offset':0,
