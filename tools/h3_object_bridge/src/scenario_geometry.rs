@@ -78,7 +78,7 @@ fn geometry(ass: &AssFile, shaders: &[Option<String>], source: &str, index: usiz
             AssObjectPayload::Mesh { vertices, triangles } => {
                 for v in vertices {
                     finite(&point(v.position))?; finite(&[v.normal.i, v.normal.j, v.normal.k])?;
-                    finite(&[v.color.r, v.color.g, v.color.b])?;
+                    finite(&[v.color.red, v.color.green, v.color.blue])?;
                     for uv in &v.uvs { finite(&point(*uv))?; }
                     for (_, weight) in &v.node_set { finite(&[*weight])?; }
                 }
@@ -91,7 +91,7 @@ fn geometry(ass: &AssFile, shaders: &[Option<String>], source: &str, index: usiz
                 row["kind"] = json!("mesh");
                 row["vertices"] = json!(vertices.iter().map(|v| json!({
                     "position":point(v.position), "normal":[v.normal.i,v.normal.j,v.normal.k],
-                    "color":[v.color.r,v.color.g,v.color.b], "weights":v.node_set,
+                    "color":[v.color.red,v.color.green,v.color.blue], "weights":v.node_set,
                     "uvs":v.uvs.iter().map(|uv|point(*uv)).collect::<Vec<_>>()
                 })).collect::<Vec<_>>());
                 row["triangles"] = json!(triangles.iter().map(|t|json!({"material":t.material,"vertices":t.v})).collect::<Vec<_>>());

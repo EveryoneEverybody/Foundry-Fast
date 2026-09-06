@@ -58,16 +58,21 @@ def _source_paths(source):
 
 class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     bl_idname = "nwo.import_halo3_object"
-    bl_label = "Import Halo 3 Object (Experimental)"
-    bl_description = "Read H3EK object dependencies into the current Reach project without changing source tags"
+    bl_label = "Import Halo 3 Asset (Experimental)"
+    bl_description = "Read H3EK object or scenario dependencies into the current Reach project without changing source tags"
     bl_options = {'REGISTER', 'UNDO'}
     filename_ext = ""
-    filter_glob: StringProperty(default="*.model;*.render_model;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3asset.json", options={'HIDDEN'})
+    filter_glob: StringProperty(default="*.scenario;*.model;*.render_model;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3asset.json", options={'HIDDEN'})
     import_collision: BoolProperty(name="Collision Geometry", default=True)
     import_physics: BoolProperty(name="Physics Reference Shapes", default=True, description="Excluded reference shapes, not a conversion of rigid-body simulation settings")
     preview_materials: BoolProperty(name="Material Previews", default=True, description="Extract shader metadata and packed textures; no Reach tags are generated")
     flip_normal_green: BoolProperty(name="Flip Normal Green", default=True, description="Invert the green channel in preview nodes only; extracted pixels stay unchanged")
     reference_only: BoolProperty(name="Reference Only", default=True, description="Exclude the imported root collection from Foundry export until inspected")
+
+    scenario_geometry: BoolProperty(name="BSP Geometry", default=True, description="Decode BSP geometry and placements as excluded references")
+    scenario_hints: BoolProperty(name="Giant Sector and Rail Hints", default=True)
+    scenario_points: BoolProperty(name="AI and Script Points", default=True, description="Show source-world firing positions and script points; unresolved reference frames remain in the report")
+    scenario_bsp_indices: StringProperty(name="BSP Indices", default="", description="Comma-separated source BSP indices. Blank imports every BSP, not an inferred zone set")
 
     @classmethod
     def poll(cls, context):
@@ -82,6 +87,17 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         layout.label(text="Paths: Foundry Preferences > Halo 3 Import")
         layout.label(text="H3 tags: " + ("Saved preference" if prefs.h3_tags_root.strip() else "Auto-detect"))
         layout.label(text="Helper: " + ("Preference override" if prefs.h3_extraction_helper.strip() else "Bundled"))
+        if Path(getattr(self, 'filepath', '')).suffix.lower() == '.scenario':
+            layout.prop(self, "scenario_geometry")
+            layout.prop(self, "scenario_bsp_indices")
+            layout.prop(self, "scenario_hints")
+            layout.prop(self, "scenario_points")
+            layout.prop(self, "preview_materials")
+            row = layout.row()
+            row.enabled = self.preview_materials
+            row.prop(self, "flip_normal_green")
+            layout.label(text="Scenario reference only. No Reach tags are generated.")
+            return
         layout.prop(self, "import_collision")
         layout.prop(self, "import_physics")
         layout.prop(self, "reference_only")
@@ -120,29 +136,48 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._finished = False
         self._shader_started = False
         self._source_root = None
+        self._is_scenario = False
         try:
             source = Path(bpy.path.abspath(self.filepath)).resolve(strict=True)
+            self._is_scenario = source.suffix.lower() == '.scenario'
+            self._source_tag = None
             if source.name.lower().endswith('.h3asset.json'):
                 self._payload_path = source
             else:
                 root, helper = _source_paths(source)
                 self._source_root = root
-                output = Path(tempfile.mkdtemp(prefix="foundry_h3_"))
-                self._payload_path = output / "asset.h3asset.json"
-                self._log_path = output / "helper.log"
+                self._source_tag = source.relative_to(root).as_posix()
+                if self._is_scenario:
+                    from .scenario_scene import bsp_selection
+                    bsp_selection(self.scenario_bsp_indices)
+                    helper = helper.with_name('h3-scenario-inspect.exe' if os.name == 'nt' else 'h3-scenario-inspect')
+                    if not helper.is_file():
+                        raise FileNotFoundError("Scenario inspector is missing beside the H3 extraction helper. Install the scenario prototype build.")
+                temporary = Path(tempfile.mkdtemp(prefix="foundry_h3_"))
+                output = temporary / "source" if self._is_scenario else temporary
+                if self._is_scenario:
+                    output.mkdir()
+                self._payload_path = output / ("scene.h3scene.json" if self._is_scenario else "asset.h3asset.json")
+                self._log_path = temporary / "helper.log"
                 self._log = self._log_path.open('w', encoding='utf-8')
                 command = [str(helper.resolve()), '--tags-root', str(root), '--input', str(source), '--output', str(output)]
-                if self.import_collision:
-                    command.append('--collision')
-                if self.import_physics:
-                    command.append('--physics')
+                if self._is_scenario:
+                    if self.scenario_geometry:
+                        command.append('--geometry')
+                    if self.scenario_bsp_indices.strip():
+                        command += ['--bsp-indices', self.scenario_bsp_indices]
+                else:
+                    if self.import_collision:
+                        command.append('--collision')
+                    if self.import_physics:
+                        command.append('--physics')
                 self._process = subprocess.Popen(command, stdout=self._log, stderr=subprocess.STDOUT,
                     cwd=str(output), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             self._settings.export_in_progress = True
             self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
             _active.append(self)
             context.window_manager.modal_handler_add(self)
-            print("Halo 3 object import started. Source tags are read-only.")
+            print("Halo 3 asset import started. Source tags are read-only.")
             return {'RUNNING_MODAL'}
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
@@ -164,7 +199,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             elapsed = time.monotonic() - self._started
             spinner = ('/', '-', '\\', '|')[int(elapsed * 8) % 4]
             if self._area is not None:
-                self._area.header_text_set(f"( {spinner} ) H3 object: {self._phase} | {elapsed:.1f}s | Esc: cancel")
+                self._area.header_text_set(f"( {spinner} ) H3 asset: {self._phase} | {elapsed:.1f}s | Esc: cancel")
             if self._cancel_requested:
                 if self._process is not None and self._process.poll() is None:
                     if time.monotonic() - self._cancel_at > 3:
@@ -191,21 +226,36 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 if self._start_shader_helper():
                     return {'RUNNING_MODAL'}
             if self._steps is None:
-                payload = load_payload(self._payload_path)
-                if not self.import_collision:
-                    payload['collision'] = None
-                if not self.import_physics:
-                    payload['physics'] = None
-                self._session = BuildSession(context, payload, self._payload_path, self.reference_only,
-                    self.preview_materials, self.flip_normal_green)
-                self._steps = iter(self._session.build())
+                if self._is_scenario:
+                    from .scenario_scene import load_scene
+                    from .scenario_builder import ScenarioBuildSession
+                    from .materials import load_manifest
+                    payload, inventory = load_scene(self._payload_path, self._source_tag)
+                    material_manifest = None
+                    if self.preview_materials:
+                        try:
+                            material_manifest = load_manifest(self._payload_path.parent / 'shader_manifest.json', payload['source_tag'])
+                        except (OSError, ValueError, TypeError) as error:
+                            utils.print_warning(f"Scenario material metadata unavailable: {error}")
+                    self._session = ScenarioBuildSession(context, payload, inventory, self._payload_path.parent,
+                        material_manifest, self.scenario_hints, self.scenario_points, self.flip_normal_green)
+                    self._steps = iter(self._session.steps())
+                else:
+                    payload = load_payload(self._payload_path)
+                    if not self.import_collision:
+                        payload['collision'] = None
+                    if not self.import_physics:
+                        payload['physics'] = None
+                    self._session = BuildSession(context, payload, self._payload_path, self.reference_only,
+                        self.preview_materials, self.flip_normal_green)
+                    self._steps = iter(self._session.build())
             deadline = time.monotonic() + 0.025
             while time.monotonic() < deadline:
                 try:
                     self._phase = next(self._steps)
                 except StopIteration:
                     self._finish(context)
-                    print(f"[Foundry perf] Halo 3 object import: {elapsed:.3f}s")
+                    print(f"[Foundry perf] Halo 3 asset import: {elapsed:.3f}s")
                     self.report({'INFO'}, "H3 import complete. See the H3 import report in Blender's Text Editor")
                     return {'FINISHED'}
             return {'RUNNING_MODAL'}
@@ -282,7 +332,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
 
 
 def menu_import(self, context):
-    self.layout.operator(NWO_OT_ImportHalo3Object.bl_idname, text="Halo 3 Object (Foundry Experimental)")
+    self.layout.operator(NWO_OT_ImportHalo3Object.bl_idname, text="Halo 3 Asset (Foundry Experimental)")
 
 
 def register():

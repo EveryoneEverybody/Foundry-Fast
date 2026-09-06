@@ -309,6 +309,14 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+fn validate_asset(geometry: &Value) -> Result<()> {
+    if (geometry["format"] != "foundry.h3-object" && geometry["format"] != "foundry.h3-scene")
+        || geometry["game"] != "halo3_mcc" || geometry["version"].as_u64() != Some(1) {
+        bail!("Unsupported H3 object or scene manifest");
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut values = BTreeMap::new();
@@ -333,9 +341,7 @@ fn run() -> Result<()> {
     if !asset.starts_with(&output) { bail!("Asset manifest must be in the extraction directory"); }
     if output.join("shader_manifest.json").exists() { bail!("Shader manifest already exists"); }
     let geometry: Value = serde_json::from_slice(&fs::read(&asset)?)?;
-    if geometry["format"] != "foundry.h3-object" || geometry["game"] != "halo3_mcc" || geometry["version"] != 1 {
-        bail!("Unsupported object manifest");
-    }
+    validate_asset(&geometry)?;
     fs::create_dir(output.join("textures"))?;
     let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new()};
     let paths = geometry["shader_paths"].as_array().context("Missing shader paths")?;
@@ -371,6 +377,16 @@ fn main() { if let Err(e) = run() { eprintln!("{e:#}"); std::process::exit(1); }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn accepts_object_and_scene_material_requests() {
+        for format in ["foundry.h3-object", "foundry.h3-scene"] {
+            assert!(validate_asset(&json!({"format":format,"game":"halo3_mcc","version":1})).is_ok());
+        }
+        for bad in [json!({"format":"foundry.h3-scene","game":"haloreach_mcc","version":1}),
+                    json!({"format":"unknown","game":"halo3_mcc","version":1}),
+                    json!({"format":"foundry.h3-scene","game":"halo3_mcc","version":true})] {
+            assert!(validate_asset(&bad).is_err());
+        }
+    }
     use blam_tags::render_method::{RenderMethodDefinitionCategory, RenderMethodDefinitionCategoryOption};
     fn option(name:&str)->RenderMethodDefinitionCategoryOption {
         RenderMethodDefinitionCategoryOption{option_name:name.into(),option_path:format!("options/{name}"),vertex_function:String::new(),pixel_function:String::new()}
