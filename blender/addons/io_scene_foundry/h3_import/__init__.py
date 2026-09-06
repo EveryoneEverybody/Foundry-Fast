@@ -9,9 +9,9 @@ import bpy
 from bpy.props import BoolProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 from .. import utils
-from .core import find_tags_root, load_payload
+from .core import find_tags_root, resolve_tags_root, load_payload
 from .builder import BuildSession
-from .import_output import HelperLogTail, open_output
+from .import_output import HelperLogTail, ImportProgress, open_output
 
 _active = []
 
@@ -25,26 +25,10 @@ def _source_paths(source):
     """Resolve source settings without loading an H3 project or changing Reach."""
     prefs = utils.get_prefs()
     configured_root = prefs.h3_tags_root.strip()
-    if configured_root:
-        root = Path(bpy.path.abspath(configured_root)).resolve()
-        if not root.is_dir():
-            raise NotADirectoryError(
-                "Halo 3 Tags Directory is not a directory. "
-                "Set it in Foundry preferences > Halo 3 Import"
-            )
-    else:
-        try:
-            root = find_tags_root(source)
-        except ValueError as exc:
-            raise ValueError(
-                "No tags directory in source path. "
-                "Set Halo 3 Tags Directory in Foundry preferences > Halo 3 Import"
-            ) from exc
-    if not source.is_relative_to(root):
-        raise ValueError(
-            "Selected tag is outside the configured Halo 3 Tags Directory. "
-            "Change or clear that directory in Foundry preferences > Halo 3 Import"
-        )
+    configured = bpy.path.abspath(configured_root) if configured_root else None
+    root = resolve_tags_root(source, configured)
+    if configured and root != Path(configured).resolve():
+        print(f'H3 source root normalized to tags directory: {root}', flush=True)
     if root == Path(utils.get_tags_path()).resolve():
         raise ValueError("Halo 3 source tags and the active Reach tags directory must be different")
     override = prefs.h3_extraction_helper.strip()
@@ -121,6 +105,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         self._process = None
         self._output = HelperLogTail()
+        self._progress = None
         self._log = None
         self._timer = None
         self._session = None
@@ -141,6 +126,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._is_scenario = False
         try:
             open_output(utils, bpy)
+            self._progress = ImportProgress('asset', self._area)
+            self._progress.update(self._phase, force=True)
             source = Path(bpy.path.abspath(self.filepath)).resolve(strict=True)
             self._is_scenario = source.suffix.lower() == '.scenario'
             self._source_tag = None
@@ -189,7 +176,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             traceback.print_exc()
-            self._finish(context, rollback=True)
+            self._finish(context, rollback=True, state='failed')
             return {'CANCELLED'}
 
     def modal(self, context, event):
@@ -218,6 +205,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 code = self._process.poll()
                 if code is None:
                     self._output.poll()
+                    self._progress.update(self._phase)
                     return {'RUNNING_MODAL'}
                 self._log.close()
                 self._log = None
@@ -237,7 +225,11 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                     from .scenario_scene import load_scene
                     from .scenario_builder import ScenarioBuildSession
                     from .materials import load_manifest
-                    payload, inventory = load_scene(self._payload_path, self._source_tag)
+                    self._progress.update('Validating scenario inventory', force=True)
+                    payload, inventory = load_scene(self._payload_path, self._source_tag, progress=self._progress.update)
+                    from .scenario_scene import result_messages
+                    for message in result_messages(payload):
+                        print(message, flush=True)
                     material_manifest = None
                     if self.preview_materials:
                         try:
@@ -248,6 +240,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                         material_manifest, self.scenario_hints, self.scenario_points, self.flip_normal_green)
                     self._steps = iter(self._session.steps())
                 else:
+                    self._progress.update('Validating object geometry', force=True)
                     payload = load_payload(self._payload_path)
                     if not self.import_collision:
                         payload['collision'] = None
@@ -260,6 +253,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             while time.monotonic() < deadline:
                 try:
                     self._phase = next(self._steps)
+                    self._progress.update(self._phase)
                 except StopIteration:
                     self._finish(context)
                     print(f"[Foundry perf] Halo 3 asset import: {elapsed:.3f}s")
@@ -272,7 +266,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         except Exception as exc:
             traceback.print_exc()
             self.report({'ERROR'}, str(exc))
-            self._finish(context, rollback=True)
+            self._finish(context, rollback=True, state='failed')
             return {'CANCELLED'}
 
     def _start_shader_helper(self):
@@ -303,7 +297,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             return False
         return True
 
-    def _finish(self, context, rollback=False):
+    def _finish(self, context, rollback=False, state=None):
         if self._finished:
             return
         self._finished = True
@@ -328,6 +322,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 except ReferenceError:
                     pass
         finally:
+            if self._progress is not None:
+                self._progress.finish(state or ('cancelled' if rollback else 'completed'))
             if self._log is not None:
                 self._log.close()
             if self._timer is not None:

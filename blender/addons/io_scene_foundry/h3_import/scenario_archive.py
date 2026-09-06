@@ -124,8 +124,9 @@ class Archive(dict):
             if roots is None or chunk['root_name'] in roots:
                 yield from decode_chunk(self.chunk_bytes(chunk), chunk)
 
-    def validate_records(self, directory=None):
+    def validate_records(self, directory=None, progress=None):
         from . import scenario_inspection as legacy
+        processed = 0
         totals = Counter()
         diagnostics = Counter()
         self.blobs = []
@@ -159,6 +160,9 @@ class Archive(dict):
                         raise legacy.InspectionError('Duplicate field address or blob across inventory chunks') from error
                     totals['reference_count'] += len(references)
                     db.commit()
+                    processed += len(rows)
+                    if progress:
+                        progress(f'Validating inventory: {processed}/{self["record_count"]} fields')
         totals['blob_count'] = len(self.blobs)
         for name in ('reference_count', 'blob_count', 'blob_bytes'):
             if totals[name] != self[name]:
@@ -168,7 +172,7 @@ class Archive(dict):
         return self
 
 
-def load(data, directory):
+def load(data, directory, progress=None):
     from . import scenario_inspection as legacy
     validate(data)
     root = Path(directory).resolve(strict=True)
@@ -178,7 +182,7 @@ def load(data, directory):
             raise legacy.InspectionError('Inventory chunk escapes extraction directory')
         with path.open('rb') as handle:
             return handle.read(chunk['bytes'] + 1)
-    return Archive(data, provider).validate_records(root)
+    return Archive(data, provider).validate_records(root, progress=progress)
 
 
 def from_packed(data, entries, text):

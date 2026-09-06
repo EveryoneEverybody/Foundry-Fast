@@ -794,6 +794,7 @@ class ExportStatus:
         self.clear()
 
     def clear(self):
+        self.h3_active = False
         self.status = "Ready"
         self.state = "idle"
         self.started_at = None
@@ -827,6 +828,20 @@ class ExportStatus:
     def _finish_line(self):
         line = self.current_line.strip()
         self.current_line = ""
+        h3 = re.fullmatch(r'\[H3 import (active|completed|cancelled|failed)\] (.*)', line)
+        if h3:
+            was_finished = self.finished
+            state, self.status = h3.groups()
+            self.h3_active = state == 'active'
+            self.state = {'active': 'active', 'completed': 'success', 'cancelled': 'failed', 'failed': 'failed'}[state]
+            self.finished = not self.h3_active
+            if self.started_at is None or state == 'active' and was_finished:
+                self.started_at = time.monotonic()
+            self.previous_line = line
+            return
+        if self.h3_active:
+            self.previous_line = line
+            return
         if TRACEBACK_START_LINE.search(line) or FATAL_PYTHON_LINE.match(line):
             self.status = "Python crash / traceback — see Messages"
             self.state = "failed"

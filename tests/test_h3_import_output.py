@@ -3,6 +3,8 @@ import ast
 from contextlib import redirect_stdout
 import importlib.util
 import io
+import re
+import time
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -16,6 +18,55 @@ spec.loader.exec_module(output)
 
 
 class OutputTests(unittest.TestCase):
+    def viewer_status(self):
+        tree = ast.parse((ROOT.parent / 'foundry_output_viewer.pyw').read_text(encoding='utf-8'))
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'ExportStatus')
+        namespace = {'re': re, 'time': time, 'ANSI_ESCAPE': re.compile(r'\x1b\[[0-9;]*m')}
+        for name in ('TRACEBACK_START_LINE', 'FATAL_PYTHON_LINE', 'FAILURE_LINE', 'CANCELLED_LINE',
+                     'EXPORT_BANNER_LINE', 'SECTION_LINE', 'EXPORT_COMPLETE_LINE'):
+            node = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in n.targets))
+            exec(compile(ast.Module(body=[node], type_ignores=[]), '<viewer>', 'exec'), namespace)
+        exec(compile(ast.Module(body=[cls], type_ignores=[]), '<viewer>', 'exec'), namespace)
+        return namespace['ExportStatus']()
+
+    def test_parent_stays_active_through_helpers_validation_and_retention(self):
+        viewer = self.viewer_status()
+        now = [0.]
+        lines = []
+        def emit(line, **kwargs):
+            lines.append(line)
+            viewer.feed(line + '\n')
+        reporter = output.ImportProgress('asset', clock=lambda: now[0], emit=emit)
+        reporter.update('Reading source')
+        viewer.feed('H3 shader extraction complete: 0 shaders, 0 bitmap bindings\n')
+        viewer.feed('BSP 0 extraction failed: missing dependency\n')
+        self.assertEqual(viewer.state, 'active')
+        now[0] = 1.
+        reporter.update('Validating inventory: 100/200 fields')
+        now[0] = 2.
+        reporter.update('Retaining source inventory: 4/8 chunks')
+        self.assertIn('4/8 chunks', viewer.status)
+        reporter.finish('completed')
+        self.assertEqual(viewer.state, 'success')
+        reporter.update('late message', force=True)
+        reporter.finish('failed')
+        self.assertEqual(len(lines), 4)
+
+    def test_throttle_header_and_terminal_states(self):
+        for terminal in ('cancelled', 'failed'):
+            viewer = self.viewer_status()
+            area = SimpleNamespace(header_text_set=Mock())
+            lines = []
+            reporter = output.ImportProgress('animation', area, clock=lambda: 0., emit=lambda line, **kw: lines.append(line))
+            for i in range(50):
+                reporter.update(f'Construction {i}/50')
+            self.assertEqual(len(lines), 1)
+            self.assertEqual(area.header_text_set.call_count, 50)
+            reporter.finish(terminal)
+            viewer.feed('\n'.join(lines) + '\n')
+            self.assertTrue(viewer.finished)
+            self.assertEqual(viewer.state, 'failed')
+
     def test_open_existing_foundry_viewer(self):
         utils = SimpleNamespace(show_output=Mock())
         output.open_output(utils, SimpleNamespace(app=SimpleNamespace(background=False)))

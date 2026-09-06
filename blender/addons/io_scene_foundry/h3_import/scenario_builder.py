@@ -176,6 +176,7 @@ class ScenarioBuildSession:
         self.warnings.extend(f"{bsp['source_tag']}: {v}" for v in bsp.get('limitations', []))
 
     def hints(self):
+        yield 'Planning authored hints and points'
         plan = source.hint_plan(self.inventory)
         for kind in ('sectors', 'rails', 'firing_positions', 'script_points'):
             enabled = self.import_hints if kind in ('sectors', 'rails') else self.import_points
@@ -183,7 +184,9 @@ class ScenarioBuildSession:
                 continue
             collection = self.collection(kind.replace('_', ' ').title(), self.root)
             for row in plan[kind]:
-                points = [self.rotation @ (Vector(p) * 100. * self.scale) for p in row['points']]
+                # The pinned JMS/ASS decoder multiplies geometry by 100; the
+                # inventory keeps raw world units. Use Foundry's same conversion.
+                points = [import_transform.position(p, scene_nwo=self.context.scene.nwo) for p in row['points']]
                 curve = None
                 if len(points) > 1:
                     curve = self.remember(bpy.data.curves, bpy.data.curves.new(row['name'], 'CURVE'))
@@ -216,6 +219,9 @@ class ScenarioBuildSession:
         self.root['h3_source_tag'] = self.scene['source_tag']
         self.root['h3_import_kind'] = 'scenario_reference'
         self.root['h3_coordinate_scale'] = 100. * self.scale
+        self.root['h3_coordinate_encoding'] = 'source_world_units_unmodified'
+        self.root['h3_display_scale_mode'] = self.context.scene.nwo.scale
+        self.root['h3_display_forward'] = self.context.scene.nwo.forward_direction
         if self.preview:
             self.shader_source = self.text('H3 shader source - ' + self.root.name, self.preview.manifest)
             self.root['h3_shader_manifest'] = self.shader_source.name
@@ -236,7 +242,7 @@ class ScenarioBuildSession:
                                  base64.b64encode(content).decode('ascii'))
                 chunks.append(dict(chunk, encoding='gzip+base64', text=text.name,
                                    sha256=hashlib.sha256(content).hexdigest()))
-                yield f"Retaining source inventory: {len(chunks)} chunks"
+                yield f"Retaining source inventory: {len(chunks)}/{len(self.inventory['chunks'])} chunks"
             self.root['h3_packed_inventory'] = self.text('H3 packed inventory index - ' + self.root.name, chunks).name
             self.counts['inventory_records'] = self.inventory['record_count']
             self.counts['inventory_chunks'] = len(chunks)
@@ -253,6 +259,9 @@ class ScenarioBuildSession:
             self.root['h3_material_report'] = self.text('H3 material report - ' + self.root.name, self.preview.results).name
         self.warnings.extend(self.scene.get('limitations', []))
         self.root['h3_scenario_report'] = self.text('H3 scenario import report', {'counts': self.counts, 'diagnostics': self.warnings,
+            'coordinates': {'source': 'world units (unmodified)', 'geometry': '100 per world unit',
+                            'display_units_per_world_unit': 100. * self.scale,
+                            'scale_mode': self.context.scene.nwo.scale, 'forward': self.context.scene.nwo.forward_direction},
             'destination_tags_written': False, 'reference_only': True}).name
         yield 'Scenario reference complete'
 

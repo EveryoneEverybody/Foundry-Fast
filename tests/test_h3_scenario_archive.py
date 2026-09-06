@@ -36,6 +36,20 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(m.hint_plan(data), m.hint_plan(self.original))
         self.assertEqual(json.loads(json.dumps(data)), self.manifest)
 
+    def test_validation_reports_real_processed_totals_without_changing_records(self):
+        messages = []
+        data = inspection.load(self.path, progress=messages.append)
+        self.assertEqual(len(messages), len(self.manifest['chunks']))
+        total = self.manifest['record_count']
+        self.assertEqual(messages[-1], f'Validating inventory: {total}/{total} fields')
+        self.assertEqual(list(data.records()), self.original['records'])
+
+    def test_progress_cancellation_propagates_during_validation(self):
+        def cancel(message):
+            raise KeyboardInterrupt()
+        with self.assertRaises(KeyboardInterrupt):
+            inspection.load(self.path, progress=cancel)
+
     def test_selective_query_does_not_drop_other_sections(self):
         row = dict(address='compiled#99[0]/value#0', name='retained', raw_name='retained',
                    ordinal=0, type='long integer', kind='value', value=101)

@@ -169,7 +169,10 @@ pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
                 Ok(())
             }));
             let error = match outcome { Ok(Ok(()))=>None, Ok(Err(e))=>Some(format!("{e:#}")), Err(_)=>Some("BSP decoder panicked".into()) };
-            if let Some(error) = error { row["status"]=json!("error");row["diagnostics"]=json!([error]); }
+            if let Some(error) = error {
+                println!("BSP {index} extraction failed: {error}");
+                row["status"]=json!("error");row["diagnostics"]=json!([error]);
+            }
             entries.push(row);
         }
     }

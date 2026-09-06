@@ -134,7 +134,7 @@ def _pairs(items):
     return result
 
 
-def load(path):
+def load(path, progress=None):
     path = Path(path)
     with path.open('rb') as handle:
         content = handle.read(MAX_MANIFEST_BYTES + 1)
@@ -144,7 +144,7 @@ def load(path):
                       parse_constant=lambda value: (_ for _ in ()).throw(InspectionError(f'Invalid JSON value: {value}')))
     if isinstance(data, dict) and data.get('version') == 2:
         from . import scenario_archive
-        return scenario_archive.load(data, path.parent)
+        return scenario_archive.load(data, path.parent, progress=progress)
     return validate(data, path.parent)
 
 

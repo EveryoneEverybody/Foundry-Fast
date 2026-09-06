@@ -12,7 +12,7 @@ from .. import utils
 from .animations import load_manifest, selected_manifest
 from .animation_builder import AnimationStager, find_armature
 from .animation_append import AnimationAppender
-from .import_output import HelperLogTail, open_output
+from .import_output import HelperLogTail, ImportProgress, open_output
 
 _active = []
 
@@ -66,6 +66,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
         self._process = self._log = self._timer = self._stager = self._steps = None
         self._finished = False
         self._output = HelperLogTail()
+        self._progress = None
         self._cancel_at = None
         self._started = time.monotonic()
         self._scene, self._layer, self._area = context.scene, context.view_layer, context.area
@@ -77,6 +78,8 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
         self._phase = 'Reading source animation resources'
         try:
             open_output(utils, bpy)
+            self._progress = ImportProgress('animation', self._area)
+            self._progress.update(self._phase, force=True)
             self._target = (context.scene.objects.get(self.target_armature)
                             if self.target_armature else find_armature(context))
             if self._target is None or self._target.type != 'ARMATURE':
@@ -120,7 +123,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
         except Exception as exc:
             traceback.print_exc()
             self.report({'ERROR'}, str(exc))
-            self._finish(context, rollback=True)
+            self._finish(context, rollback=True, state='failed')
             return {'CANCELLED'}
 
     def modal(self, context, event):
@@ -148,6 +151,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 code = self._process.poll()
                 if code is None:
                     self._output.poll()
+                    self._progress.update(self._phase)
                     return {'RUNNING_MODAL'}
                 self._log.close()
                 self._log = None
@@ -156,6 +160,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 if code != 0:
                     raise RuntimeError(f'H3 animation helper failed ({code}): {log[-1600:]}')
             if self._steps is None:
+                self._progress.update('Validating animation data', force=True)
                 manifest = selected_manifest(load_manifest(self._manifest),
                                              self.include_overlays, self.include_blend_screens)
                 builder = AnimationStager if self.create_staging_copy else AnimationAppender
@@ -163,6 +168,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 self._steps = iter(self._stager.build())
             try:
                 self._phase = next(self._steps)
+                self._progress.update(self._phase)
             except StopIteration:
                 count = len(self._stager.animations)
                 self._finish(context)
@@ -176,11 +182,11 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
         except Exception as exc:
             traceback.print_exc()
             self.report({'ERROR'}, str(exc))
-            self._finish(context, rollback=True)
+            self._finish(context, rollback=True, state='failed')
             return {'CANCELLED'}
         return {'RUNNING_MODAL'}
 
-    def _finish(self, context, rollback=False):
+    def _finish(self, context, rollback=False, state=None):
         if self._finished:
             return
         self._finished = True
@@ -205,6 +211,8 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 if self._old_active and self._old_active.name in bpy.data.objects:
                     self._layer.objects.active = self._old_active
         finally:
+            if self._progress is not None:
+                self._progress.finish(state or ('cancelled' if rollback else 'completed'))
             if self._log:
                 self._log.close()
             if self._timer:

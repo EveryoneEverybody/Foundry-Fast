@@ -148,7 +148,7 @@ class ScenarioUITests(unittest.TestCase):
             ns={'Path':Path,'os':SimpleNamespace(name='posix'),'time':SimpleNamespace(monotonic=lambda:0),
                 'bpy':SimpleNamespace(path=SimpleNamespace(abspath=lambda p:p)),
                 'utils':SimpleNamespace(get_scene_props=lambda:settings,show_output=Mock()),'HelperLogTail':log_output.HelperLogTail,
-                'open_output':log_output.open_output,'_source_paths':lambda p:(tags,helper),
+                'open_output':log_output.open_output,'ImportProgress':log_output.ImportProgress,'_source_paths':lambda p:(tags,helper),
                 'tempfile':SimpleNamespace(mkdtemp=lambda **kw:str(output)),
                 'subprocess':SimpleNamespace(Popen=popen,STDOUT=-2),'_active':[],
                 '__package__':PKG,'traceback':SimpleNamespace(print_exc=Mock())}

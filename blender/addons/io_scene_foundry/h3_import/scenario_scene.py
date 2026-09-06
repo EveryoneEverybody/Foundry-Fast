@@ -97,16 +97,30 @@ def validate_scene(data, source_tag=None):
     return data
 
 
-def load_scene(path, source_tag=None):
+def load_scene(path, source_tag=None, progress=None):
     path = Path(path)
     data = validate_scene(checked_json(path), source_tag)
-    inventory = inspection.load(within(path.parent, data['inventory']))
+    inventory = inspection.load(within(path.parent, data['inventory']), progress=progress)
     if inventory['source_tag'].replace('\\', '/') != data['source_tag'].replace('\\', '/'):
         raise ValueError('Inventory belongs to another scenario')
     for row in data['bsp_entries']:
         if row['status'] == 'extracted':
             within(path.parent, row['geometry'])
     return data, inventory
+
+
+def result_messages(data):
+    entries = data['bsp_entries']
+    extracted = [row for row in entries if row['status'] == 'extracted']
+    failed = [row for row in entries if row['status'] == 'error']
+    yield (f'H3 BSP results: {len(extracted)} extracted, {len(failed)} failed, '
+           f'{len(entries) - len(extracted) - len(failed)} not requested; '
+           f'{len(data.get("shader_paths", []))} source shaders')
+    for row in failed:
+        for error in row['diagnostics']:
+            yield f'H3 BSP {row["index"]} ({row.get("source_tag")}): {error}'
+    if data.get('geometry_requested') and not extracted:
+        yield 'H3 scenario has no extracted BSP geometry; only enabled hints and source inventory will be imported.'
 
 
 def validate_bsp(data, source_tag, index):
