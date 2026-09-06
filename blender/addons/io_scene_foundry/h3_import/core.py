@@ -200,3 +200,22 @@ def find_tags_root(path):
         if parent.name.casefold() == "tags":
             return parent
     raise ValueError("No tags directory in source path. Set Halo 3 Tags Directory explicitly")
+
+
+def resolve_tags_root(source, configured=None):
+    """Accept a kit folder only when its direct tags child contains the source."""
+    source = Path(source).resolve(strict=True)
+    if not configured:
+        try:
+            return find_tags_root(source)
+        except ValueError as error:
+            raise ValueError('Set Halo 3 Tags Directory in Foundry preferences > Halo 3 Import') from error
+    root = Path(configured).resolve()
+    if not root.is_dir():
+        raise NotADirectoryError('Halo 3 Tags Directory is not a directory. Set it in Foundry preferences > Halo 3 Import')
+    child = (root / 'tags').resolve()
+    if child.is_dir() and source.is_relative_to(child):
+        root = child
+    if not source.is_relative_to(root):
+        raise ValueError('Selected tag is outside the configured Halo 3 Tags Directory')
+    return root

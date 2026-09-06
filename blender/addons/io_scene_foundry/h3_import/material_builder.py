@@ -20,19 +20,22 @@ class PreviewBuilder:
         self.results.append(result)
         if record is None:
             result['diagnostics'].append('No unambiguous source shader record')
-            return
-        try:
-            recipe = plan(record)
-            nodes = MaterialNodes(self, material, recipe)
-            nodes.build()
-            result['status'] = 'approximate_preview'
-            result['diagnostics'] = list(dict.fromkeys(nodes.diagnostics))
-        except Exception as exc:
-            result['diagnostics'].append(str(exc))
-            # A partial preview must not masquerade as a completed conversion.
-            material.use_nodes = False
+        else:
+            try:
+                recipe = plan(record)
+                nodes = (TerrainNodes if recipe['family'] == 'rmtr' else MaterialNodes)(self, material, recipe)
+                nodes.build()
+                result['status'] = 'approximate_preview'
+                result['diagnostics'] = list(dict.fromkeys(nodes.diagnostics))
+                if recipe['albedo'] == 'constant_color':
+                    material.diffuse_color = recipe['parameters']['albedo_color']['value']
+            except Exception as exc:
+                result['diagnostics'].append(str(exc))
+                # A partial preview must not masquerade as a completed conversion.
+                material.use_nodes = False
         material['h3_material_preview'] = result['status']
         material['h3_material_diagnostics'] = json.dumps(result['diagnostics'])
+        return result
         # Leave nwo.shader_path and uses_blender_nodes untouched.
 
     def image(self, bitmap, role):
@@ -286,3 +289,57 @@ class MaterialNodes:
         if hasattr(self.material, 'surface_render_method'):
             # Dithered coverage discards zero-alpha additive emission in Eevee.
             self.material.surface_render_method = 'BLENDED' if self.illumination_surface == 'additive' else 'DITHERED'
+
+
+class TerrainNodes(MaterialNodes):
+    """Layer albedo from H3 terrain.fx sample_blend_normalized/ACCUMULATE_MATERIAL_ALBEDO.
+
+    This is not a reconstruction of the terrain lighting or wet reflection passes.
+    """
+    def build(self):
+        active = [i for i in range(4) if self.c.get(f'material_{i}', 'off') not in {'off', 'none'}]
+        if not active:
+            raise ValueError('Terrain shader has no active material layers')
+        blend = self.texture('blend_map', 'data')
+        if blend is None:
+            raise ValueError('Terrain blend_map is unavailable; layer weights cannot be resolved')
+        separate = self.node('ShaderNodeSeparateColor', 'Terrain blend weights (linear data)')
+        separate.mode = 'RGB'
+        self.feed(blend.outputs['Color'], separate.inputs['Color'])
+        weights = [separate.outputs['Red'], separate.outputs['Green'], separate.outputs['Blue'], blend.outputs['Alpha']]
+        mode = self.c.get('blending')
+        if mode == 'dynamic_morph':
+            alpha = self.math('MULTIPLY', self.math('SUBTRACT', weights[3], self.scalar('transition_threshold', 1.), 'Transition threshold'), self.scalar('transition_sharpness', 1.), 'Transition sharpness')
+            alpha = self.math('MINIMUM', self.math('MAXIMUM', alpha, 0., 'Clamp transition low'), 1., 'Clamp transition high')
+            dynamic = self.color('dynamic_material', (0,0,0,0))
+            weights[3] = 0.
+            weights = [self.math('ADD', self.math('MULTIPLY', w, self.math('SUBTRACT', 1., alpha, 'Inverse transition'), 'Static terrain weight'), self.math('MULTIPLY', alpha, dynamic[i], 'Dynamic terrain weight'), 'Morphed terrain weight') for i,w in enumerate(weights)]
+        elif mode != 'morph':
+            raise ValueError(f'Terrain blending {mode} is not supported')
+        total = 0.
+        for i in active: total = self.math('ADD', total, weights[i], 'Active terrain weight sum')
+        # A zero-weight source texel is undefined in the shader. Keep it black.
+        denominator = self.math('MAXIMUM', total, 1e-8, 'Guard undefined zero-weight texels')
+        rgb = (0.,0.,0.)
+        for i in active:
+            name = f'base_map_m_{i}'
+            base = self.texture(name)
+            if base is None: raise ValueError(f'Terrain {name} is unavailable')
+            detail, _ = self.sample(f'detail_map_m_{i}', fallback=(1 / DETAIL_MULTIPLIER,) * 3)
+            layer = self.vector('MULTIPLY', base.outputs['Color'], detail, f'Terrain layer {i} base x detail')
+            weight = self.math('DIVIDE', weights[i], denominator, f'Terrain layer {i} normalized weight')
+            weight = self.math('MULTIPLY', weight, self.scalar('global_albedo_tint',1.) * DETAIL_MULTIPLIER, 'Terrain detail/tint scale')
+            combine = self.node('ShaderNodeCombineXYZ', f'Terrain layer {i} weight')
+            for socket in combine.inputs: self.feed(weight,socket)
+            rgb = self.vector('ADD', rgb, self.vector('MULTIPLY',layer,combine.outputs[0],f'Weighted terrain layer {i}'), 'Terrain albedo sum')
+        surface = self.node('ShaderNodeBsdfPrincipled', 'H3 terrain layer albedo preview')
+        surface.inputs['Roughness'].default_value = .65
+        self.feed(rgb,surface.inputs['Base Color'])
+        output = self.node('ShaderNodeOutputMaterial','Terrain preview only')
+        self.tree.links.new(surface.outputs['BSDF'],output.inputs['Surface'])
+        self.diagnostics.append('Terrain layer albedo uses normalized blend-map channels; Halo lighting, puddle reflections, detailed normals and runtime environment maps are not reproduced')
+        for name,p in self.p.items():
+            if p['type']=='bitmap' and name not in self.used:
+                tex=self.texture(name,'data' if 'bump' in name else 'color')
+                if tex: tex.label=name+' [unconnected source]'
+        for i,node in enumerate(self.tree.nodes): node.location=((i%7)*230,-(i//7)*230)

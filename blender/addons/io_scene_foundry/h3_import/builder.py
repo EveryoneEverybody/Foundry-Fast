@@ -12,7 +12,7 @@ from .volume_display import configure_material, configure_object
 
 
 class BuildSession:
-    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True):
+    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True, *, source_axes=False, variant=None):
         self.context = context
         self.payload = payload
         self.source_path = str(source_path)
@@ -20,6 +20,10 @@ class BuildSession:
         self.settings = utils.get_scene_props()
         self.scale = import_transform.scale_factor(self.settings)
         self.rotation = import_transform.rotation_matrix(self.settings)
+        if source_axes:
+            self.rotation = Matrix.Identity(4)
+        self.variant = variant
+        self.variant_regions = None
         self.created = []
         self.warnings = list(payload.get("warnings", []))
         self.armature = None
@@ -27,6 +31,10 @@ class BuildSession:
         self.flip_normal_green = flip_normal_green
         self.render_materials = []
         self.physics_material = None
+        if variant is not None:
+            from .scenario_objects import variant_regions
+            self.variant_regions, warnings = variant_regions(payload, variant)
+            self.warnings.extend(warnings)
 
     def remember(self, store, value):
         self.created.append((store, value))
@@ -240,6 +248,10 @@ class BuildSession:
 
     def build(self):
         root = self.collection("H3 " + self.payload["name"], self.context.scene.collection, self.reference_only)
+        self.root = root
+        if self.variant is not None:
+            root['h3_requested_variant'] = self.variant
+            root['h3_source_variants'] = json.dumps(self.payload.get('variants', []))
         root["h3_source_tag"] = self.payload["source_tag"]
         root["h3_extraction_file"] = self.source_path
         root["h3_dependencies"] = json.dumps(self.payload.get("dependencies", {}))
@@ -252,6 +264,8 @@ class BuildSession:
             collection = self.collection(role.title(), root)
             materials = self.materials(source, role)
             for key, triangles in groups(source, collision=role == 'collision').items():
+                if self.variant_regions is not None and key[0] in self.variant_regions and key[1] not in self.variant_regions[key[0]]:
+                    continue
                 self.build_mesh(source, key, triangles, materials, collection, role)
                 yield f"{role}: {key[0]} / {key[1]}"
         markers = self.collection("Markers", root)
