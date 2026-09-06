@@ -225,12 +225,13 @@ fn run() -> Result<()> {
             warnings.push(format!("No {ext} reference on source model"));
         }
     }
+    let default_variant = ["object", "unit/object", "item/object", "device/object"].iter()
+        .find_map(|p| object.root().descend(p).and_then(|s| s.read_string_id("default model variant"))).unwrap_or_default();
     let payload = json!({"format": FORMAT, "version":1, "game":"halo3_mcc", "units":"jms_x100",
         "decoder":DECODER, "name":input.file_stem().unwrap().to_string_lossy(),
         "source_tag":relative(&input), "dependencies":dependencies,
         "variants":variant_metadata(&model),
-        "default_variant":["object", "unit/object", "item/object", "device/object"].iter()
-            .find_map(|p| object.root().descend(p).and_then(|s| s.read_string_id("default model variant"))).unwrap_or_default(),
+        "default_variant":default_variant,
         "shader_paths":shader_paths(&render_tag), "render":mesh_json(&render),
         "collision":collision_data, "physics":physics_data, "warnings":warnings});
     let file = OpenOptions::new().write(true).create_new(true).open(output.join("asset.h3asset.json"))?;
