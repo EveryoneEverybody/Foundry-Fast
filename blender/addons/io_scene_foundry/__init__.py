@@ -17,6 +17,8 @@ from . import perf_bitmap_cache
 from . import perf_patch
 from . import fast_runtime
 from . import h3_import
+from .h3_import import volume_display
+from .h3_import import animation_ops
 
 modules = [
     preferences,
@@ -34,6 +36,8 @@ modules = [
     perf_patch,
     fast_runtime,
     h3_import,
+    volume_display,
+    animation_ops,
 ]
             
 def register():

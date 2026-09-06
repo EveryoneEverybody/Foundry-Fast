@@ -31,7 +31,7 @@ utils.print_warning = print
 utils.current_project_valid = lambda: True
 utils.is_corinth = lambda context: False
 sys.modules[NAME + '.utils'] = utils
-for part, path in [('managed_blam', ROOT / 'managed_blam'), ('h3_import', ROOT / 'h3_import')]:
+for part, path in [('managed_blam', ROOT / 'managed_blam'), ('h3_import', ROOT / 'h3_import'), ('tools', ROOT / 'tools')]:
     module = ModuleType(NAME + '.' + part)
     module.__path__ = [str(path)]
     sys.modules[module.__name__] = module
