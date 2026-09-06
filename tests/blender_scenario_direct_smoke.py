@@ -74,6 +74,7 @@ backend.ObjectTag=ObjectTag
 backend.ModelTag=type('ModelTag',(),{})
 backend.RenderModelTag=type('RenderModelTag',(),{})
 backend.draw_import_template=lambda *a,**k:None
+backend.draw_scenario_import_sections=lambda *a,**k:None
 backend.remove_collection_hierarchy=lambda c:None
 
 actual_direct=importlib.import_module(NAME+'.scenario_static_direct')
