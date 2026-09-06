@@ -133,6 +133,7 @@ class ScenarioUITests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import Mock
         from test_h3_import_preferences import IMPORTER, OPERATOR
+        log_output = importlib.import_module(PKG + '.import_output')
         code = next(n for n in OPERATOR.body if isinstance(n, ast.FunctionDef) and n.name == 'execute')
         # Execute the production routing with the process launcher replaced.
         with tempfile.TemporaryDirectory() as d:
@@ -146,13 +147,15 @@ class ScenarioUITests(unittest.TestCase):
             operator=SimpleNamespace(filepath=str(tag),scenario_geometry=True,scenario_bsp_indices='',import_collision=True,import_physics=True,report=Mock(),_finish=Mock())
             ns={'Path':Path,'os':SimpleNamespace(name='posix'),'time':SimpleNamespace(monotonic=lambda:0),
                 'bpy':SimpleNamespace(path=SimpleNamespace(abspath=lambda p:p)),
-                'utils':SimpleNamespace(get_scene_props=lambda:settings),'_source_paths':lambda p:(tags,helper),
+                'utils':SimpleNamespace(get_scene_props=lambda:settings,show_output=Mock()),'HelperLogTail':log_output.HelperLogTail,
+                'open_output':log_output.open_output,'_source_paths':lambda p:(tags,helper),
                 'tempfile':SimpleNamespace(mkdtemp=lambda **kw:str(output)),
                 'subprocess':SimpleNamespace(Popen=popen,STDOUT=-2),'_active':[],
                 '__package__':PKG,'traceback':SimpleNamespace(print_exc=Mock())}
             exec(compile(ast.Module(body=[code],type_ignores=[]),'h3_import/execute','exec'),ns)
             try:
                 self.assertEqual(ns['execute'](operator,context),{'RUNNING_MODAL'})
+                ns['utils'].show_output.assert_called_once_with()
                 command=popen.call_args.args[0]
                 directory=Path(command[command.index('--output')+1])
                 self.assertEqual(list(directory.iterdir()),[])
@@ -161,7 +164,7 @@ class ScenarioUITests(unittest.TestCase):
                 self.assertNotIn('--collision',command)
                 self.assertNotIn('--physics',command)
             finally:
-                if operator._log:operator._log.close()
+                if getattr(operator, '_log', None):operator._log.close()
 
 
 if __name__=='__main__':unittest.main()
