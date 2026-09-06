@@ -9,7 +9,7 @@ import bpy
 from bpy.props import BoolProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 from .. import utils
-from .animations import load_manifest
+from .animations import load_manifest, selected_manifest
 from .animation_builder import AnimationStager, find_armature
 from .animation_append import AnimationAppender
 
@@ -28,7 +28,9 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
     create_staging_copy: BoolProperty(name='Create Staging Copy', default=False, options={'SKIP_SAVE'},
         description='Duplicate the target rig and its bound objects for isolated playback; otherwise add actions to the existing rig')
     include_overlays: BoolProperty(name='Import Time Overlays', default=False,
-        description='Import local time overlays as composed JMO actions with a leading reference; blend screens and replacements remain unsupported')
+        description='Import local time overlays as composed JMO actions with a leading reference; independent from aim-screen samples')
+    include_blend_screens: BoolProperty(name='Import Aim/Blend-Screen Poses', default=False,
+        description='Import regular H3 aim-screen samples with stepped keys and retained screen metadata; no runtime aiming controller')
     animation_name: StringProperty(name='Exact Animation Name', default='combat:move_front',
         description='Exact source graph name, including colons. Blank imports all supported clips enabled below')
 
@@ -42,10 +44,11 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
         self.layout.prop(self, 'create_staging_copy')
         self.layout.prop(self, 'animation_name')
         self.layout.prop(self, 'include_overlays')
+        self.layout.prop(self, 'include_blend_screens')
         self.layout.label(text='Copy rig and meshes' if self.create_staging_copy else 'Actions only; no duplicate meshes')
         self.layout.label(text='H3 .model: preferred rest-pose source')
         self.layout.label(text='.model_animation_graph also accepted')
-        self.layout.label(text='Base clips and enabled time overlays; no tag writes')
+        self.layout.label(text='Base clips and enabled overlays; no tag writes')
         if not self.target_armature:
             self.layout.label(text='Choose an imported armature above', icon='INFO')
 
@@ -97,6 +100,8 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                     command += ['--animation', self.animation_name.strip()]
                 if self.include_overlays:
                     command.append('--include-overlays')
+                if self.include_blend_screens:
+                    command.append('--include-blend-screens')
                 self._process = subprocess.Popen(command, cwd=str(temp), stdout=self._log, stderr=subprocess.STDOUT,
                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             self._settings.export_in_progress = True
@@ -144,12 +149,8 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 if code != 0:
                     raise RuntimeError(f'H3 animation helper failed ({code}): {log[-1600:]}')
             if self._steps is None:
-                manifest = load_manifest(self._manifest)
-                if not self.include_overlays:
-                    for clip in manifest['animations']:
-                        if clip['status'] == 'decoded' and clip['animation_type'] == 'overlay':
-                            clip['status'] = 'not_selected'
-                            clip['message'] = 'Import Time Overlays is disabled'
+                manifest = selected_manifest(load_manifest(self._manifest),
+                                             self.include_overlays, self.include_blend_screens)
                 builder = AnimationStager if self.create_staging_copy else AnimationAppender
                 self._stager = builder(context, manifest, self._manifest.parent, self._target)
                 self._steps = iter(self._stager.build())

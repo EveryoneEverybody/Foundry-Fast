@@ -106,7 +106,7 @@ class AnimationAppender(AnimationStager):
                 curve.keyframe_points.foreach_set('co', [v for frame, values in enumerate(samples, 1)
                                                         for v in (frame, values[component])])
                 for key in curve.keyframe_points:
-                    key.interpolation = 'LINEAR'
+                    key.interpolation = action.get('h3_animation_interpolation', 'LINEAR')
                 curve.update()
             for curve in source:
                 curves.remove(curve)
@@ -143,7 +143,9 @@ class AnimationAppender(AnimationStager):
                       'Source-root movement stays folded on H3 rigs without a pedestal.',
                       'Events retained, not converted. No Reach tags written.',
                       'JMO frame 1 is the composition reference; frames 2 onward are codec samples.',
-                      'Time overlays are standalone composed previews, not NLA layers.']}, indent=2))
+                      'Time overlays are standalone composed previews, not NLA layers.',
+                      'Blend screens are discrete source-order samples, not timed motion or a runtime aim controller.',
+                      'H3 screen metadata is retained; Reach object-space pose-overlay controls are not generated.']}, indent=2))
         arm['h3_animation_report'] = report.name
         self.context.view_layer.update()
 

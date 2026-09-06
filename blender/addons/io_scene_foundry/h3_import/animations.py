@@ -1,4 +1,5 @@
 """Validation and node matching for H3 animation intermediates."""
+import copy
 import json
 import math
 from pathlib import Path, PurePosixPath
@@ -34,7 +35,7 @@ def _vector(value, count):
 
 
 def validate_manifest(data):
-    if not isinstance(data, dict) or data.get('format') != FORMAT or type(data.get('version')) is not int or data.get('version') not in (1, 2):
+    if not isinstance(data, dict) or data.get('format') != FORMAT or type(data.get('version')) is not int or data.get('version') not in (1, 2, 3):
         raise ValueError('Unsupported H3 animation manifest')
     expected = {'game': 'halo3_mcc', 'units': 'halo_world', 'jma_units': 'halo_world_x100',
                 'quaternion_order': 'wxyz', 'rest_space': 'parent_local'}
@@ -84,9 +85,17 @@ def validate_manifest(data):
         if clip.get('frame_info_type') != movement[kind]:
             raise ValueError('Animation kind and movement metadata disagree')
         count = d.get('decoded_frame_count')
-        if type(count) is not int or not 0 < count <= 32767 or clip.get('source_frame_count') != count:
+        if type(count) is not int or not 0 < count <= 32767:
+            raise ValueError('Invalid decoded animation sample count')
+        source_count = clip.get('source_frame_count')
+        if type(source_count) is not int or not 0 < source_count <= 32767:
+            raise ValueError('Invalid source animation frame count')
+        if not is_blend_screen(clip) and source_count != count:
             raise ValueError('Animation frame counts disagree')
-        layout = 'reference_then_codec_frames' if kind == 'JMO' else 'codec_frames_then_held_terminal'
+        if d.get('blend_screen') is not None and kind != 'JMO':
+            raise ValueError('Blend-screen samples must remain overlays')
+        layout = ('reference_then_pose_samples' if is_blend_screen(clip) else
+                  'reference_then_codec_frames' if kind == 'JMO' else 'codec_frames_then_held_terminal')
         if d.get('file_frame_count') != count + 1 or d.get('frame_layout') != layout:
             raise ValueError('Invalid animation frame layout')
         if kind == 'JMO':
@@ -105,13 +114,18 @@ def validate_manifest(data):
 
 def validate_overlay(clip, nodes, version, clips):
     d = clip['decoded']
-    if version != 2 or clip.get('blend_screen') != -1 or clip.get('object_space_parent_count') != 0:
-        raise ValueError('Only schema-2 time overlays without blend-screen or object-space data are supported')
+    screen = is_blend_screen(clip)
+    if version not in (2, 3) or clip.get('object_space_parent_count') != 0:
+        raise ValueError('Unsupported overlay schema or object-space data')
+    if screen:
+        validate_blend_screen(clip, version)
+    elif type(clip.get('blend_screen')) is not int or clip['blend_screen'] != -1 or d.get('blend_screen') is not None:
+        raise ValueError('Time overlay has invalid blend-screen metadata')
     if d.get('motion_file') is not None or d.get('movement_samples') != []:
-        raise ValueError('Time overlay must not contain movement data')
+        raise ValueError('Overlay must not contain movement data')
     overlay = d.get('overlay', {})
     if (overlay.get('composition') != 'static_reference_then_parent_local_delta'
-            or overlay.get('preview') != 'composed_on_fixed_reference'
+            or overlay.get('preview') != ('discrete_blend_screen_samples' if screen else 'composed_on_fixed_reference')
             or overlay.get('reference_frame') != 1 or overlay.get('first_sample_frame') != 2):
         raise ValueError('Unknown overlay composition or reference layout')
     base = overlay.get('base', {})
@@ -142,6 +156,59 @@ def validate_overlay(clip, nodes, version, clips):
                 raise ValueError('Invalid overlay component flags')
         if any(a and b for a, b in zip(flags['static_' + component], flags['animated_' + component])):
             raise ValueError('Overlapping static and animated overlay flags')
+
+
+def is_blend_screen(clip):
+    """Identify pose banks by source screen reference, not clip name or codec."""
+    index = clip.get('blend_screen')
+    return type(index) is int and index >= 0 and clip.get('animation_type') == 'overlay'
+
+
+def validate_blend_screen(clip, version):
+    d = clip['decoded']
+    screen = d.get('blend_screen')
+    if version != 3 or not isinstance(screen, dict):
+        raise ValueError('Blend-screen samples require schema 3 and a resolved screen')
+    if (type(screen.get('index')) is not int or screen['index'] != clip['blend_screen']
+            or not isinstance(screen.get('label'), str) or not screen['label']
+            or screen.get('layout') != 'h3_aiming_screen'
+            or screen.get('angle_units') != 'radians'
+            or screen.get('sample_order') != 'source_codec_order'
+            or screen.get('sample_coordinates') != 'unresolved'):
+        raise ValueError('Invalid blend-screen identity or sample interpretation')
+    counts, angles = screen.get('counts'), screen.get('angles')
+    if not isinstance(counts, dict) or not isinstance(angles, dict):
+        raise ValueError('Missing blend-screen axes')
+    sides = ('right', 'left', 'down', 'up')
+    for side in sides:
+        count, angle = counts.get(side), angles.get(side)
+        if type(count) is not int or not 0 <= count <= 32767:
+            raise ValueError('Invalid blend-screen frame count')
+        if not _number(angle) or angle < 0 or (count and angle == 0):
+            raise ValueError('Invalid blend-screen angle step')
+    expected = (counts['right'] + counts['left'] + 1) * (counts['down'] + counts['up'] + 1)
+    if (expected > 32767 or type(screen.get('sample_count')) is not int
+            or screen['sample_count'] != expected or d['decoded_frame_count'] != expected):
+        raise ValueError('Blend-screen grid and decoded sample count disagree')
+    resource_count = clip.get('codec_frame_count')
+    if resource_count is not None and (type(resource_count) is not int or resource_count != expected):
+        raise ValueError('Blend-screen resource and decoded sample count disagree')
+    if not isinstance(screen.get('source_fields'), dict):
+        raise ValueError('Missing blend-screen source record')
+
+
+def selected_manifest(manifest, include_overlays=False, include_blend_screens=False):
+    """Apply independent import switches without changing the retained source object."""
+    selected = copy.deepcopy(manifest)
+    for clip in selected['animations']:
+        if clip['status'] != 'decoded' or clip['animation_type'] != 'overlay':
+            continue
+        screen = is_blend_screen(clip)
+        enabled = include_blend_screens if screen else include_overlays
+        if not enabled:
+            clip['status'] = 'not_selected'
+            clip['message'] = ('Import Aim/Blend-Screen Poses' if screen else 'Import Time Overlays') + ' is disabled'
+    return selected
 
 
 def load_manifest(path):

@@ -1,5 +1,6 @@
 //! Read H3 animation tags into temporary source files. Never write tags.
 mod overlay;
+mod blend_screen;
 use anyhow::{bail, Context, Result};
 use blam_tags::animation::{NodeTransform, Pose, SizeLayout, Skeleton, SkeletonNode};
 use blam_tags::extract::animation::{build_defaults, jma_kind_for};
@@ -101,12 +102,17 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut values = BTreeMap::new();
     let mut include_overlays = false;
+    let mut include_blend_screens = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--version" => { println!("h3-animation-bridge 0.1.0; schema 2; decoder {DECODER}"); return Ok(()); }
+            "--version" => { println!("h3-animation-bridge 0.1.0; schema 3; decoder {DECODER}"); return Ok(()); }
             "--include-overlays" => {
                 if include_overlays { bail!("Duplicate option: {arg}"); }
                 include_overlays = true;
+            }
+            "--include-blend-screens" => {
+                if include_blend_screens { bail!("Duplicate option: {arg}"); }
+                include_blend_screens = true;
             }
             "--tags-root" | "--input" | "--output" | "--animation" => {
                 if values.contains_key(&arg) { bail!("Duplicate option: {arg}"); }
@@ -177,25 +183,39 @@ fn run() -> Result<()> {
             "source_frame_count":a.frame_count, "source_node_count":a.node_count as u8,
             "node_list_checksum":a.node_list_checksum, "resource_group":a.resource_group,
             "resource_group_member":a.resource_group_member, "codec_byte":a.codec_byte,
+            "codec_frame_count":a.codec_frame_count, "animated_codec_byte":a.animated_codec_byte(),
             "resource_bytes":a.blob.len(), "status":"not_selected"});
         let source_fields = tag.root().descend(&format!("definitions/animations[{}]", a.index));
         let blend_screen = source_fields.as_ref().and_then(|e|
             e.field("blend screen").map(|_| e.read_block_index("blend screen")));
         record["blend_screen"] = json!(blend_screen);
+        if let Some(index) = blend_screen.filter(|i| *i >= 0) {
+            if let Some(element) = tag.root().descend(&format!("definitions/blend screens[{index}]")) {
+                record["blend_screen_source"] = snapshot(element, 0);
+            }
+        }
         record["object_space_parent_count"] = json!(a.object_space_parents.len());
         if let Some(e) = source_fields { record["source_fields"] = snapshot(e, 0); }
         if filter.is_some_and(|f| a.name.as_ref() != Some(f)) { results.push(record); continue; }
         if a.animation_type.as_deref() == Some("overlay") {
-            if !include_overlays {
+            let screen = blend_screen.is_some_and(|i| i >= 0);
+            if !(if screen { include_blend_screens } else { include_overlays }) {
                 record["status"] = json!("unsupported");
-                record["message"] = json!("Enable Import Time Overlays to decode this overlay");
+                record["message"] = json!(if screen { "Enable Import Aim/Blend-Screen Poses to decode this screen" }
+                    else { "Enable Import Time Overlays to decode this overlay" });
             } else if a.world_relative || a.frame_info_type.as_deref() != Some("none")
-                || blend_screen != Some(-1) || !a.object_space_parents.is_empty() {
+                || !blend_screen.is_some_and(|i| i >= -1) || !a.object_space_parents.is_empty() {
                 record["status"] = json!("unsupported");
-                record["message"] = json!("Blend-screen, object-space, world-relative and movement-bearing overlays retain metadata only");
+                record["message"] = json!("Object-space, world-relative, movement-bearing or unidentified overlays retain metadata only");
             } else {
-                println!("Decoding time overlay {}", a.name.as_deref().unwrap_or("<unnamed>"));
-                match overlays.export(&animations, a, &skeleton, &defaults, &output, blend_screen) {
+                println!("Decoding {} {}", if screen { "blend-screen samples" } else { "time overlay" },
+                    a.name.as_deref().unwrap_or("<unnamed>"));
+                let result = if screen {
+                    overlays.export_screen(&tag, &animations, a, &skeleton, &defaults, &output, blend_screen.unwrap())
+                } else {
+                    overlays.export(&animations, a, &skeleton, &defaults, &output, blend_screen)
+                };
+                match result {
                     Ok(data) => { record["status"] = json!("decoded"); record["decoded"] = data; }
                     Err(e) => { eprintln!("Overlay {:?}: {e:#}", a.name); record["status"] = json!("error"); record["message"] = json!(format!("{e:#}")); }
                 }
@@ -247,7 +267,7 @@ fn run() -> Result<()> {
     let count = results.iter().filter(|r| r["status"] == "decoded").count();
     let metadata: BTreeMap<_,_> = ["definitions", "content", "contents"] .into_iter()
         .filter_map(|name| tag.root().field(name).and_then(|f| f.as_struct()).map(|s| (name, snapshot(s,0)))).collect();
-    let payload = json!({"format":FORMAT, "version":2, "game":"halo3_mcc", "decoder":DECODER,
+    let payload = json!({"format":FORMAT, "version":3, "game":"halo3_mcc", "decoder":DECODER,
         "source_tag":relative(&input), "source_graph":relative(&graph_path),
         "source_render_model":render_path.as_ref().map(|p|relative(p)),
         "units":"halo_world", "jma_units":"halo_world_x100", "quaternion_order":"wxyz",
@@ -256,6 +276,7 @@ fn run() -> Result<()> {
         "animations":results, "source_metadata":metadata,
         "warnings":["Events and graph routing are retained as source metadata, not converted to Reach events.",
             "Time overlays are composed previews with a leading reference, not runtime NLA layers.",
+            "Blend screens retain source-order poses and grid settings; sample directions and Reach controls are not inferred.",
             "Decoding does not establish Reach Tool or in-game compatibility."]});
     let mut out = writer(&output.join("animations.h3anim.json"))?;
     serde_json::to_writer(&mut out, &payload)?;

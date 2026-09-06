@@ -7,7 +7,7 @@ from mathutils import Matrix, Quaternion, Vector
 from .. import utils
 from ..legacy.jma import JMA
 from ..managed_blam import import_transform
-from .animations import KINDS, CONTROL_PREFIXES, canonical_node, node_mapping, safe_file, validate_jma_header
+from .animations import KINDS, is_blend_screen, CONTROL_PREFIXES, canonical_node, node_mapping, safe_file, validate_jma_header
 
 
 def find_armature(context):
@@ -224,7 +224,15 @@ class AnimationStager:
         if clip['decoded']['kind'] == 'JMO':
             action['h3_animation_reference_frame'] = 1
             action['h3_animation_first_sample_frame'] = 2
-            action['h3_animation_preview'] = 'composed_on_fixed_reference'
+            action['h3_animation_preview'] = clip['decoded']['overlay']['preview']
+        interpolation = 'CONSTANT' if is_blend_screen(clip) else 'LINEAR'
+        if is_blend_screen(clip):
+            action['h3_animation_sample_domain'] = 'blend_screen'
+            action['h3_animation_interpolation'] = interpolation
+            action['h3_animation_blend_screen'] = json.dumps(clip['decoded']['blend_screen'])
+            action.pose_markers.new('H3 Reference').frame = 1
+            for sample in range(clip['decoded']['decoded_frame_count']):
+                action.pose_markers.new(f'H3 Sample {sample:02d}').frame = sample + 2
         arm.animation_data_create()
         slot = action.slots.new('OBJECT', arm.name)
         arm.animation_data.action = action
@@ -239,7 +247,7 @@ class AnimationStager:
                 curve.keyframe_points.add(len(samples))
                 curve.keyframe_points.foreach_set('co', [x for f, v in enumerate(samples, 1) for x in (f, v)])
                 for key in curve.keyframe_points:
-                    key.interpolation = 'LINEAR'
+                    key.interpolation = interpolation
                 curve.update()
         animation = self.settings.animations.add()
         self.animations.append(animation)
@@ -285,7 +293,9 @@ class AnimationStager:
                       'Control constraints muted on the staging copy. Events retained, not converted.',
                       'Reach-only bones retain their rest transforms relative to their animated parents.',
                       'JMO frame 1 is the composition reference; frames 2 onward are codec samples.',
-                      'Time overlays are standalone composed previews, not NLA layers.']}, indent=2))
+                      'Time overlays are standalone composed previews, not NLA layers.',
+                      'Blend screens are discrete source-order samples, not timed motion or a runtime aim controller.',
+                      'H3 screen metadata is retained; Reach object-space pose-overlay controls are not generated.']}, indent=2))
         self.collection['h3_animation_report'] = report.name
         self.context.view_layer.update()
 

@@ -1,4 +1,4 @@
-//! Compose time overlays against a named local graph base.
+//! Compose local overlays against a named local graph base.
 use super::{supported, transform_json, writer};
 use anyhow::{bail, Context, Result};
 use blam_tags::animation::{
@@ -75,10 +75,10 @@ fn validate_tracks(clip: &AnimationClip, nodes: usize) -> Result<()> {
     Ok(())
 }
 
-fn compose(clip: &AnimationClip, skeleton: &Skeleton, base: &[NodeTransform]) -> Result<(Vec<NodeTransform>, Pose)> {
+pub(super) fn compose(clip: &AnimationClip, skeleton: &Skeleton, base: &[NodeTransform]) -> Result<(Vec<NodeTransform>, Pose)> {
     if clip.frame_count == 0 { bail!("Overlay has no frames"); }
     if clip.movement.kind != MovementKind::None || !clip.movement.frames.is_empty() {
-        bail!("Time overlays with movement data are not supported");
+        bail!("Overlays with movement data are not supported");
     }
     validate_tracks(clip, skeleton.len())?;
     validate_pose(base, skeleton.len())?;
@@ -95,12 +95,24 @@ impl OverlayExtractor {
 
     pub fn export(&mut self, animations: &Animation<'_>, group: &AnimationGroup<'_>,
         skeleton: &Skeleton, defaults: &[NodeTransform], output: &Path, blend_screen: Option<i16>) -> Result<Value> {
+        self.export_inner(animations, group, skeleton, defaults, output, blend_screen, None)
+    }
+
+    pub fn export_screen(&mut self, tag: &TagFile, animations: &Animation<'_>, group: &AnimationGroup<'_>,
+        skeleton: &Skeleton, defaults: &[NodeTransform], output: &Path, index: i16) -> Result<Value> {
+        let screen = super::blend_screen::BlendScreen::read(tag, index)?;
+        self.export_inner(animations, group, skeleton, defaults, output, Some(index), Some(&screen))
+    }
+
+    fn export_inner(&mut self, animations: &Animation<'_>, group: &AnimationGroup<'_>,
+        skeleton: &Skeleton, defaults: &[NodeTransform], output: &Path, blend_screen: Option<i16>,
+        screen: Option<&super::blend_screen::BlendScreen>) -> Result<Value> {
         if group.animation_type.as_deref() != Some("overlay") || group.world_relative
             || group.frame_info_type.as_deref() != Some("none") {
-            bail!("Only local time overlays without movement are supported");
+            bail!("Only local overlays without movement are supported");
         }
-        if blend_screen != Some(-1) || !group.object_space_parents.is_empty() {
-            bail!("Blend-screen and object-space pose overlays are not supported in this pass");
+        if blend_screen != Some(screen.map_or(-1, |s| s.index)) || !group.object_space_parents.is_empty() {
+            bail!("Invalid blend-screen selection or unsupported object-space overlay");
         }
         if group.node_count as u8 as usize != skeleton.len() || group.movement_type_mismatch() {
             bail!("Overlay header node count or movement type mismatch");
@@ -126,8 +138,12 @@ impl OverlayExtractor {
             self.bases.insert(index, first);
         }
         let base = &self.bases[&index];
-        let clip = group.decode().context("Decode time overlay")?;
-        if clip.frame_count as i16 != group.frame_count { bail!("Overlay decoded/header frame count mismatch"); }
+        let clip = group.decode().context("Decode overlay")?;
+        if let Some(screen) = screen {
+            screen.validate_samples(group.frame_count, group.codec_frame_count, clip.frame_count as usize)?;
+        } else if clip.frame_count as i16 != group.frame_count {
+            bail!("Overlay decoded/header frame count mismatch");
+        }
         let (reference, pose) = compose(&clip, skeleton, base)?;
         let flags = clip.node_flags.as_ref().unwrap();
         let bits = |b: &BitArray| (0..skeleton.len()).map(|i| b.bit(i)).collect::<Vec<_>>();
@@ -135,7 +151,7 @@ impl OverlayExtractor {
         let mut out = writer(&output.join(&file))?;
         pose.write_jma(&mut out, skeleton, &reference, group.node_list_checksum, JmaKind::Jmo, "actor", None)?;
         out.flush()?;
-        Ok(json!({"jma_file":file, "motion_file":null, "kind":"JMO", "fps":30,
+        let mut result = json!({"jma_file":file, "motion_file":null, "kind":"JMO", "fps":30,
             "decoded_frame_count":pose.frames.len(), "file_frame_count":pose.frames.len()+1,
             "frame_layout":"reference_then_codec_frames", "movement_samples":[],
             "overlay":{
@@ -150,7 +166,13 @@ impl OverlayExtractor {
                 "reference_frame":1, "first_sample_frame":2,
                 "notes":["Graph candidate selection is recorded, not proof of the original authoring base.",
                     "Standalone composed preview, not runtime layering over a moving base.",
-                    "Blend screens, pose overlays, replacements and event conversion are not implemented."]}}))
+                    "Reach pose controls, replacements and event conversion are not implemented."]}});
+        if let Some(screen) = screen {
+            result["frame_layout"] = json!("reference_then_pose_samples");
+            result["overlay"]["preview"] = json!("discrete_blend_screen_samples");
+            result["blend_screen"] = screen.metadata()?;
+        }
+        Ok(result)
     }
 }
 
@@ -226,6 +248,10 @@ mod tests {
     }
     #[test] fn buckle_wobble_resolves_local_idle() {
         assert_eq!(base_index(&graph(-1),"combat:buckle_wobble",5).unwrap(),(8,"idle".into()));
+    }
+    #[test] fn aim_screens_resolve_a_named_local_base() {
+        assert_eq!(base_index(&graph(-1),"combat:aim_still_up",1).unwrap(),(8,"idle".into()));
+        assert_eq!(base_index(&graph(-1),"combat:aim_move_up",0).unwrap(),(8,"idle".into()));
     }
     #[test] fn missing_inherited_and_self_bases_are_rejected() {
         assert!(base_index(&AnimationGraph::default(),"combat:buckle_wobble",5).is_err());
