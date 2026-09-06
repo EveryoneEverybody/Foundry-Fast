@@ -1,4 +1,5 @@
 """Direct-reference dispatch, function reuse, UI placement, and rest-matrix checks."""
+from collections import defaultdict
 from contextlib import contextmanager
 import importlib
 from pathlib import Path
@@ -27,7 +28,7 @@ bpy.types.Collection.nwo = bpy.props.PointerProperty(type=CollectionProps)
 
 class Session:
     def __init__(self):
-        self.enabled=True; self.depth=1; self.object_depth=0; self.counts={}; self.results=[]; self.slowest=[]
+        self.enabled=True; self.depth=1; self.object_depth=0; self.counts=defaultdict(int); self.results=[]; self.slowest=[]
     @contextmanager
     def isolated(self): yield bpy.context.scene
     def report(self): pass
@@ -70,11 +71,15 @@ class ObjectTag:
     def functions_to_blender(self):
         ObjectTag.calls+=1; return {'glow':['health']}
 backend.ObjectTag=ObjectTag
+backend.ModelTag=type('ModelTag',(),{})
+backend.RenderModelTag=type('RenderModelTag',(),{})
 backend.draw_import_template=lambda *a,**k:None
 backend.remove_collection_hierarchy=lambda c:None
 
-# Direct dispatcher stub: one rigid object succeeds, biped deliberately falls back.
-direct=ModuleType(NAME+'.scenario_static_direct')
+actual_direct=importlib.import_module(NAME+'.scenario_static_direct')
+
+# Override only dispatch for this test. The real module remains loaded so matrix
+# helpers and import-time contracts are tested rather than replaced by a fake module.
 def try_build(importer, placement, pose, current_session):
     if placement.nwo.marker_game_instance_tag_name.endswith('.biped'):
         return None,'skinned render geometry needs the live reference path'
@@ -82,8 +87,7 @@ def try_build(importer, placement, pose, current_session):
     mesh=bpy.data.meshes.new('direct mesh'); mesh.from_pydata([(0,0,0),(1,0,0),(0,1,0)],[],[(0,1,2)])
     ob=bpy.data.objects.new('direct mesh',mesh); root.objects.link(ob); root['reference_variant']='default'
     return root,None
-direct.try_build=try_build
-sys.modules[direct.__name__]=direct
+actual_direct.try_build=try_build
 
 patch=importlib.import_module(NAME+'.scenario_reference_direct_patch')
 
@@ -132,7 +136,6 @@ try:
     assert session.counts['object function cache hits']==1
 
     # Direct node matrices match the armature convention without a Blender armature.
-    actual_direct=importlib.import_module(NAME+'.scenario_static_direct')
     root=SimpleNamespace(index=0,name='root',parent=None,translation=Vector((100,0,0)),rotation=Quaternion((1,0,0,0)))
     child=SimpleNamespace(index=1,name='child',parent=root,translation=Vector((0,100,0)),rotation=Quaternion((1,0,0,0)))
     matrices=actual_direct._node_world_matrices([root,child],SimpleNamespace(factor=0.03048,rotation=0.0))
