@@ -124,7 +124,7 @@ class ScenarioUITests(unittest.TestCase):
         ns = {'Path': Path, 'utils': SimpleNamespace(get_prefs=lambda: SimpleNamespace(h3_tags_root='', h3_extraction_helper=''))}
         load_functions(ns)
         ns['draw'](SimpleNamespace(layout=layout, filepath='040_voi.scenario', preview_materials=True), None)
-        self.assertEqual(layout.properties, ['scenario_geometry','scenario_bsp_indices','scenario_hints','scenario_points','preview_materials','flip_normal_green'])
+        self.assertEqual(layout.properties, ['scenario_geometry','scenario_bsp_indices','scenario_hints','scenario_objects','scenario_content','scenario_points','preview_materials','flip_normal_green'])
         self.assertNotIn('reference_only',layout.properties)
         self.assertNotIn('h3_tags_root',layout.properties)
 

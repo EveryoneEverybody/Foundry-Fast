@@ -56,6 +56,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
 
     scenario_geometry: BoolProperty(name="BSP Geometry", default=True, description="Decode BSP geometry and placements as excluded references")
     scenario_hints: BoolProperty(name="Giant Sector and Rail Hints", default=True)
+    scenario_objects: BoolProperty(name="Placed Game Objects", default=True, description="Reuse H3 object geometry by source tag and variant; excluded from export")
+    scenario_content: BoolProperty(name="Scenario Content and AI Organization", default=True, description="Show authored positions and preserve source folders, squads, zones and objectives")
     scenario_points: BoolProperty(name="AI and Script Points", default=True, description="Show source-world firing positions and script points; unresolved reference frames remain in the report")
     scenario_bsp_indices: StringProperty(name="BSP Indices", default="", description="Comma-separated source BSP indices. Blank imports every BSP, not an inferred zone set")
 
@@ -76,6 +78,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             layout.prop(self, "scenario_geometry")
             layout.prop(self, "scenario_bsp_indices")
             layout.prop(self, "scenario_hints")
+            layout.prop(self, "scenario_objects")
+            layout.prop(self, "scenario_content")
             layout.prop(self, "scenario_points")
             layout.prop(self, "preview_materials")
             row = layout.row()
@@ -136,6 +140,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             else:
                 root, helper = _source_paths(source)
                 self._source_root = root
+                self._object_helper = helper
                 self._source_tag = source.relative_to(root).as_posix()
                 if self._is_scenario:
                     from .scenario_scene import bsp_selection
@@ -237,7 +242,10 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                         except (OSError, ValueError, TypeError) as error:
                             utils.print_warning(f"Scenario material metadata unavailable: {error}")
                     self._session = ScenarioBuildSession(context, payload, inventory, self._payload_path.parent,
-                        material_manifest, self.scenario_hints, self.scenario_points, self.flip_normal_green)
+                        material_manifest, self.scenario_hints, self.scenario_points, self.flip_normal_green,
+                        import_objects=self.scenario_objects, import_content=self.scenario_content,
+                        tags_root=self._source_root, object_helper=self._object_helper,
+                        preview_materials=self.preview_materials)
                     self._steps = iter(self._session.steps())
                 else:
                     self._progress.update('Validating object geometry', force=True)

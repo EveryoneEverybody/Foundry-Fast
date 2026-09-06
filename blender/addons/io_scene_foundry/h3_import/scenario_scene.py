@@ -214,11 +214,11 @@ def placement_order(instances):
 
 
 class FieldIndex:
-    def __init__(self, data):
+    def __init__(self, data, roots=None):
         self.data = data
         self.children = defaultdict(list)
         self.names = defaultdict(list)
-        for row in inspection.iter_records(data, roots={'ai user hint data', 'zones', 'scripting data'}):
+        for row in inspection.iter_records(data, roots=roots or {'ai user hint data', 'zones', 'scripting data'}):
             parent = row['address'].rpartition('/')[0]
             self.children[parent].append(row)
             self.names[row['name']].append(row)

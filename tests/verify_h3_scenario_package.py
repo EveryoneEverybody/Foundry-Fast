@@ -12,7 +12,7 @@ root = Path(__file__).resolve().parents[1]
 addon = root / 'blender/addons/io_scene_foundry'
 path = Path(sys.argv[1])
 version = tomllib.loads((addon / 'blender_manifest.toml').read_text())['version']
-assert version == '1.9.41'
+assert version == '1.9.42'
 result = {'version': version, 'source_commit': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
           'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'source_files': {}, 'helpers': {}}
 with ZipFile(path) as archive:

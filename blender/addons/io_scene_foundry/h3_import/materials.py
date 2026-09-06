@@ -159,14 +159,40 @@ def plan(shader):
     albedo = categories.get('albedo', 'default')
     if albedo not in ALBEDO_MODES:
         diagnostics.append(f'Albedo {albedo}: base texture preview only')
-    if shader.get('group') != 'rmsh':
+    if shader.get('group') not in {'rmsh', 'rmtr'}:
         diagnostics.append(f"{shader.get('group')}: generic object preview, not the original shader family")
     diagnostics.append('Lighting, specular lobes, reflections and render passes use Blender approximations')
     if any(p.get('has_functions') for p in shader['parameters']):
         diagnostics.append('Material functions use their time-zero sample; source curves remain in metadata')
-    return {'categories': categories, 'parameters': named(shader['parameters'], 'name'),
+    return {'categories': categories, 'parameters': named(shader['parameters'], 'name'), 'family': shader.get('group'),
             'albedo': albedo, 'diagnostics': diagnostics,
             'illumination_surface': illumination_surface(categories, shader.get('group'))}
+
+
+def bsp_material_issues(material, manifest):
+    """Identify the failing stage without losing the exact BSP shader identity."""
+    source = material.get('source_shader')
+    if not source:
+        return [('source_reference', 'BSP material has no source shader reference')]
+    if manifest is None:
+        return [('shader_description', 'Material preview manifest unavailable')]
+    shader = manifest['shaders'].get(source)
+    if shader is None:
+        return [('shader_description', 'Referenced shader is absent from extracted descriptions')]
+    if shader.get('status') != 'resolved_snapshot':
+        return [('shader_description', shader.get('error', 'Shader description unresolved'))]
+    issues = []
+    if shader.get('group') not in {'rmsh', 'rmtr'}:
+        issues.append(('shader_class', f"{shader.get('group')}: only a generic preview is available"))
+    for parameter in shader.get('parameters', []):
+        if parameter.get('type') != 'bitmap' or parameter.get('extern'):
+            continue
+        bitmap = manifest.get('bitmaps', {}).get(parameter.get('bitmap'))
+        if not bitmap or not bitmap.get('preview'):
+            issues.append(('bitmap_extraction', f"{parameter['name']}: {(bitmap or {}).get('preview_error') or (bitmap or {}).get('error') or 'No extracted 2D bitmap'}"))
+    if shader.get('group') == 'rmtr':
+        issues.append(('preview_coverage', 'Terrain layer albedo preview; Halo lighting, water/puddle reflections and detailed normal blending remain approximate'))
+    return issues
 
 
 def source_material_key(path):

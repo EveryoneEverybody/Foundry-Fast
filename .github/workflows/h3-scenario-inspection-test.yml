@@ -116,6 +116,10 @@ jobs:
         run: xvfb-run -a .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_scenario_archive_smoke.py
       - name: Test scenario and object coordinate consistency
         run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_scenario_units_smoke.py
+      - name: Test cached scenario placements and authored content
+        run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_scenario_content_smoke.py
+      - name: Test terrain albedo and BSP material diagnostics
+        run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_scenario_materials_smoke.py
 
   package:
     needs: [inspect, blender]
@@ -149,13 +153,13 @@ jobs:
           echo "4de22f70d1a3fa8c44698c8006a223fe5fb0ee84b76adecf3726cf2003e9145f  blender/addons/io_scene_foundry/wheels/coacd-1.0.11-cp39-abi3-win_amd64.whl" | sha256sum -c -
       - name: Build test extension
         run: |
-          .cache/blender-5.2.1-linux-x64/blender --command extension build --source-dir blender/addons/io_scene_foundry --output-filepath Foundry-Fast-1.9.41-H3-scenarios.zip
-          python3 tests/verify_h3_scenario_package.py Foundry-Fast-1.9.41-H3-scenarios.zip
-          sha256sum Foundry-Fast-1.9.41-H3-scenarios.zip > Foundry-Fast-1.9.41-H3-scenarios.sha256
+          .cache/blender-5.2.1-linux-x64/blender --command extension build --source-dir blender/addons/io_scene_foundry --output-filepath Foundry-Fast-1.9.42-H3-scenarios.zip
+          python3 tests/verify_h3_scenario_package.py Foundry-Fast-1.9.42-H3-scenarios.zip
+          sha256sum Foundry-Fast-1.9.42-H3-scenarios.zip > Foundry-Fast-1.9.42-H3-scenarios.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: Foundry-H3-scenarios-test-1.9.41
+          name: Foundry-H3-scenarios-test-1.9.42
           path: |
-            Foundry-Fast-1.9.41-H3-scenarios.zip
-            Foundry-Fast-1.9.41-H3-scenarios.sha256
-            Foundry-Fast-1.9.41-H3-scenarios.verification.json
+            Foundry-Fast-1.9.42-H3-scenarios.zip
+            Foundry-Fast-1.9.42-H3-scenarios.sha256
+            Foundry-Fast-1.9.42-H3-scenarios.verification.json

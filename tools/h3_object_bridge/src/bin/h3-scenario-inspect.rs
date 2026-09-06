@@ -46,6 +46,8 @@ fn leaf(value: D) -> Value {
         D::RealPoint3d(v) => floats(&[v.x, v.y, v.z]),
         D::RealVector2d(v) => floats(&[v.i, v.j]),
         D::RealVector3d(v) => floats(&[v.i, v.j, v.k]),
+        D::RealEulerAngles2d(v) => floats(&[v.yaw, v.pitch]),
+        D::RealEulerAngles3d(v) => floats(&[v.yaw, v.pitch, v.roll]),
         D::RealQuaternion(v) => json!({"order":"wxyz", "components":floats(&[v.w, v.i, v.j, v.k])}),
         D::TagReference(v) => match v.group_tag_and_name {
             Some((group, name)) => json!({"group":group, "group_name":String::from_utf8_lossy(&group.to_be_bytes()),
@@ -202,6 +204,13 @@ mod tests {
     #[test] fn points_are_not_rescaled() {
         let value = leaf(D::RealPoint3d(blam_tags::math::RealPoint3d {x:1.0,y:2.0,z:3.0}));
         assert_eq!(value["values"], json!([1.0,2.0,3.0]));
+    }
+    #[test] fn euler_components_and_bits_are_retained_in_source_order() {
+        let value = leaf(D::RealEulerAngles3d(blam_tags::math::RealEulerAngles3d {yaw:0.25,pitch:-0.5,roll:1.0}));
+        assert_eq!(value["values"], json!([0.25,-0.5,1.0]));
+        assert_eq!(value["bits"][1], (-0.5_f32).to_bits());
+        let value = leaf(D::RealEulerAngles2d(blam_tags::math::RealEulerAngles2d {yaw:0.25,pitch:-0.5}));
+        assert_eq!(value["values"], json!([0.25,-0.5]));
     }
     #[test] fn unsafe_source_paths_are_rejected() {
         for path in ["../outside.scenario", "C:\\outside", "/absolute", "\\\\server\\tag", ""] { assert!(!safe_relative(path)); }

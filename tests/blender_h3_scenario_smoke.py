@@ -17,6 +17,8 @@ from h3_material_fixture import manifest
 
 class ScenarioObjectProps(bpy.types.PropertyGroup):
     export_this: bpy.props.BoolProperty(default=True)
+    node_order_source: bpy.props.StringProperty()
+    marker_type: bpy.props.StringProperty()
 
 class ScenarioMaterialProps(bpy.types.PropertyGroup):
     shader_path: bpy.props.StringProperty()

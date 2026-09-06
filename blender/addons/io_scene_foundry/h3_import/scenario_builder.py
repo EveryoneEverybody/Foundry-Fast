@@ -2,6 +2,7 @@
 import base64
 import json
 import hashlib
+from collections import Counter
 from pathlib import Path
 
 import bpy
@@ -9,12 +10,16 @@ from mathutils import Matrix, Quaternion, Vector
 
 from ..managed_blam import import_transform
 from .material_builder import PreviewBuilder
+from .materials import bsp_material_issues
+from .scenario_content_builder import ContentBuilder
 from . import scenario_scene as source
 
 
-class ScenarioBuildSession:
+class ScenarioBuildSession(ContentBuilder):
     def __init__(self, context, data, inventory, directory, material_manifest=None,
-                 import_hints=True, import_points=True, flip_normal_green=True):
+                 import_hints=True, import_points=True, flip_normal_green=True, *,
+                 import_objects=False, import_content=False, tags_root=None, object_helper=None,
+                 object_assets=None, preview_materials=True):
         self.context = context
         self.scene = data
         self.inventory = inventory
@@ -25,6 +30,17 @@ class ScenarioBuildSession:
         self.warnings = []
         self.root = None
         self.shader_source = None
+        self.material_manifest = material_manifest
+        self.material_report = []
+        self.import_objects = import_objects
+        self.import_content = import_content
+        self.tags_root = tags_root
+        self.object_helper = object_helper
+        self.object_assets = object_assets
+        self.preview_materials = preview_materials
+        self.flip_normal_green = flip_normal_green
+        self.content_groups = {}
+        self.templates = {}
         self.preview = PreviewBuilder(material_manifest, self.directory, self.remember, flip_normal_green) if material_manifest else None
         self.import_hints = import_hints
         self.import_points = import_points
@@ -61,19 +77,31 @@ class ScenarioBuildSession:
         value.use_fake_user = True
         return value
 
-    def material(self, record, bsp, slot):
+    def material(self, record, bsp, slot, faces=0):
         material = self.remember(bpy.data.materials, bpy.data.materials.new(f'H3 {Path(record["name"]).name}'))
         material['h3_source_bsp'] = bsp['source_tag']
         material['h3_source_material_slot'] = slot
         material['h3_source_material_record'] = json.dumps(record)
         material.nwo.shader_path = ''
+        material.diffuse_color = (.45, .45, .45, 1)
+        issues = bsp_material_issues(record, self.material_manifest)
+        result = None
         shader = record.get('source_shader')
         if shader:
             material['h3_source_shader'] = shader
             if self.preview:
                 material['h3_shader_manifest'] = self.shader_source.name
-                self.preview.build(material)
-        material.diffuse_color = (.45, .45, .45, 1)
+                result = self.preview.build(material)
+                if result['status'] != 'approximate_preview':
+                    issues.append(('blender_preview', '; '.join(result['diagnostics'])))
+        report = dict(bsp=bsp['source_tag'], slot=slot, name=record['name'], source_shader=shader,
+                      source_triangle_count=faces, preview=result, issues=[dict(stage=s, message=m) for s,m in issues])
+        self.material_report.append(report)
+        material['h3_bsp_material_diagnostics'] = json.dumps(report)
+        for stage, message in issues:
+            diagnostic = f"BSP material {bsp['source_tag']} slot {slot} ({faces} source triangles), {shader or record['name']} [{stage}]: {message}"
+            self.warnings.append(diagnostic)
+            print(diagnostic, flush=True)
         return material
 
     def mesh(self, record, materials, bsp, collection):
@@ -134,7 +162,11 @@ class ScenarioBuildSession:
         collection['h3_source_bsp_index'] = entry['index']
         render = self.collection('Render', collection)
         auxiliary = self.collection('BSP auxiliary geometry', collection)
-        materials = [self.material(row, bsp, i) for i, row in enumerate(bsp['materials'])]
+        materials = []
+        uses = Counter(t['material'] for ob in bsp['objects'] if ob['kind'] == 'mesh' for t in ob['triangles'])
+        for i, row in enumerate(bsp['materials']):
+            materials.append(self.material(row, bsp, i, uses[i]))
+            yield f"BSP {entry['index']}: material {i + 1}/{len(bsp['materials'])}"
         definitions = {}
         for record in bsp['objects']:
             if record['kind'] == 'mesh' and not record.get('xref_path'):
@@ -187,6 +219,7 @@ class ScenarioBuildSession:
                 continue
             collection = self.collection(kind.replace('_', ' ').title(), self.root)
             for row in plan[kind]:
+                destination = self.hint_collection(row, kind, collection)
                 # The pinned JMS/ASS decoder multiplies geometry by 100; the
                 # inventory keeps raw world units. Use Foundry's same conversion.
                 points = [import_transform.position(p, scene_nwo=self.context.scene.nwo) for p in row['points']]
@@ -202,7 +235,7 @@ class ScenarioBuildSession:
                     for point, value in zip(spline.points, points):
                         point.co = (*value, 1.)
                     spline.use_cyclic_u = row['closed']
-                ob = self.object(row['name'], curve, collection, kind, row['address'])
+                ob = self.object(row['name'], curve, destination, kind, row['address'])
                 ob['h3_source_hint'] = json.dumps(row)
                 ob.show_in_front = True
                 ob.color = (0.1, .85, 1., 1.) if kind == 'sectors' else (1., .55, .05, 1.)
@@ -228,6 +261,8 @@ class ScenarioBuildSession:
         if self.preview:
             self.shader_source = self.text('H3 shader source - ' + self.root.name, self.preview.manifest)
             self.root['h3_shader_manifest'] = self.shader_source.name
+        if self.import_objects or self.import_content:
+            yield from self.content_steps()
         for entry in self.scene['bsp_entries']:
             if entry['status'] == 'extracted':
                 yield from self.bsp_steps(entry)
@@ -258,8 +293,7 @@ class ScenarioBuildSession:
                 packed = self.text(f"H3 source data {len(blobs):04d} - {self.root.name}", base64.encodebytes(content).decode('ascii'))
                 blobs.append({'address': row['address'], 'file': row['file'], 'bytes': len(content), 'encoding': 'base64', 'text': packed.name})
         self.root['h3_packed_data'] = self.text('H3 packed source data index - ' + self.root.name, blobs).name
-        if self.preview:
-            self.root['h3_material_report'] = self.text('H3 material report - ' + self.root.name, self.preview.results).name
+        self.root['h3_material_report'] = self.text('H3 BSP material report - ' + self.root.name, self.material_report).name
         self.warnings.extend(self.scene.get('limitations', []))
         self.root['h3_scenario_report'] = self.text('H3 scenario import report', {'counts': self.counts, 'diagnostics': self.warnings,
             'coordinates': {'source': 'world units (unmodified)', 'geometry': '100 per world unit',
