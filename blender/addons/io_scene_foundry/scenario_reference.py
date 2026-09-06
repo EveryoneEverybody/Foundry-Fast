@@ -78,8 +78,14 @@ class Session:
         scratch = self.scratch
         scratch.frame_set(importer.scene.frame_current)
         saved = importer.context, importer.scene, importer.scene_collection, importer.build_control_rig
+        window = bpy.context.window
+        if window is None:
+            raise ValueError('Static reference import needs a Blender window context')
+        previous_scene, previous_layer = window.scene, window.view_layer
         _settings.append((importer.scene_nwo, importer.scene_nwo_export))
         try:
+            # Edit-mode operators resolve the active object through the window scene.
+            window.scene = scratch
             with bpy.context.temp_override(scene=scratch, view_layer=scratch.view_layers[0]):
                 importer.context = bpy.context
                 importer.scene = scratch
@@ -88,6 +94,8 @@ class Session:
                 yield scratch
         finally:
             importer.context, importer.scene, importer.scene_collection, importer.build_control_rig = saved
+            window.scene = previous_scene
+            window.view_layer = previous_layer
             _settings.pop()
 
     def close(self):
