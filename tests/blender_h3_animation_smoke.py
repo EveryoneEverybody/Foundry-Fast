@@ -79,17 +79,26 @@ def near(a,b,tol=0.003):
 
 
 def rig(nodes):
+    for selected in bpy.context.selected_objects:
+        selected.select_set(False)
     arm_data=bpy.data.armatures.new('test source');arm=bpy.data.objects.new('test source',arm_data)
     bpy.context.scene.collection.objects.link(arm);bpy.context.view_layer.objects.active=arm;arm.select_set(True)
     bpy.ops.object.mode_set(mode='EDIT')
     rest=object_space(nodes,[matrix(n) for n in nodes])
+    # Match the importer bone length in both scene scales to avoid short-tail precision loss.
+    factor = B.import_transform.scale_factor(settings)
     for n in nodes:
-        b=arm_data.edit_bones.new(n['name']);b.head=(0,0,0);b.tail=(0,0.1,0)
+        b=arm_data.edit_bones.new(n['name']);b.head=(0,0,0);b.tail=(0,5*factor,0)
     for i,n in enumerate(nodes):
         b=arm_data.edit_bones[n['name']]
         if n['parent']>=0:b.parent=arm_data.edit_bones[nodes[n['parent']]['name']]
         b.matrix=converted(rest[i]);b.use_deform=True
     bpy.ops.object.mode_set(mode='OBJECT')
+    for n, intended in zip(nodes, rest):
+        expected = converted(intended)
+        actual = arm_data.bones[n['name']].matrix_local
+        error = B.bind_pose_error(expected, actual, factor)
+        assert error < 0.002, ('fixture bind matrix', n['name'], settings.scale, settings.forward_direction, error, expected, actual)
     mesh=bpy.data.meshes.new('weighted triangle');mesh.from_pydata([(0,0,0),(1,0,0),(0,1,0)],[],[(0,1,2)])
     ob=bpy.data.objects.new('weighted triangle',mesh);bpy.context.scene.collection.objects.link(ob)
     ob.parent=arm;g=ob.vertex_groups.new(name=nodes[-1]['name']);g.add([0,1,2],1,'REPLACE')
