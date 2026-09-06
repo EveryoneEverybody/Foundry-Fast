@@ -11,6 +11,7 @@ from bpy_extras.io_utils import ImportHelper
 from .. import utils
 from .core import find_tags_root, load_payload
 from .builder import BuildSession
+from .import_output import HelperLogTail, open_output
 
 _active = []
 
@@ -119,6 +120,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         self._process = None
+        self._output = HelperLogTail()
         self._log = None
         self._timer = None
         self._session = None
@@ -138,6 +140,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._source_root = None
         self._is_scenario = False
         try:
+            open_output(utils, bpy)
             source = Path(bpy.path.abspath(self.filepath)).resolve(strict=True)
             self._is_scenario = source.suffix.lower() == '.scenario'
             self._source_tag = None
@@ -160,6 +163,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 self._payload_path = output / ("scene.h3scene.json" if self._is_scenario else "asset.h3asset.json")
                 self._log_path = temporary / "helper.log"
                 self._log = self._log_path.open('w', encoding='utf-8')
+                self._output.follow(self._log_path)
                 command = [str(helper.resolve()), '--tags-root', str(root), '--input', str(source), '--output', str(output)]
                 if self._is_scenario:
                     if self.scenario_geometry:
@@ -179,6 +183,9 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             context.window_manager.modal_handler_add(self)
             print("Halo 3 asset import started. Source tags are read-only.")
             return {'RUNNING_MODAL'}
+        except KeyboardInterrupt:
+            self._finish(context, rollback=True)
+            return {'CANCELLED'}
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             traceback.print_exc()
@@ -210,11 +217,11 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             if self._process is not None:
                 code = self._process.poll()
                 if code is None:
+                    self._output.poll()
                     return {'RUNNING_MODAL'}
                 self._log.close()
                 self._log = None
-                text = self._log_path.read_text(encoding='utf-8', errors='replace')
-                print(text)
+                text = self._output.poll(final=True)
                 self._process = None
                 if code != 0:
                     if self._shader_started:
@@ -259,6 +266,9 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                     self.report({'INFO'}, "H3 import complete. See the H3 import report in Blender's Text Editor")
                     return {'FINISHED'}
             return {'RUNNING_MODAL'}
+        except KeyboardInterrupt:
+            self._finish(context, rollback=True)
+            return {'CANCELLED'}
         except Exception as exc:
             traceback.print_exc()
             self.report({'ERROR'}, str(exc))
@@ -277,6 +287,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._phase = "Reading shaders and bitmaps"
         self._log_path = output / 'shader-helper.log'
         self._log = self._log_path.open('w', encoding='utf-8')
+        self._output.follow(self._log_path)
         command = [str(helper.resolve()), '--tags-root', str(self._source_root),
                    '--asset', str(self._payload_path), '--output', str(output)]
         reach = Path(utils.get_tags_path())

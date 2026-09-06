@@ -204,7 +204,7 @@ class FieldIndex:
         self.data = data
         self.children = defaultdict(list)
         self.names = defaultdict(list)
-        for row in data['records']:
+        for row in inspection.iter_records(data, roots={'ai user hint data', 'zones', 'scripting data'}):
             parent = row['address'].rpartition('/')[0]
             self.children[parent].append(row)
             self.names[row['name']].append(row)

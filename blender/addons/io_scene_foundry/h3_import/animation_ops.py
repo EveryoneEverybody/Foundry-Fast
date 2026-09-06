@@ -12,6 +12,7 @@ from .. import utils
 from .animations import load_manifest, selected_manifest
 from .animation_builder import AnimationStager, find_armature
 from .animation_append import AnimationAppender
+from .import_output import HelperLogTail, open_output
 
 _active = []
 
@@ -64,6 +65,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         self._process = self._log = self._timer = self._stager = self._steps = None
         self._finished = False
+        self._output = HelperLogTail()
         self._cancel_at = None
         self._started = time.monotonic()
         self._scene, self._layer, self._area = context.scene, context.view_layer, context.area
@@ -74,6 +76,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                              context.scene.render.fps, context.scene.render.fps_base)
         self._phase = 'Reading source animation resources'
         try:
+            open_output(utils, bpy)
             self._target = (context.scene.objects.get(self.target_armature)
                             if self.target_armature else find_armature(context))
             if self._target is None or self._target.type != 'ARMATURE':
@@ -95,6 +98,7 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 self._manifest = output / 'animations.h3anim.json'
                 self._log_path = temp / 'animation-helper.log'
                 self._log = self._log_path.open('w', encoding='utf-8')
+                self._output.follow(self._log_path)
                 command = [str(helper.resolve()), '--tags-root', str(root), '--input', str(source), '--output', str(output)]
                 if self.animation_name.strip():
                     command += ['--animation', self.animation_name.strip()]
@@ -110,6 +114,9 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
             context.window_manager.modal_handler_add(self)
             print('[Foundry] H3 animation extraction started. Source tags are read-only.')
             return {'RUNNING_MODAL'}
+        except KeyboardInterrupt:
+            self._finish(context, rollback=True)
+            return {'CANCELLED'}
         except Exception as exc:
             traceback.print_exc()
             self.report({'ERROR'}, str(exc))
@@ -140,11 +147,11 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
             if self._process:
                 code = self._process.poll()
                 if code is None:
+                    self._output.poll()
                     return {'RUNNING_MODAL'}
                 self._log.close()
                 self._log = None
-                log = self._log_path.read_text(encoding='utf-8', errors='replace')
-                print(log)
+                log = self._output.poll(final=True)
                 self._process = None
                 if code != 0:
                     raise RuntimeError(f'H3 animation helper failed ({code}): {log[-1600:]}')
@@ -163,6 +170,9 @@ class NWO_OT_ImportH3Animations(bpy.types.Operator, ImportHelper):
                 target = 'a staging copy' if self.create_staging_copy else self._target.name
                 self.report({'INFO'}, f'{count} animations added to {target}. No Reach tags written')
                 return {'FINISHED'}
+        except KeyboardInterrupt:
+            self._finish(context, rollback=True)
+            return {'CANCELLED'}
         except Exception as exc:
             traceback.print_exc()
             self.report({'ERROR'}, str(exc))

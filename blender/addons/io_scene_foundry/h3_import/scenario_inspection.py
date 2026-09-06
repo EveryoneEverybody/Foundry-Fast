@@ -44,6 +44,9 @@ def _finite(value, depth=0):
 
 
 def validate(data, directory=None):
+    if isinstance(data, dict) and data.get('version') == 2:
+        from . import scenario_archive
+        return scenario_archive.validate(data, directory)
     if (not isinstance(data, dict) or data.get('format') != FORMAT
             or type(data.get('version')) is not int or data['version'] != 1):
         raise InspectionError('Unsupported scenario inspection format')
@@ -139,17 +142,20 @@ def load(path):
         raise InspectionError('Scenario manifest exceeds size limit')
     data = json.loads(content, object_pairs_hook=_pairs,
                       parse_constant=lambda value: (_ for _ in ()).throw(InspectionError(f'Invalid JSON value: {value}')))
+    if isinstance(data, dict) and data.get('version') == 2:
+        from . import scenario_archive
+        return scenario_archive.load(data, path.parent)
     return validate(data, path.parent)
 
 
 def named_fields(data, name):
     """Return exact named fields without merging equal names at different addresses."""
-    return [row for row in data['records'] if row['name'] == name]
+    return [row for row in iter_records(data) if row['name'] == name]
 
 
 def subtree(data, address):
     """Keep indexed child fields in source order."""
-    return [row for row in data['records'] if row['address'] == address
+    return [row for row in iter_records(data) if row['address'] == address
             or row['address'].startswith(address + '/') or row['address'].startswith(address + '[')]
 
 
@@ -173,9 +179,28 @@ def dependency_requests(data, extension):
     if not isinstance(extension, str) or re.fullmatch(r'[a-z0-9_]+', extension) is None:
         raise InspectionError('Invalid dependency extension')
     result = []
-    for row in data['references']:
+    references = data['references'] if data['version'] == 1 else (
+        {'address': row['address'], 'reference': row['value']} for row in iter_records(data)
+        if row.get('kind') == 'value' and isinstance(row.get('value'), dict) and 'group' in row['value'])
+    for row in references:
         ref = row['reference']
         if ref.get('extension') == extension and ref.get('path'):
             source = str(relative_path(ref['path'])) + '.' + extension
             result.append({'address': row['address'], 'source_tag': source, 'source_group': ref['group']})
     return result
+
+def iter_records(data, roots=None):
+    """Stream source records; restrict only the caller's query, not retained data."""
+    if data['version'] == 1:
+        yield from data['records']
+    else:
+        from .scenario_archive import Archive
+        if not isinstance(data, Archive):
+            raise InspectionError('Chunked inventory must be loaded with its record provider')
+        yield from data.records(roots)
+
+
+def data_records(data):
+    if data['version'] == 1:
+        return (row for row in data['records'] if row['kind'] == 'data')
+    return iter(data.blobs)

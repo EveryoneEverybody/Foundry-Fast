@@ -1,6 +1,7 @@
 """Construct non-exportable H3 BSP references and authored AI overlays."""
 import base64
 import json
+import hashlib
 from pathlib import Path
 
 import bpy
@@ -227,8 +228,20 @@ class ScenarioBuildSession:
             yield from self.hints()
         self.root['h3_scenario_manifest'] = self.text('H3 scenario source - ' + self.root.name, self.inventory).name
         self.root['h3_scene_manifest'] = self.text('H3 scene source - ' + self.root.name, self.scene).name
+        chunks = []
+        if self.inventory['version'] == 2:
+            for chunk in self.inventory['chunks']:
+                content = self.inventory.chunk_bytes(chunk)
+                text = self.text(f"H3 inventory chunk {len(chunks):04d} - {self.root.name}",
+                                 base64.b64encode(content).decode('ascii'))
+                chunks.append(dict(chunk, encoding='gzip+base64', text=text.name,
+                                   sha256=hashlib.sha256(content).hexdigest()))
+                yield f"Retaining source inventory: {len(chunks)} chunks"
+            self.root['h3_packed_inventory'] = self.text('H3 packed inventory index - ' + self.root.name, chunks).name
+            self.counts['inventory_records'] = self.inventory['record_count']
+            self.counts['inventory_chunks'] = len(chunks)
         blobs = []
-        for row in self.inventory['records']:
+        for row in source.inspection.data_records(self.inventory):
             if row['kind'] == 'data':
                 content = source.within(self.directory, row['file']).read_bytes()
                 if len(content) != row['bytes']:
