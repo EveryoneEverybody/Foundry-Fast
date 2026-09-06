@@ -1,0 +1,29 @@
+name: Test H3 scenario inspection foundation
+
+on:
+  push:
+    branches: ["feature/h3-scenario-inspection"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test and build read-only inspector
+        shell: pwsh
+        run: |
+          cargo test --manifest-path tools/h3_object_bridge/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --release --manifest-path tools/h3_object_bridge/Cargo.toml --bin h3-scenario-inspect
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & tools/h3_object_bridge/target/release/h3-scenario-inspect.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h3-scenario-inspection-helper
+          path: tools/h3_object_bridge/target/release/h3-scenario-inspect.exe
+          if-no-files-found: error
