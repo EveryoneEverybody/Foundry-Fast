@@ -8,6 +8,9 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 
+#[path = "../scenario_geometry.rs"]
+mod scenario_geometry;
+
 const DECODER: &str = "5d0509fb75eadb96ac7774542ca0b2c10aed7b00";
 const MAX_FIELDS: usize = 2_000_000;
 const MAX_DEPTH: usize = 96;
@@ -130,12 +133,19 @@ fn safe_relative(path: &str) -> bool {
 fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut options = BTreeMap::new();
+    let mut include_geometry = false;
     while let Some(key) = args.next() {
-        if key == "--version" { println!("h3-scenario-inspect schema 1; decoder {DECODER}"); return Ok(()); }
-        if !["--input", "--tags-root", "--output"].contains(&key.as_str()) { bail!("Unknown option: {key}"); }
+        if key == "--version" { println!("h3-scenario-inspect schema 1; scene schema 1; decoder {DECODER}"); return Ok(()); }
+        if key == "--geometry" {
+            if include_geometry { bail!("Repeated geometry option"); }
+            include_geometry = true; continue;
+        }
+        if !["--input", "--tags-root", "--output", "--bsp-indices"].contains(&key.as_str()) { bail!("Unknown option: {key}"); }
         let value = args.next().context("Missing option value")?;
         if options.insert(key.clone(), value).is_some() { bail!("Repeated option: {key}"); }
     }
+    let selected = scenario_geometry::indices(options.get("--bsp-indices").map(String::as_str).unwrap_or(""))?;
+    if selected.is_some() && !include_geometry { bail!("BSP selection requires --geometry"); }
     let get = |key: &str| -> Result<PathBuf> {
         PathBuf::from(options.get(key).with_context(|| format!("Required: {key}"))?).canonicalize().map_err(Into::into)
     };
@@ -164,6 +174,9 @@ fn run() -> Result<()> {
     let mut writer = BufWriter::new(OpenOptions::new().write(true).create_new(true).open(output.join("scenario.h3inspect.json"))?);
     serde_json::to_writer(&mut writer, &payload)?; writer.flush()?;
     println!("Inspection complete: {} fields, {} references, {} data blobs", inventory.records.len(), inventory.references.len(), inventory.blob_count);
+    drop(writer);
+    // BSP reconstruction has a separate manifest and does not change the inventory's scope.
+    scenario_geometry::extract(&tag, &root, &output, &relative, include_geometry, selected.as_ref())?;
     Ok(())
 }
 

@@ -13,6 +13,36 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: camden-smallwood/definitions
+          ref: 0b21715e93110a28aaf53bc7122bba5d96b496aa
+          path: .cache/reference-definitions
+          sparse-checkout: halo3_mcc
+      - name: Capture source verification snapshot
+        shell: python
+        run: |
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          import hashlib, json, subprocess
+          root = Path.cwd()
+          paths = []
+          for folder in ('tests', 'blender/addons/io_scene_foundry', 'tools', '.github/workflows'):
+              paths += [p for p in (root / folder).rglob('*') if p.is_file() and p.suffix in ('.py', '.rs', '.toml', '.lock', '.yml') and 'target' not in p.parts]
+          paths += [root / '.cache/reference-definitions/halo3_mcc/scenario.json']
+          hashes = {}
+          with ZipFile('h3-scenario-source.zip', 'w', ZIP_DEFLATED) as archive:
+              for path in sorted(paths):
+                  name = path.relative_to(root).as_posix()
+                  content = path.read_bytes()
+                  hashes[name] = hashlib.sha256(content).hexdigest()
+                  archive.writestr(name, content)
+              archive.writestr('source-verification.json', json.dumps({'source_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'sha256':hashes},indent=2))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h3-scenario-source-verification
+          path: h3-scenario-source.zip
+          if-no-files-found: error
       - name: Validate scenario manifests and existing H3 import logic
         shell: pwsh
         run: |
