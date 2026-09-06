@@ -173,6 +173,9 @@ def bsp_material_issues(material, manifest):
     """Identify the failing stage without losing the exact BSP shader identity."""
     source = material.get('source_shader')
     if not source:
+        if material.get('name', '').startswith(('+', '@')):
+            # ASS auxiliary surface markers do not identify render shaders.
+            return []
         return [('source_reference', 'BSP material has no source shader reference')]
     if manifest is None:
         return [('shader_description', 'Material preview manifest unavailable')]

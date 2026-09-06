@@ -1,7 +1,12 @@
 from copy import deepcopy
 import importlib
 import unittest
+import json
+from pathlib import Path
+import tempfile
+from unittest.mock import patch
 from test_h3_scenario_scene import PKG
+from test_h3_scenario_scene import ROOT
 from h3_scenario_content_fixture import content_inventory
 from h3_material_fixture import manifest
 from h3_import_fixture import payload
@@ -42,6 +47,17 @@ class ContentTests(unittest.TestCase):
             row=c.plan(data)['placements'][0];self.assertIsNone(row['position']);self.assertTrue(row['diagnostics'])
     def test_unsafe_source_rejected(self):
         with self.assertRaises(ValueError):c.tag_reference(dict(path='../outside',extension='scenery'))
+    def test_placement_fields_match_pinned_source_definitions(self):
+        path=ROOT/'.cache/reference-definitions/halo3_mcc/scenario.json'
+        if not path.is_file():self.skipTest('Pinned definitions are provided by CI')
+        structs=json.loads(path.read_text())['structs']
+        required={'scenario_object_datum_struct':['position','rotation','scale','parent id','editor folder!'],
+                  'squads_struct':['name^','parent','initial objective','fire-teams'],
+                  'scenario_trigger_volume_struct':['position','forward!','up!','extents','object name'],
+                  'scenario_cutscene_camera_point_block':['name^','position','orientation']}
+        for name,fields in required.items():
+            found={f.get('name') for f in structs[name]['fields']}
+            self.assertTrue(set(fields)<=found,(name,set(fields)-found))
     def test_variant_selection_and_ambiguous_state(self):
         data=payload();data['variants']=[dict(name='default',regions=[dict(name='body',parent_variant=-1,permutations=[dict(name='default',states=[{'state':1}])])])]
         selected,diagnostics=objects.variant_regions(data,'default')
@@ -56,6 +72,7 @@ class MaterialResolutionTests(unittest.TestCase):
         record=dict(source_shader='objects/test/test.shader');data=manifest()
         self.assertEqual(materials.bsp_material_issues(record,data),[])
         self.assertEqual(materials.bsp_material_issues({},data)[0][0],'source_reference')
+        self.assertEqual(materials.bsp_material_issues(dict(name='@collision_only'),data),[])
         self.assertEqual(materials.bsp_material_issues(record,None)[0][0],'shader_description')
         del data['shaders'][record['source_shader']]
         self.assertEqual(materials.bsp_material_issues(record,data)[0][0],'shader_description')
@@ -67,5 +84,47 @@ class MaterialResolutionTests(unittest.TestCase):
         self.assertFalse(any('generic object' in d for d in materials.plan(shader)['diagnostics']))
         shader['group']='rmw '
         self.assertIn('shader_class',[s for s,_ in materials.bsp_material_issues(dict(source_shader=shader['source']),data)])
+
+
+class ExtractionTests(unittest.TestCase):
+    def test_unique_sources_reuse_existing_helper_and_cache(self):
+        content=c.plan(content_inventory());calls=[]
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/'tags';root.mkdir();output=Path(d)/'output';output.mkdir()
+            helper=Path(d)/'h3-object-bridge.exe';helper.touch()
+            for source in objects.requests(content):
+                path=root/source;path.parent.mkdir(parents=True,exist_ok=True);path.touch()
+            class Process:
+                returncode=0
+                def __init__(self,args,**kwargs):
+                    calls.append(args)
+                    data=payload();data['source_tag']=Path(args[args.index('--input')+1]).relative_to(root).as_posix()
+                    (Path(args[args.index('--output')+1])/'asset.h3asset.json').write_text(json.dumps(data))
+                def poll(self):return 0
+            def collect(generator):
+                while True:
+                    try:next(generator)
+                    except StopIteration as result:return result.value
+            with patch.object(objects.subprocess,'Popen',Process):
+                first=collect(objects.extract(content,root,output,helper,False))
+                second=collect(objects.extract(content,root,output,helper,False))
+            self.assertEqual(len(calls),3);self.assertEqual(first,second)
+            self.assertTrue(all(r['status']=='extracted' for r in first.values()))
+    def test_cancel_closes_active_object_helper(self):
+        content=c.plan(content_inventory());processes=[]
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/'tags';root.mkdir();output=Path(d)/'output';output.mkdir();helper=Path(d)/'helper';helper.touch()
+            for source in objects.requests(content):
+                path=root/source;path.parent.mkdir(parents=True,exist_ok=True);path.touch()
+            class Process:
+                stopped=False
+                def __init__(self,*args,**kwargs):processes.append(self)
+                def poll(self):return 0 if self.stopped else None
+                def kill(self):self.stopped=True
+                def wait(self,timeout):return 0
+            with patch.object(objects.subprocess,'Popen',Process):
+                steps=objects.extract(content,root,output,helper,False)
+                next(steps);next(steps);steps.close()
+            self.assertEqual(len(processes),1);self.assertTrue(processes[0].stopped)
 
 if __name__=='__main__':unittest.main()

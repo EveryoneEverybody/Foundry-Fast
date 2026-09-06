@@ -27,6 +27,14 @@ references/descriptions/bitmaps/classes and construction failures. The packed
 `H3 BSP material report` remains available after extraction files disappear.
 No destination shader paths are generated.
 
+The real extraction was rebuilt in background Blender 5.2.1. Lakebed (BSP 020,
+slot 2, 1,970 source triangles), lakebed_b (BSP 040, slot 30, 3,301 triangles)
+and wet-puddle (BSP 040, slot 53, 22 triangles) each connected the blend map and
+all three active base/detail pairs. All five inspected grey100 slots retained
+0.392156869 per RGB channel. These are source definition triangle counts, not
+multiplied instance counts. The full construction/material/retention check took
+81.5 seconds after extraction; it is not a measurement of total fresh import time.
+
 ## Source content and organization
 
 Scenery, machines, controls, crates, vehicles, weapons, equipment, bipeds, giants,
