@@ -13,6 +13,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate scenario manifests and existing H3 import logic
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p test_h3_scenario_inspection.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p 'test_h3_import*.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test and build read-only inspector
         shell: pwsh
         run: |
