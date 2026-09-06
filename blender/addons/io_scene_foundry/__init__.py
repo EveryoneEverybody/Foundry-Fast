@@ -16,6 +16,9 @@ from . import perf_material_cleanup
 from . import perf_bitmap_cache
 from . import perf_patch
 from . import fast_runtime
+from . import scenario_reference
+from . import scenario_reference_direct_patch
+from . import parallel_bitmaps
 from . import h3_import
 
 modules = [
@@ -33,10 +36,15 @@ modules = [
     perf_bitmap_cache,
     perf_patch,
     fast_runtime,
+    scenario_reference,
+    scenario_reference_direct_patch,
+    parallel_bitmaps,
     h3_import,
 ]
-            
+
 def register():
+    scenario_reference.prepare()
+    parallel_bitmaps.prepare()
     foundry_output.register()
     bpy.app.handlers.exit_pre.append(startup.managed_blam_exit)
     bpy.app.handlers.load_post.append(startup.load_handler)
