@@ -19,7 +19,9 @@ def extract(content, tags_root, directory, helper, shaders=True):
     """Each unique source runs once. Closing the generator stops its active helper."""
     assets = {}
     root = Path(tags_root).resolve(strict=True)
-    directory = Path(directory)
+    directory = Path(directory).resolve()
+    if directory.is_relative_to(root):
+        raise ValueError('Object extraction output must be outside source tags')
     sources = requests(content)
     process = log = None
     try:
@@ -69,6 +71,12 @@ def extract(content, tags_root, directory, helper, shaders=True):
             except (OSError,ValueError,KeyError,TypeError) as error:
                 record['diagnostics'].append(str(error))
                 print(f'H3 placed source unresolved: {source}: {error}',flush=True)
+            finally:
+                if process is not None and process.poll() is None:
+                    process.kill();process.wait(timeout=3)
+                process = None
+                if log is not None:
+                    log.close();log=None
         return assets
     finally:
         if process is not None and process.poll() is None:

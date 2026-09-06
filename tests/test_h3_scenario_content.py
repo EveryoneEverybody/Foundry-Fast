@@ -98,7 +98,7 @@ class ExtractionTests(unittest.TestCase):
                 returncode=0
                 def __init__(self,args,**kwargs):
                     calls.append(args)
-                    data=payload();data['source_tag']=Path(args[args.index('--input')+1]).relative_to(root).as_posix()
+                    data=payload();data['source_tag']=Path(args[args.index('--input')+1]).relative_to(root.resolve()).as_posix()
                     (Path(args[args.index('--output')+1])/'asset.h3asset.json').write_text(json.dumps(data))
                 def poll(self):return 0
             def collect(generator):
