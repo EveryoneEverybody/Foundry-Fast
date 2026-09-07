@@ -311,8 +311,10 @@ class ScenarioBuildSession(ContentBuilder):
             self.counts['reference_frames_resolved'] = len(self.frame_resolver.resolved)
             self.counts['reference_frames_unresolved'] = len(self.frame_resolver.failures)
         self.warnings.extend(self.scene.get('limitations', []))
-        self.profile.counts['materials'] = sum(store is bpy.data.materials for store, _ in self.created)
-        self.profile.counts['unique_images'] = sum(store is bpy.data.images for store, _ in self.created)
+        # RNA collection wrappers are not stable Python identities. Count the
+        # retained datablock types, not `store is bpy.data.materials`.
+        self.profile.counts['materials'] = sum(isinstance(item, bpy.types.Material) for _, item in self.created)
+        self.profile.counts['unique_images'] = sum(isinstance(item, bpy.types.Image) for _, item in self.created)
         self.root['h3_performance_report'] = self.text('H3 scenario performance', dict(self.profile.report(), helper_timings={'inventory':self.inventory.get('timings'), 'bsps':[{k:r.get(k) for k in ('index','timings')} for r in self.scene['bsp_entries']], 'bsp_shaders':(self.material_manifest or {}).get('timings')})).name
         for name, row in self.profile.rows.items():
             print(f"H3 timing {name}: {row['inclusive_seconds']:.3f}s inclusive / {row['exclusive_seconds']:.3f}s exclusive", flush=True)

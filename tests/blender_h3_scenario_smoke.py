@@ -93,6 +93,8 @@ for units, forward in [('blender', 'x'), ('blender', 'y'), ('max', 'x')]:
         assert len(meshes) == 2 and meshes[0].data is meshes[1].data
         assert all(not ob.hide_render for ob in meshes)
         assert session.counts == dict(bsp_meshes=1, bsp_placements=2, sectors=1, rails=1, firing_positions=1, script_points=1)
+        assert session.profile.counts['materials'] == 2
+        assert session.profile.counts['unique_images'] > 0
         mesh = meshes[0].data
         scale = .03048 if units == 'blender' else 1.
         near(mesh.vertices[1].co, [100*scale, 0, 0])

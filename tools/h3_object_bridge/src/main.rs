@@ -204,7 +204,7 @@ fn run() -> Result<()> {
     if render.vertices.is_empty() || render.triangles.is_empty() { bail!("Render model has no decoded triangles"); }
     let mut warnings = vec![
         "Experimental reconstruction, not a lossless object-tag conversion.".to_string(),
-        "All decoded permutations are retained in the source payload. Scenario previews may select explicit variant permutations; child attachments are not applied.".to_string(),
+        "All decoded permutations are retained in the source payload. The scenario reference builder separately resolves explicit variants and deterministic child attachments.".to_string(),
         "Animations, gameplay fields, shader conversion, UVW W coordinates and marker permutation filters are not imported in this pass.".to_string(),
         "Render topology is reconstructed by the JMS decoder. Original authoring topology is not guaranteed.".to_string(),
     ];

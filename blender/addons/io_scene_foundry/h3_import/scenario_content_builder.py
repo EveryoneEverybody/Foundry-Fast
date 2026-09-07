@@ -132,6 +132,15 @@ class ContentBuilder:
                     asset['diagnostics'] = list(asset.get('diagnostics', [])) + [str(error)]
         self.frame_resolver = FrameResolver(scenario_content.ContentIndex(self.inventory, scenario_content.CONTENT_ROOTS),
                                             content['placements'], self.source_payloads)
+        for frame in self.frame_resolver.frames:
+            with self.profile.span('reference-frame table validation'):
+                try:
+                    self.frame_resolver.point([0., 0., 0.], frame)
+                except ValueError:
+                    # The resolver retains the failure. No placeholder point is
+                    # created at the origin for an unresolved source frame.
+                    pass
+            yield f'Reference frames: {frame + 1}/{len(self.frame_resolver.frames)}'
         with self.profile.span('reference-frame resolution and content planning'):
             content = scenario_content.plan(self.inventory, self.frame_resolver)
         self.content_plan = content
