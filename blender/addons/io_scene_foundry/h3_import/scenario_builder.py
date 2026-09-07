@@ -411,7 +411,7 @@ class ScenarioBuildSession(ContentBuilder):
             if not self.options.render_only: unsupported.append('BSP collision/portal conversion and structure merge')
             if unsupported:
                 self.warnings.append('H3 source-only in this checkpoint: ' + ', '.join(unsupported) + '. Source records are retained; no destination data is invented.')
-        if self.preview:
+        if self.preview and not self.options:
             self.shader_source = self.text('H3 shader source - ' + self.root.name, self.preview.manifest)
             self.root['h3_shader_manifest'] = self.shader_source.name
         if self.options or self.import_objects or self.import_content:

@@ -4,6 +4,10 @@ import time
 from pathlib import Path
 
 
+class HelperPending(str):
+    """Yield control until the next UI timer instead of busy-polling a subprocess."""
+
+
 class ImportProgress:
     """The parent import owns completion, including work after helper exit."""
     def __init__(self, label, area=None, clock=time.monotonic, emit=print):

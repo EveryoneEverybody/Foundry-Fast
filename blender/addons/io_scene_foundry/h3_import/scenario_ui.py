@@ -87,7 +87,7 @@ def sky_items(operator, context):
 
 def search_skies(operator, context, edit_text):
     refresh(operator)
-    return [(f"h3:{r['index']}", r['source_tag']) for r in getattr(operator, '_h3_skies', [])
+    return [(f"{r['index']}: {r['source_tag']}", r['source_tag']) for r in getattr(operator, '_h3_skies', [])
             if r['source_tag']]
 
 
@@ -97,6 +97,9 @@ def route(operator, context, paths):
     if 'halo3' not in sources: return None
     if len(paths) != 1:
         raise ValueError('Import one H3 scenario at a time; mixed-source selections are not supported')
+    if getattr(operator, 'tag_zone_set', '') not in ('', 'all_zone_sets'):
+        raise ValueError('H3 Zone Set filtering is not available in this checkpoint; choose All Zone Sets')
     from . import ScenarioImportJob
     operator._h3_job = ScenarioImportJob(operator, ScenarioOptions.from_operator(operator))
+    operator._h3_job.filepath = paths[0]
     return operator._h3_job.execute(context)

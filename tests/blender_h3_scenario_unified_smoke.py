@@ -212,4 +212,24 @@ with tempfile.TemporaryDirectory() as d:
         else: raise AssertionError('Expected construction failure')
     assert count() == before, (before, count())
 
+    # Requested categories control external work, not only final visibility.
+    requests = []
+    def extract_spy(content, *args, **kwargs):
+        requests.append(content)
+        if False: yield
+        return assets
+    with patch.object(object_module, 'extract', extract_spy):
+        session = Session(bpy.context, data, fixture(), directory, tags_root=directory,
+            object_helper=directory/'helper', options=Options(geometry=False, sky='h3:1'))
+        list(session.steps())
+        assert len(requests) == 1 and len(requests[0]['placements']) == 1
+        assert requests[0]['placements'][0]['source_tag'] == 'objects/test/panel.scenery'
+        assert session.profile.counts['sky_objects'] == 1
+        session.rollback(); assert count() == before
+    with patch.object(object_module, 'extract', side_effect=AssertionError('Disabled object/sky decode')), \
+         patch.object(assets_module.subprocess, 'Popen', side_effect=AssertionError('Disabled shader decode')):
+        session = Session(bpy.context, data, fixture(), directory, tags_root=directory,
+            object_helper=directory/'helper', options=Options(geometry=False, materials=True))
+        list(session.steps()); session.rollback(); assert count() == before
+
 print('Unified H3 scenario passed: options, source skies, BSP semantics/colors, excluded placements, compact points, visibility, rollback and save/reopen')

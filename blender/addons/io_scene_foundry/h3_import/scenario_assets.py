@@ -11,7 +11,7 @@ from .core import load_payload
 from .scenario_content import ContentIndex, tag_reference, plan
 from .materials import load_manifest
 from .material_builder import PreviewBuilder
-from .import_output import HelperLogTail
+from .import_output import HelperLogTail, HelperPending
 
 
 def skies(inventory):
@@ -27,7 +27,8 @@ def skies(inventory):
 
 def selected_sky(rows, value):
     if not value or value == 'none': return None
-    matches = [r for r in rows if value in (f"h3:{r['index']}", r['source_tag'], r['source_tag'].replace('/', '\\'))]
+    matches = [r for r in rows if value in (f"h3:{r['index']}", f"{r['index']}: {r['source_tag']}",
+        r['source_tag'], r['source_tag'].replace('/', '\\'))]
     if len(matches) != 1 or not matches[0]['source_tag']:
         raise ValueError(f'Sky selection {value!r} does not identify exactly one source scenario sky')
     return matches[0]
@@ -115,7 +116,7 @@ def prepare(session, content):
                     while process.poll() is None:
                         if time.monotonic() - last_read >= .1:
                             tail.poll(); last_read = time.monotonic()
-                        yield 'Shared BSP, sky and object material extraction'
+                        yield HelperPending('Shared BSP, sky and object material extraction')
                     tail.poll(final=True)
                     if process.returncode: raise ValueError(f'Scenario shader helper failed ({process.returncode}); see {log_path}')
                 # A scenario combines hundreds of independently bounded assets.

@@ -11,7 +11,7 @@ from bpy_extras.io_utils import ImportHelper
 from .. import utils
 from .core import find_tags_root, resolve_tags_root, load_payload
 from .builder import BuildSession
-from .import_output import HelperLogTail, ImportProgress, open_output
+from .import_output import HelperLogTail, HelperPending, ImportProgress, open_output
 
 _active = []
 
@@ -261,6 +261,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 try:
                     self._phase = next(self._steps)
                     self._progress.update(self._phase)
+                    if isinstance(self._phase, HelperPending):
+                        break
                 except StopIteration:
                     self._finish(context)
                     print(f"[Foundry perf] Halo 3 asset import: {elapsed:.3f}s")

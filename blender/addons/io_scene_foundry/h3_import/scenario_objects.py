@@ -9,7 +9,7 @@ import time
 
 from .core import load_payload
 from .scenario_inspection import relative_path
-from .import_output import HelperLogTail
+from .import_output import HelperLogTail, HelperPending
 from .scenario_scene import checked_json
 
 
@@ -98,7 +98,7 @@ def extract(content, tags_root, directory, helper, shaders=True):
                     while process.poll() is None:
                         if time.monotonic()-last_read >= .1:
                             tail.poll();last_read=time.monotonic()
-                        yield prefix + f' ({phase})'
+                        yield HelperPending(prefix + f' ({phase})')
                     code=process.returncode
                     process=None;log.close();log=None
                     details=tail.poll(final=True)
