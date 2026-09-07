@@ -239,7 +239,13 @@ def build(args):
                 paths.reach/'tool_fast.exe', paths.reach/'bin/ManagedBlam.dll', paths.reach/'project.xml']
             report['build_tools_and_project'] = {str(p):digest(p) for p in provenance_files}
             report['authoring_oracles']=evidence.archives(args)
+            kit_sources = [paths.h3/'tags/shaders'/n for n in ('foliage_fx.hlsl_include',
+                'alpha_test_fx.hlsl_include','terrain_fx.hlsl_include')]
+            kit_sources += [paths.reach/'tags/shaders/templated'/n for n in ('foliage.hlsl_include',
+                'alpha_test.hlsl_include','terrain.hlsl_include','terrain_new.hlsl_include')]
+            report['semantic_kit_source_evidence'] = {str(p):digest(p) for p in kit_sources if p.is_file()}
             code = [*Path(__file__).parent.glob('*.py'), Path(__file__).with_name('mappings.json'),
+                    Path(__file__).with_name('semantic_catalog.json'),
                     addon/'tools/scenario/lightmap.py', addon/'blender_manifest.toml']
             report['compiler_source_hashes'] = {p.relative_to(addon).as_posix():digest(p) for p in code}
             package = addon.parent/'build.json'
@@ -332,6 +338,22 @@ def build(args):
                 plan=construct(paths,scene,bsps,skies,shaders,scenario_xml,lighting_xmls,sky_xmls,sky_render_xmls,
                                lighting_quality=args.lighting,selection=selection,designs=designs,seams_xml=seams_xml,light_xmls=light_xmls)
             report['semantic_planning_seconds']=time.perf_counter()-plan_started
+            if plan.get('source_semantic_resolution') is not None:
+                from port_environment import semantics
+                baseline_path = getattr(args, 'semantic_baseline', None)
+                if baseline_path:
+                    baseline = json.loads(Path(baseline_path).read_text(encoding='utf-8-sig'))
+                    report['source_semantic_baseline'] = dict(file=str(Path(baseline_path).resolve()), sha256=digest(baseline_path))
+                    semantics.reconcile_baseline(plan, baseline)
+                plan['plan_sha256'] = stable_hash({k:v for k,v in plan.items() if k != 'plan_sha256'})
+                resolution = plan['source_semantic_resolution']
+                resolution['kit_source_evidence'] = report['semantic_kit_source_evidence']
+                plan['plan_sha256'] = stable_hash({k:v for k,v in plan.items() if k != 'plan_sha256'})
+                atomic_json(run/'source-semantic-resolution.json', resolution)
+                atomic_json(run/'original-source-contracts.json', plan['source_contract_observations'])
+                atomic_json(run/'semantic-mapping-catalog.json', semantics.CATALOG)
+                (run/'source-semantic-resolution.md').write_text(semantics.markdown(resolution), encoding='utf-8')
+                report['source_semantic_accounting'] = {k:v for k,v in resolution.items() if k != 'records'}
             plan_path = run/'environment.plan.json'
             atomic_json(plan_path, plan,compact=plan['version']>=2)
             report.update(plan=str(plan_path), plan_sha256=plan['plan_sha256'], source=plan['source'],
@@ -346,6 +368,7 @@ def build(args):
                 sky_bounce=plan['lighting']['sky']['defaults'])
             report['target_defaults']['sky_model'] = plan_skies(plan)[0]['target_defaults']
             report['unsupported']=plan.get('unsupported',[])
+            atomic_json(run/'unsupported-semantics.json',report['unsupported'])
             report['selected_bsp_sources']=[dict(source_tag=b['source_tag'],destination=b['destination'],
                 source_index=b.get('source_index',0),base_render=b['source_render'],base_collision=b['source_collision'],
                 instances={k:v for k,v in b.get('instance_plan',{}).items() if k not in {'placements','used_render_instances'}})
@@ -451,6 +474,7 @@ def main():
     parser.add_argument('--helpers', help='Override directory containing the bundled source helper executables')
     parser.add_argument('--lighting', choices=('direct_only', 'draft', 'none'), default='direct_only')
     parser.add_argument('--plan-only', action='store_true')
+    parser.add_argument('--semantic-baseline', help='Original unsupported-semantics.json to reconcile by stable source-record identity')
     args = parser.parse_args()
     try:
         return build(args)

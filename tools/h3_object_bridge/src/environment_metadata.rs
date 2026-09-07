@@ -16,10 +16,13 @@ fn collision_mesh(node: TagStruct<'_>) -> Result<Value> {
         let first = surface.read_int_any("first edge").context("Missing instance first edge")?;
         let mut edge_index = first;
         let start = vertices.len();
+        let mut ring_edges = vec![];
+        let mut ring_points = vec![];
         let mut seen = BTreeSet::new();
         loop {
             if edge_index < 0 || !seen.insert(edge_index) { bail!("Malformed instance collision surface {si}"); }
             let edge = edges.element(edge_index as usize).context("Invalid instance collision edge")?;
+            ring_edges.push(edge_index as i64);
             let (vertex, next) = if edge.read_int_any("left surface") == Some(si as i128) {
                 (edge.read_int_any("start vertex"),edge.read_int_any("forward edge"))
             } else if edge.read_int_any("right surface") == Some(si as i128) {
@@ -27,6 +30,7 @@ fn collision_mesh(node: TagStruct<'_>) -> Result<Value> {
             } else { bail!("Instance collision edge does not own surface {si}"); };
             let vertex = vertex.context("Missing instance collision vertex")?;
             if vertex < 0 { bail!("Negative instance collision vertex"); }
+            ring_points.push(vertex as i64);
             let p = points.element(vertex as usize).context("Invalid instance collision point")?.read_point3d("point");
             if [p.x,p.y,p.z].iter().any(|v|!v.is_finite()) { bail!("Nonfinite instance collision point"); }
             vertices.push(json!({"position":[p.x*100.0,p.y*100.0,p.z*100.0],"normal":[0,0,1],"uvs":[],"weights":[]}));
@@ -40,6 +44,8 @@ fn collision_mesh(node: TagStruct<'_>) -> Result<Value> {
         metadata["triangle_start"] = json!(triangles.len());
         metadata["triangle_count"] = json!(count-2);
         metadata["source_surface"] = json!(si);
+        metadata["ring"] = json!({"source_edges":ring_edges,"source_vertices":ring_points,
+            "decoded_vertices":(start..vertices.len()).collect::<Vec<_>>()});
         source_surfaces.push(metadata);
         for i in 1..count-1 {
             triangles.push(json!({"material":material,"vertices":[start,start+i,start+i+1],"source_surface":si}));
@@ -100,6 +106,15 @@ pub fn extract(tag: &TagFile) -> Result<Value> {
         for (i, def) in defs.iter().enumerate() {
             let collision = def.field("collision info").and_then(|f|f.as_struct()).context("Missing instance collision definition")?;
             result["definitions"][i]["collision_mesh"] = collision_mesh(collision)?;
+            // These are correspondence evidence, not copied target runtime data.
+            // Keep the source topology needed to distinguish an unassigned solid
+            // instance surface from the separate structure-sky encoding.
+            for name in ["surfaces", "surface to triangle mapping", "breakable surface sets"] {
+                result["definitions"][i][name] = json!(rows(&def, name)?);
+            }
+            for name in ["planes", "edges", "vertices"] {
+                result["definitions"][i]["collision_mesh"][name.to_string()+"_source"] = json!(rows(&collision, name)?);
+            }
         }
     }
     for (key, path, nested) in [

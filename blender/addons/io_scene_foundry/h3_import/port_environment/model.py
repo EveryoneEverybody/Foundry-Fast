@@ -432,6 +432,8 @@ def construct_selected(paths, scene, bsps, skies, shaders, scenario_xml, lightin
         portals, errors = authoring.portal_plan(bsp); problems.extend(errors)
         source_lighting=chosen['lighting_info']
         lights,errors=authoring.static_lighting(lighting_xmls[source_lighting],source_lighting)
+        lights.update(source_bsp_index=chosen['source_index'], target_bsp_index=chosen['target_index'],
+                      membership_strategy='Owning source BSP structure-lighting-info reference')
         problems.extend(errors);light_plans.append(lights);sources.add(source_lighting)
         region=f'{paths.asset}_bsp_{chosen["source_index"]:04}'
         design=None
@@ -552,5 +554,7 @@ def construct_selected(paths, scene, bsps, skies, shaders, scenario_xml, lightin
         excluded=['normal scenario objects','AI','HSC','audio','effects','cinematics','source runtime resources'],
         unknowns=['Nate must confirm runtime acceptance after a successful native build.'])
     result['lighting']=dict(source_tag=light_plans[0]['source_tag'],sky=sky_plans[0]['lighting'],quality=lighting_quality)
+    from .semantics import resolve
+    resolve(result, bsps, shaders)
     result['plan_sha256']=stable_hash(result)
     return result

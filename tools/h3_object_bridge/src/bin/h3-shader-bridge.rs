@@ -78,6 +78,11 @@ fn preview_shape(is_2d: bool, depth: u32, images: usize, has_sequences: bool, si
     is_2d && depth == 1 && images == 1 && (!has_sequences || single_image_pixels)
 }
 
+fn environment_cube_shape(is_cube: bool, width: u32, height: u32, depth: u32, images: usize, format: &str, enabled: bool) -> bool {
+    enabled && is_cube && width > 0 && width <= 4096 && width == height && depth == 1 && images == 1
+        && matches!(format, "dxt1" | "dxt5")
+}
+
 impl Reader {
     fn definition(&mut self, root: &Path, name: &str) -> Result<RenderMethodDefinition> {
         let path = resolve(root, name, Some("render_method_definition"))?;
@@ -119,6 +124,24 @@ impl Reader {
             }
             let format = image.format_name().unwrap_or_default().to_lowercase();
             let large = u64::from(image.width()) * u64::from(image.height()) > 67_108_864;
+            if environment_cube_shape(image.is_cube(), image.width(), image.height(), image.depth().into(),
+                bitmap.len(), &format, self.single_image_pixels) {
+                // The pinned decoder writes all SIX decoded faces to a cross;
+                // this is source-pixel recovery, never a 2D preview substitute.
+                let tiff = format!("textures/{number:05}_cube.tif");
+                out.clear();
+                image.write_tiff(&mut out)?;
+                write_new(&self.output.join(&tiff), &out)?;
+                result["cube_source"] = json!({"tiff":tiff,"layout":"directx_cross_4x3",
+                    "face_order":["+X","-X","+Y","-Y","+Z","-Z"],
+                    "cells":[[0,1],[2,1],[1,0],[1,2],[1,1],[3,1]],
+                    "face_rotations_quarter_turns":[0,0,0,0,0,0],
+                    "width":image.width()*4,"height":image.height()*3,"decoded_faces":6,
+                    "pixel_format":"RGBA8","mip_policy":"TIFF contains six base faces; DDS retains every source mip",
+                    "source_sequence_count":bitmap.sequences().len()});
+                result["status"] = json!("cube_source_pixels");
+                return Ok(result);
+            }
             // The explicit compiler path samples the entire sole indexed 2D
             // texture, not a sprite/sequence frame. Ordinary inspection keeps
             // its conservative preview policy. Real box textures have one
@@ -425,6 +448,17 @@ mod tests {
             RenderMethodDefinitionCategory{category_name:"blend_mode".into(),vertex_function:String::new(),pixel_function:String::new(),options:vec![option("opaque"),option("alpha_blend")]},
             RenderMethodDefinitionCategory{category_name:"albedo".into(),vertex_function:String::new(),pixel_function:String::new(),options:vec![option("constant_color"),option("default")]},
         ],shared_pixel_shaders_path:String::new(),shared_vertex_shaders_path:String::new(),flags:0,version:0}
+    }
+    #[test] fn environment_cube_pixels_require_six_face_semantics_and_known_formats() {
+        for format in ["dxt1", "dxt5"] {
+            assert!(environment_cube_shape(true,64,64,1,1,format,true));
+            assert!(!environment_cube_shape(true,64,64,1,1,format,false));
+            assert!(!environment_cube_shape(false,64,64,1,1,format,true));
+            assert!(!environment_cube_shape(true,64,32,1,1,format,true));
+            assert!(!environment_cube_shape(true,64,64,6,1,format,true));
+            assert!(!environment_cube_shape(true,64,64,1,2,format,true));
+        }
+        assert!(!environment_cube_shape(true,64,64,1,1,"dxn",true));
     }
     #[test] fn options_are_matched_by_name_not_index() {
         let source=json!({"categories":[{"category":"albedo","option":"default","source_index":0}]});

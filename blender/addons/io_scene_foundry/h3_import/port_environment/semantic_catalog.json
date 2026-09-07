@@ -1,0 +1,233 @@
+{
+  "format": "foundry.h3-environment-semantic-rules",
+  "version": 1,
+  "scope": "Source authoring plans only; no native build or runtime acceptance",
+  "evidence": {
+    "H3_ART": {
+      "kind": "documentation",
+      "url": "https://c20.reclaimers.net/h3/source-data/h3-materials/",
+      "claim": "ASS material symbols distinguish collision, sphere collision, ladder, breakable, transparency, shadow and lightmap intent; seams require matching owners."
+    },
+    "H3_LIGHT": {
+      "kind": "official_documentation",
+      "url": "https://learn.microsoft.com/en-us/halo-master-chief-collection/h3/individual/dynamiclights",
+      "claim": "Scenario .light placements are dynamic lights; marker X is emission direction. Their runtime functions are separate from authored static lightmap inputs."
+    },
+    "H3_FUNCTION": {
+      "kind": "decoder_source",
+      "url": "https://github.com/Zoephie/blam-tags/blob/5d0509fb75eadb96ac7774542ca0b2c10aed7b00/blam-tags/src/tag_function/mod.rs",
+      "claim": "Type 1 unranged functions are authored constants, including constant colors. Other decoded functions can be evaluated at a specified source input/time."
+    },
+    "H3_CBUFFER": {
+      "kind": "decoder_source",
+      "url": "https://github.com/Zoephie/blam-tags/blob/5d0509fb75eadb96ac7774542ca0b2c10aed7b00/blam-tags/src/render_method/cbuffer.rs",
+      "claim": "Resolved parameter values apply rmop defaults then authored channel overrides; bitmap transforms use scale XY, translation ZW."
+    },
+    "H3_PARTS": {
+      "kind": "schema_source",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/RenderGeometry/Mesh.cs",
+      "claim": "PartTypeNew: 3 opaque nonshadowing, 4 transparent, 5 lightmap only; flag bit 1 ignored by lightmapper. These are not interchangeable transparency modes."
+    },
+    "H3_COLLISION": {
+      "kind": "schema_source",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/BspCollisionGeometry/CollisionGeometry.cs",
+      "claim": "Surface bits 0 two-sided, 1 invisible, 2 climbable, 3 breakable; material and breakable indices are independent fields."
+    },
+    "H3_NULL_MATERIAL": {
+      "kind": "source_and_inference",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/Utils/GeometryToObjectConverter.cs",
+      "claim": "Instance collision can retain material -1 independently of sky. No rendered correspondence plus solid collision flags supports preserving an untextured collision shell; the shader identity is not inferred."
+    },
+    "H3_CUBE": {
+      "kind": "decoder_source",
+      "url": "https://github.com/Zoephie/blam-tags/blob/5d0509fb75eadb96ac7774542ca0b2c10aed7b00/blam-tags/src/bitmap/layout.rs",
+      "claim": "DDS face order and per-face mip chains; six-face RGBA8 TIFF cross from decoded source pixels. Target import orientation must be checked by the next native writer."
+    },
+    "REACH_MATERIAL": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/shader.py",
+      "claim": "Native Reach shader options and parameter authoring, including alpha test, blend modes and environment mapping."
+    },
+    "REACH_TERRAIN": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/shader_terrain.py",
+      "claim": "Native shader_terrain group, morph/dynamic morph, four independently selected material layers, material names and terrain parameters."
+    },
+    "REACH_FOLIAGE": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/shader_foliage.py",
+      "claim": "Native shader_foliage, default albedo, alpha from texture or albedo, translucent material option."
+    },
+    "REACH_FACES": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/export/process.py",
+      "claim": "Connected geometry ladder, sphere collision only, no shadow, lightmap only, transparency and breakable face properties; breakable collision proxies are invalid."
+    },
+    "REACH_LIGHTING": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/scenario_structure_lighting_info.py",
+      "claim": "Native static light definitions and instances; emissive material focus and attenuation. H3 frustum blend/angles do not have direct fields."
+    },
+    "PAIRED_TERRAIN": {
+      "kind": "supplied_tag_evidence",
+      "path": "H3TagXML.zip and ReachTagXML.zip: levels/reference/lighting_reference/shaders/terrain_grass.shader_terrain.xml",
+      "claim": "Both games retain four top-level material names; target is shader_terrain rather than ordinary shader."
+    },
+    "SOURCE": {
+      "kind": "decoded_tag_evidence",
+      "claim": "Per-record source fields, SHA-256 identity, usage, topology, transform, snapshot and XML provenance are retained in the plan and run artifacts."
+    },
+    "KIT_HLSL": {
+      "kind": "installed_authoring_source",
+      "paths": [
+        "H3EK/tags/shaders/foliage_fx.hlsl_include",
+        "H3EK/tags/shaders/alpha_test_fx.hlsl_include",
+        "H3EK/tags/shaders/terrain_fx.hlsl_include",
+        "HREK/tags/shaders/templated/foliage.hlsl_include",
+        "HREK/tags/shaders/templated/alpha_test.hlsl_include",
+        "HREK/tags/shaders/templated/terrain_new.hlsl_include"
+      ],
+      "claim": "Both alpha tests sample texture alpha and use cutoff 0.5. H3 default foliage static lighting uses SH/PRT diffuse; back_light is declared but unused there. Reach flat foliage is a diffuse approximation; Reach has foliage_translucency, not a back_light color socket. Wind coefficient zero alone does not remove phase displacement: freeze authored rest geometry by zero amplitude. Terrain morph/dynamic morph preserve the same active RGBA normalization; Reach D3D11 adds 1e-8 to source blend channels before division."
+    }
+  },
+  "rules": [
+    {
+      "id": "material.parameters",
+      "meaning": "Resolve every active parameter independently; the record takes its strongest remaining restriction",
+      "evidence": [
+        "H3_FUNCTION",
+        "H3_CBUFFER",
+        "REACH_MATERIAL",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "material.constant",
+      "meaning": "Unranged authored constant channel, including opacity: preserve decoded source value exactly",
+      "evidence": [
+        "H3_FUNCTION",
+        "H3_CBUFFER"
+      ]
+    },
+    {
+      "id": "material.canonical_animation",
+      "meaning": "Freeze permitted cosmetic UV or emissive animation at source input/time zero; never opacity, cutout, visibility or topology",
+      "evidence": [
+        "H3_CBUFFER",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "material.engine_extern",
+      "meaning": "Reach owns native BRDF/reflection externs; foliage wind may freeze at source rest state",
+      "evidence": [
+        "REACH_MATERIAL",
+        "REACH_FOLIAGE",
+        "SOURCE",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "surface.render_pass",
+      "meaning": "Compose verified draw category with independent shader alpha/blend and lightmapper flags",
+      "evidence": [
+        "H3_ART",
+        "H3_PARTS",
+        "REACH_FACES",
+        "REACH_MATERIAL",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "collision.untextured_shell",
+      "meaning": "Preserve unassigned solid instance collision with zero render correspondence as collision-only, never sky",
+      "evidence": [
+        "H3_ART",
+        "H3_COLLISION",
+        "H3_NULL_MATERIAL",
+        "REACH_FACES",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "collision.surface_flags",
+      "meaning": "Data-driven two-sided, climbable and invisible authoring; breakable must retain its geometry relationship",
+      "evidence": [
+        "H3_ART",
+        "H3_COLLISION",
+        "REACH_FACES",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "terrain.native_layers",
+      "meaning": "Stage normalized source terrain into native Reach terrain options, layered samplers, transforms and material names",
+      "evidence": [
+        "H3_CBUFFER",
+        "REACH_TERRAIN",
+        "PAIRED_TERRAIN",
+        "SOURCE",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "foliage.native_cutout",
+      "meaning": "Native foliage texture alpha test; approximate diffuse lighting with Reach flat foliage, retain unused back_light recipe and freeze wind separately",
+      "evidence": [
+        "REACH_FOLIAGE",
+        "H3_ART",
+        "SOURCE",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "bitmap.single_cube",
+      "meaning": "Decode one BC1/BC3 cube as six faces, retain all source mip resources and cube identity",
+      "evidence": [
+        "H3_CUBE",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "lighting.material_properties",
+      "meaning": "Absent imported index is not an index into another row; recover authored material properties by source identity",
+      "evidence": [
+        "H3_ART",
+        "REACH_FACES",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "lighting.dynamic_placements",
+      "meaning": "Separate documented dynamic .light objects from BSP-owned static bake definitions and instances",
+      "evidence": [
+        "H3_LIGHT",
+        "REACH_LIGHTING",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "lighting.emissive_frustum",
+      "meaning": "Preserve directional emissive inputs; require a proven angular distribution adapter before nonzero frustum emission is accepted",
+      "evidence": [
+        "REACH_LIGHTING",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "seam.inactive_neighbor",
+      "meaning": "Source inactive neighbor is evidence, not permission to invent closure or add a BSP",
+      "evidence": [
+        "H3_ART",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "source.unknown",
+      "meaning": "Unrecognized source semantics and missing original records remain blocking",
+      "evidence": [
+        "SOURCE"
+      ]
+    }
+  ]
+}
