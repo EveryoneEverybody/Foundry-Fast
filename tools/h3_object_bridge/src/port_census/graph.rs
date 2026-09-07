@@ -567,6 +567,9 @@ mod tests {
             for p in refs {
                 s.add(p.into(), "parsed_field");
             }
+            // A real 040_voi coordinate exposed one-ULP drift in serde_json's
+            // default cache parser. Preserve the source decimal and raw bits.
+            s.metadata.push(json!({"kind":"value","name":"point","address":"point#0","value":{"values":[f32::from_bits(3216466039) as f64],"bits":[3216466039u32]}}));
             s
         };
         let first = build_using(
@@ -592,6 +595,10 @@ mod tests {
         assert_eq!(first.tags.len(), 4);
         assert_eq!(first.tags, second.tags);
         assert_eq!(first.edges, second.edges);
+        assert_eq!(
+            first.scans["root.scenario"].metadata,
+            second.scans["root.scenario"].metadata
+        );
         assert_eq!(first.tags["a.model"]["dependency_depth"], 1);
         assert_eq!(first.tags["missing.bitmap"]["dependency_depth"], 2);
         assert_eq!(first.tags["missing.bitmap"]["exists"], false);
