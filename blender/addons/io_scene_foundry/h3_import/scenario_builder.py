@@ -27,6 +27,9 @@ class ScenarioBuildSession(ContentBuilder):
         self.inspection_groups = {}
         self.sky_entries = []
         self.sky_entry = None
+        if options is not None:
+            preview_materials = options.materials
+            if not options.materials: material_manifest = None
         self.context = context
         self.scene = data
         self.inventory = inventory
@@ -438,8 +441,8 @@ class ScenarioBuildSession(ContentBuilder):
         self.profile.counts['unique_images'] = sum(isinstance(item, bpy.types.Image) for _, item in self.created)
         self.profile.counts['mesh_datablocks'] = sum(isinstance(item, bpy.types.Mesh) for _, item in self.created)
         self.profile.counts['placement_objects'] = self.counts.get('placed_objects', 0)
-        self.profile.counts['inspection_objects'] = sum(1 for _, item in self.created if isinstance(item, bpy.types.Object)
-            and any(c.name in self.inspection_groups for c in item.users_collection))
+        inspection_root = self.inspection_groups.get('_root')
+        self.profile.counts['inspection_objects'] = len(inspection_root.all_objects) if inspection_root else 0
         if self.options and self.preview:
             self.root['h3_material_usage'] = self.text('H3 shared material source usage', self.preview.usage).name
             self.profile.counts['bitmap_image_cache_hits'] = self.preview.image_hits
@@ -455,23 +458,31 @@ class ScenarioBuildSession(ContentBuilder):
 
     def finish_profile(self, total_seconds):
         from .scenario_reporting import memory_metrics
-        self.profile.elapsed('Total import elapsed', total_seconds)
-        memory = memory_metrics()
-        report = bpy.data.texts[self.root['h3_performance_report']]
-        data = json.loads(report.as_string())
-        data.update(self.profile.report(), memory=memory, sky=self.sky_entry)
-        report.clear(); report.write(json.dumps(data, indent=2))
-        print(f'H3 total import: {total_seconds:.3f}s; counters: {dict(self.profile.counts)}; memory: {memory}', flush=True)
-        # All of these source records are now retained in packed Text reports or
-        # the source inventory. Release query/template planning copies.
+        import time
+        before = memory_metrics()
+        started = time.perf_counter()
+        # Full source descriptions are already retained in packed Text reports.
         if self.options:
             with self.profile.span('transient source cleanup'):
                 self.source_payloads.clear()
                 if self.frame_resolver:
                     self.frame_resolver.index.children.clear()
                     self.frame_resolver.index.names.clear()
+                    self.frame_resolver.by_name.clear()
+                    self.frame_resolver.by_identifier.clear()
                 self.content_plan = None
+                self.frame_placements = None
                 self.object_assets = None
+                self.preview = None
+                self.material_manifest = None
+        total_seconds += time.perf_counter() - started
+        self.profile.elapsed('Total import elapsed', total_seconds)
+        memory = memory_metrics()
+        report = bpy.data.texts[self.root['h3_performance_report']]
+        data = json.loads(report.as_string())
+        data.update(self.profile.report(), memory=memory, memory_before_cleanup=before, sky=self.sky_entry)
+        report.clear(); report.write(json.dumps(data, indent=2))
+        print(f'H3 total import: {total_seconds:.3f}s; counters: {dict(self.profile.counts)}; memory: {memory}', flush=True)
 
     def rollback(self):
         for store, item in reversed(self.created):

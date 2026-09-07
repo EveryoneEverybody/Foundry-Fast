@@ -70,6 +70,7 @@ struct Reader {
     definitions: BTreeMap<PathBuf, RenderMethodDefinition>,
     bitmaps: BTreeMap<String, Value>,
     bitmap_seconds: f64,
+    bitmap_hits: usize,
 }
 
 impl Reader {
@@ -91,7 +92,7 @@ impl Reader {
 
     fn bitmap(&mut self, name: &str, index: i16) -> String {
         let key = format!("{}#{index}", name.replace('\\', "/"));
-        if self.bitmaps.contains_key(&key) { return key; }
+        if self.bitmaps.contains_key(&key) { self.bitmap_hits += 1; return key; }
         let number = self.bitmaps.len();
         let started = std::time::Instant::now();
         let result = (|| -> Result<Value> {
@@ -346,7 +347,7 @@ fn run() -> Result<()> {
     let geometry: Value = serde_json::from_slice(&fs::read(&asset)?)?;
     validate_asset(&geometry)?;
     fs::create_dir(output.join("textures"))?;
-    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new(),bitmap_seconds:0.};
+    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new(),bitmap_seconds:0.,bitmap_hits:0};
     let started = std::time::Instant::now();
     let paths = geometry["shader_paths"].as_array().context("Missing shader paths")?;
     let mut shaders = BTreeMap::new();
@@ -371,10 +372,11 @@ fn run() -> Result<()> {
     let manifest = json!({"format":"foundry.h3-shaders","version":1,"source_tag":geometry["source_tag"],
         "timings":{"shader_metadata_exclusive_seconds":inclusive-reader.bitmap_seconds,"bitmap_extraction_seconds":reader.bitmap_seconds,"combined_inclusive_seconds":inclusive},
         "source_game":"halo3_mcc","shaders":shaders,"bitmaps":reader.bitmaps,
+        "cache":{"unique_bitmaps":reader.bitmaps.len(),"bitmap_cache_hits":reader.bitmap_hits},
         "notes":["Blender previews are approximations, not game shader conversions.",
             "Source function blobs, parameter values and sampler settings are retained.",
             "Runtime externs, reference inheritance and animated materials require additional work."]});
-    write_new(&output.join("shader_manifest.json"),&serde_json::to_vec_pretty(&manifest)?)?;
+    write_new(&output.join("shader_manifest.json"),&serde_json::to_vec(&manifest)?)?;
     println!("H3 shader extraction complete: {} shaders, {} bitmap bindings",shaders.len(),reader.bitmaps.len());
     Ok(())
 }

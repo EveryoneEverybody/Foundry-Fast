@@ -183,4 +183,33 @@ with tempfile.TemporaryDirectory() as d:
             assert max(abs(a[r][c]-b[r][c]) for r in range(4) for c in range(4)) < 1e-4, name
     for build, _, _ in reversed(builds): build.rollback()
 
+    # BSPs, sky and object variants share source materials and packed images.
+    for asset in assets.values():
+        source = json.loads(Path(asset['asset']).read_text())
+        source['shader_paths'] = ['objects/test/test.shader']
+        for material in source['render']['materials']: material['name'] = 'test'
+        Path(asset['asset']).write_text(json.dumps(source))
+    manifest = base['shaders'](directory)
+    before = count()
+    session = Session(bpy.context, data, fixture(), directory, material_manifest=manifest,
+        object_assets=assets, options=Options(objects=True, sky='h3:0', materials=True))
+    list(session.steps())
+    shared = [m for m in bpy.data.materials if m.get('h3_source_shader') == 'objects/test/test.shader'
+              and any(item == m for _, item in session.created if isinstance(item, bpy.types.Material))]
+    assert len(shared) == 1, [m.name for m in shared]
+    assert session.preview.image_hits > 0
+    assert session.preview.usage and len(session.preview.materials) == 2
+    assert session.counts['object_templates'] >= 3
+    session.finish_profile(1.)
+    assert not session.source_payloads and session.content_plan is None
+    session.rollback(); assert count() == before, (before, count())
+    # Late construction failure rolls back shared caches and nested templates.
+    session = Session(bpy.context, data, fixture(), directory, material_manifest=manifest,
+        object_assets=assets, options=Options(objects=True, sky='h3:0', materials=True))
+    with patch.object(session, 'bsp_steps', side_effect=ValueError('injected BSP failure')):
+        try: list(session.steps())
+        except ValueError: session.rollback()
+        else: raise AssertionError('Expected construction failure')
+    assert count() == before, (before, count())
+
 print('Unified H3 scenario passed: options, source skies, BSP semantics/colors, excluded placements, compact points, visibility, rollback and save/reopen')

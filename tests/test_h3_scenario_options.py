@@ -4,6 +4,7 @@ import importlib
 import hashlib
 from pathlib import Path
 import tempfile
+import sys
 from types import SimpleNamespace
 import unittest
 
@@ -82,7 +83,7 @@ class OptionsTests(unittest.TestCase):
             'import_bsp': 'b28da8eec63e954e67706c229aa5067c76938dd0dcd0b804b797510a38e7ce44',
         }
         tree = ast.parse((ROOT/'blender/addons/io_scene_foundry/tools/importer.py').read_text())
-        actual = {node.name: hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+        actual = {node.name: hashlib.sha256(ast.dump(node, include_attributes=False, **({'show_empty': True} if sys.version_info >= (3, 13) else {})).encode()).hexdigest()
                   for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name in expected}
         self.assertEqual(actual, expected)
 

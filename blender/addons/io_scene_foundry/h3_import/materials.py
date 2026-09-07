@@ -105,10 +105,10 @@ def validate_manifest(data, source_tag):
     return data
 
 
-def load_manifest(path, source_tag):
+def load_manifest(path, source_tag, *, max_bytes=64 * 1024 * 1024):
     path = Path(path)
-    if path.stat().st_size > 64 * 1024 * 1024:
-        raise ValueError('Shader manifest exceeds 64 MiB')
+    if path.stat().st_size > max_bytes:
+        raise ValueError(f'Shader manifest exceeds {max_bytes // (1024 * 1024)} MiB')
     data = json.loads(path.read_text(encoding='utf-8'), object_pairs_hook=_object_pairs)
     return validate_manifest(data, source_tag)
 

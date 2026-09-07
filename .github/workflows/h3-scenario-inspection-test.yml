@@ -150,6 +150,14 @@ jobs:
           curl.exe -L --fail --retry 3 https://download.blender.org/release/Blender5.2/blender-5.2.1-windows-x64.zip -o "$env:RUNNER_TEMP/blender.zip"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Expand-Archive "$env:RUNNER_TEMP/blender.zip" .cache
+      - name: Install bundled Foundry Python dependencies for registration
+        shell: pwsh
+        run: |
+          & .cache/blender-5.2.1-windows-x64/5.2/python/bin/python.exe -m ensurepip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $wheels = Get-ChildItem blender/addons/io_scene_foundry/wheels/*.whl | ForEach-Object FullName
+          & .cache/blender-5.2.1-windows-x64/5.2/python/bin/python.exe -m pip install --no-index --no-deps $wheels
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test registered Foundry operator and actual collection property callbacks
         shell: pwsh
         run: |

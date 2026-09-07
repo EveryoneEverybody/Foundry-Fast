@@ -4,10 +4,11 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from dataclasses import replace
 
 from . import scenario_objects
 from .core import load_payload
-from .scenario_content import ContentIndex, tag_reference
+from .scenario_content import ContentIndex, tag_reference, plan
 from .materials import load_manifest
 from .material_builder import PreviewBuilder
 from .import_output import HelperLogTail
@@ -32,12 +33,45 @@ def selected_sky(rows, value):
     return matches[0]
 
 
+def reference_dependencies(inventory, options):
+    """Decode only model dependencies named by authored frames when objects are off."""
+    from .scenario_frames import object_identifier
+    index = ContentIndex(inventory, {'reference frames'})
+    identifiers = set()
+    for _, address in index.elements('', 'reference frames'):
+        try: identifiers.add(object_identifier(index.metadata(index.struct(address, 'object id'))))
+        except ValueError: pass
+    source_options = replace(options, objects=True, sound=True, light_references=True,
+                             ai=False, script_points=False, reference_debug=False)
+    placements = plan(inventory, options=source_options)['placements']
+    selected = {}
+    by_name = {r['name_index']: r for r in placements if r['name_index'] >= 0}
+    for row in placements:
+        try:
+            if object_identifier(row['metadata'].get('object id', {})) in identifiers:
+                selected[row['address']] = row
+        except ValueError: pass
+    queue = list(selected.values())
+    while queue:
+        row = queue.pop()
+        parent = by_name.get(row['parent_name_index'])
+        if parent and parent['address'] not in selected:
+            selected[parent['address']] = parent; queue.append(parent)
+    requests = [dict(row, position=row.get('source_position')) for row in selected.values()]
+    return placements, requests
+
+
 def prepare(session, content):
     """Prune source requests before extraction, then deduplicate all shader work."""
     options = session.options
     session.sky_entries = skies(session.inventory)
     session.sky_entry = selected_sky(session.sky_entries, options.sky)
     requested = list(content['placements'])
+    session.frame_placements = content['placements']
+    if (options.ai or options.hints) and not options.objects:
+        session.frame_placements, dependencies = reference_dependencies(session.inventory, options)
+        requested.extend(dependencies)
+        session.profile.counts['reference_model_requests'] = len({r['source_tag'] for r in dependencies if r['source_tag']})
     if session.sky_entry:
         requested.append(dict(source_tag=session.sky_entry['source_tag'], variant='', position=[0., 0., 0.]))
     assets = session.object_assets
@@ -84,7 +118,8 @@ def prepare(session, content):
                         yield 'Shared BSP, sky and object material extraction'
                     tail.poll(final=True)
                     if process.returncode: raise ValueError(f'Scenario shader helper failed ({process.returncode}); see {log_path}')
-                session.material_manifest = load_manifest(session.directory / 'shader_manifest.json', session.scene['source_tag'])
+                # A scenario combines hundreds of independently bounded assets.
+                session.material_manifest = load_manifest(session.directory / 'shader_manifest.json', session.scene['source_tag'], max_bytes=256 * 1024 * 1024)
             except (OSError, ValueError) as error:
                 session.warnings.append(str(error))
             finally:
@@ -98,4 +133,6 @@ def prepare(session, content):
         session.root['h3_shader_manifest'] = session.shader_source.name
         session.profile.counts['unique_shaders'] = len(session.material_manifest['shaders'])
         session.profile.counts['unique_bitmaps'] = len(session.material_manifest['bitmaps'])
+        if 'cache' in session.material_manifest:
+            session.profile.counts['bitmap_cache_hits'] = session.material_manifest['cache']['bitmap_cache_hits']
     return assets

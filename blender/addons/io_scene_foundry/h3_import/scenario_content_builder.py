@@ -140,7 +140,7 @@ class ContentBuilder:
                 except (OSError, ValueError, KeyError, TypeError) as error:
                     asset['diagnostics'] = list(asset.get('diagnostics', [])) + [str(error)]
         self.frame_resolver = FrameResolver(scenario_content.ContentIndex(self.inventory, {'reference frames', 'object names'} if self.options else scenario_content.CONTENT_ROOTS),
-                                            content['placements'], self.source_payloads)
+                                            self.frame_placements if self.options else content['placements'], self.source_payloads)
         for frame in self.frame_resolver.frames:
             with self.profile.span('reference-frame table validation'):
                 try:

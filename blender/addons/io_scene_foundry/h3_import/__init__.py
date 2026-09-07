@@ -318,7 +318,12 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             if rollback and self._session is not None:
                 self._session.rollback()
             if not rollback and self._is_scenario and self._session is not None:
-                self._session.finish_profile(time.monotonic() - self._started)
+                try:
+                    self._session.finish_profile(time.monotonic() - self._started)
+                except BaseException:
+                    state = 'failed'
+                    self._session.rollback()
+                    raise
                 if getattr(self, 'options', None) and self.options.setup_as_asset:
                     from ..tools.importer import set_asset
                     set_asset('.scenario')
