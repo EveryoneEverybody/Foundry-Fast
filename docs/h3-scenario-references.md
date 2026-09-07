@@ -74,8 +74,10 @@ Blender phase timings distinguish inclusive/exclusive calls and exclude modal
 suspension when measured through a generator. Extraction elapsed time explicitly
 includes helper/UI waits. Helper shader timings separate bitmap extraction from
 metadata work; BSP timing identifies decode plus source table reads. Unmeasured
-phases are absent, not estimates. Fine-grained final-cleanup and separate
-firing/script-point timings are follow-up work.
+phases are absent, not estimates. Separate firing-position, script-point, placement, semantic-object and packed-pose
+validation timings are included. Final UI cleanup remains outside the builder
+report. Pose application is explicitly unsupported, not reported as a zero-time
+success.
 
 Object-relative trigger volumes and parent-relative scenario placements remain
 retained without guessed geometry. Their resolver support is not yet enabled in

@@ -225,31 +225,32 @@ class ScenarioBuildSession(ContentBuilder):
                 continue
             collection = self.collection(kind.replace('_', ' ').title(), self.root)
             for row in plan[kind]:
-                destination = self.hint_collection(row, kind, collection)
-                # The pinned JMS/ASS decoder multiplies geometry by 100; the
-                # inventory keeps raw world units. Use Foundry's same conversion.
-                points = [import_transform.position(p, scene_nwo=self.context.scene.nwo) for p in row['points']]
-                curve = None
-                if len(points) > 1:
-                    curve = self.remember(bpy.data.curves, bpy.data.curves.new(row['name'], 'CURVE'))
-                    curve.dimensions = '3D'
-                    curve.resolution_u = 1
-                    curve.bevel_depth = 1.5 * self.scale
-                    curve.bevel_resolution = 0
-                    spline = curve.splines.new('POLY')
-                    spline.points.add(len(points) - 1)
-                    for point, value in zip(spline.points, points):
-                        point.co = (*value, 1.)
-                    spline.use_cyclic_u = row['closed']
-                ob = self.object(row['name'], curve, destination, kind, row['address'])
-                ob['h3_source_hint'] = json.dumps(row)
-                ob.show_in_front = True
-                ob.color = (0.1, .85, 1., 1.) if kind == 'sectors' else (1., .55, .05, 1.)
-                if curve is None:
-                    ob.location = points[0]
-                    ob.empty_display_type = 'PLAIN_AXES' if kind == 'firing_positions' else 'ARROWS'
-                    ob.empty_display_size = 5. * self.scale
-                self.counts[kind] += 1
+                with self.profile.span(kind.replace('_', ' ') + ' creation'):
+                    destination = self.hint_collection(row, kind, collection)
+                    # The pinned JMS/ASS decoder multiplies geometry by 100; the
+                    # inventory keeps raw world units. Use Foundry's same conversion.
+                    points = [import_transform.position(p, scene_nwo=self.context.scene.nwo) for p in row['points']]
+                    curve = None
+                    if len(points) > 1:
+                        curve = self.remember(bpy.data.curves, bpy.data.curves.new(row['name'], 'CURVE'))
+                        curve.dimensions = '3D'
+                        curve.resolution_u = 1
+                        curve.bevel_depth = 1.5 * self.scale
+                        curve.bevel_resolution = 0
+                        spline = curve.splines.new('POLY')
+                        spline.points.add(len(points) - 1)
+                        for point, value in zip(spline.points, points):
+                            point.co = (*value, 1.)
+                        spline.use_cyclic_u = row['closed']
+                    ob = self.object(row['name'], curve, destination, kind, row['address'])
+                    ob['h3_source_hint'] = json.dumps(row)
+                    ob.show_in_front = True
+                    ob.color = (0.1, .85, 1., 1.) if kind == 'sectors' else (1., .55, .05, 1.)
+                    if curve is None:
+                        ob.location = points[0]
+                        ob.empty_display_type = 'PLAIN_AXES' if kind == 'firing_positions' else 'ARROWS'
+                        ob.empty_display_size = 5. * self.scale
+                    self.counts[kind] += 1
                 if self.counts[kind] % 64 == 0:
                     yield f'{kind}: {self.counts[kind]}'
         self.warnings.extend(f"{r['address']}: {r['reason']}" for r in plan['diagnostics'])

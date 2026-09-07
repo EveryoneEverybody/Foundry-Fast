@@ -183,11 +183,12 @@ class ContentBuilder:
                     yield from self.object_template(key, assets, set(), row['diagnostics'])
                 if row.get('stored_pose'):
                     from .scenario_poses import validate_stored_pose
-                    row['pose_status'] = validate_stored_pose(row['stored_pose'], self.source_payloads.get(row['source_tag']))
+                    with self.profile.span('stored-pose validation (application unsupported)'):
+                        row['pose_status'] = validate_stored_pose(row['stored_pose'], self.source_payloads.get(row['source_tag']))
                     if row['pose_status']['status'] != 'empty':
                         row['diagnostics'].append(row['pose_status']['reason'])
                         self.profile.counts['stored_pose_fallback'] += 1
-                with self.profile.span('placement instancing and semantic markers'):
+                with self.profile.span('semantic non-render object creation' if asset.get('status') == 'semantic' else 'placement instancing'):
                     self.profile.counts['placements'] += 1
                     ob = self.object(row['name'], None, collection, 'placed_object', row['address'])
                     ob.matrix_world = self.content_transform(row['position'], row['rotation'], row['scale'])
