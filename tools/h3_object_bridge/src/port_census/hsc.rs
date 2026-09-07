@@ -1,7 +1,7 @@
 //! HaloScript census parser. No code execution or source rewriting.
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Location {
@@ -21,13 +21,13 @@ pub struct Form {
     pub children: Option<Vec<Form>>,
 }
 impl Form {
-    fn text(&self) -> &str {
+    pub(super) fn text(&self) -> &str {
         self.atom.as_deref().unwrap_or("")
     }
-    fn list(&self) -> &[Form] {
+    pub(super) fn list(&self) -> &[Form] {
         self.children.as_deref().unwrap_or(&[])
     }
-    fn head(&self) -> &str {
+    pub(super) fn head(&self) -> &str {
         self.list().first().map(Form::text).unwrap_or("")
     }
 }
@@ -231,56 +231,27 @@ impl Catalogue {
     }
 }
 
-pub fn compatibility(name: &str, argc: usize, cat: &Catalogue) -> (&'static str, String) {
-    let Some(source) = cat.h3.functions.get(name) else {
-        return ("UNKNOWN","Name is absent from the supplied H3 catalogue; may be an external script or undocumented function".into());
-    };
-    let usable: Vec<_> = source
-        .iter()
-        .filter(|s| argc >= s.min_args && s.max_args.is_none_or(|n| argc <= n))
-        .collect();
-    if usable.is_empty() {
-        return (
-            "UNKNOWN",
-            "No documented H3 overload accepts this argument count".into(),
-        );
-    }
-    if let Some(target) = cat.reach.functions.get(name) {
-        if usable.iter().any(|a| {
-            target.iter().any(|b| {
-                a.result == b.result
-                    && a.args == b.args
-                    && a.min_args == b.min_args
-                    && a.max_args == b.max_args
-            })
-        }) {
-            return ("DIRECT","Documented overload matches; argument expression types and runtime behavior are not validated".into());
-        }
-        return (
-            "SIGNATURE_CHANGE",
-            "Name exists in Reach but no identical documented overload matches this call".into(),
-        );
-    }
-    if name.starts_with("cortana_") && usable.iter().all(|s| s.result == "void") {
-        return ("STUB_CANDIDATE","Absent from the Reach catalogue; review Cortana presentation and call-site control flow before a void stub".into());
-    }
+#[cfg(test)]
+pub fn compatibility(name: &str, argc: usize, cat: &Catalogue) -> (String, String) {
+    let review = super::hsc_compat::bundled();
+    let cat = super::hsc_compat::supplemented(cat, &review);
+    let r = super::hsc_compat::classify(name, &vec![vec![]; argc], &cat, &review);
     (
-        "UNSUPPORTED",
-        "Documented in H3 and absent from the supplied Reach catalogue; no reviewed counterpart"
-            .into(),
+        r["classification"].as_str().unwrap().into(),
+        r["reason"].as_str().unwrap().into(),
     )
 }
 
 #[derive(Clone)]
-struct Declaration {
-    name: String,
-    kind: String,
-    result: String,
-    params: BTreeMap<String, String>,
-    location: Location,
-    body: Vec<Form>,
+pub(super) struct Declaration {
+    pub(super) name: String,
+    pub(super) kind: String,
+    pub(super) result: String,
+    pub(super) params: BTreeMap<String, String>,
+    pub(super) location: Location,
+    pub(super) body: Vec<Form>,
 }
-fn declaration(form: &Form) -> Option<Declaration> {
+pub(super) fn declaration(form: &Form) -> Option<Declaration> {
     let v = form.list();
     if form.head() == "global" && v.len() >= 4 {
         return Some(Declaration {
@@ -332,9 +303,11 @@ pub struct Sources {
     pub files: Vec<Value>,
     pub forms: Vec<Form>,
     pub diagnostics: Vec<Value>,
+    pub texts: BTreeMap<String, String>,
 }
 impl Sources {
     pub fn add(&mut self, path: &str, text: &str, scope: &str) {
+        self.texts.insert(path.into(), text.into());
         let (forms, errors) = parse(path, text);
         self.files.push(json!({"path":path,"scope":scope,"bytes":text.len(),"sha256":super::digest(text.as_bytes()),"forms":forms.len(),"diagnostics":errors.len(),"ast":forms}));
         if scope != "discovered_not_in_scenario_source_table" {
@@ -343,230 +316,7 @@ impl Sources {
         }
     }
     pub fn analyze(&self, cat: &Catalogue, symbols: &BTreeMap<String, Vec<Value>>) -> Value {
-        let declarations: Vec<_> = self.forms.iter().filter_map(declaration).collect();
-        let mut lookup: BTreeMap<String, Vec<&Declaration>> = BTreeMap::new();
-        for d in &declarations {
-            lookup.entry(d.name.clone()).or_default().push(d);
-        }
-        let mut calls = Vec::new();
-        let mut symbol_uses = Vec::new();
-        let mut global_uses = Vec::new();
-        let mut script_calls = Vec::new();
-        let mut unknown = Vec::new();
-        let mut diagnostics = self.diagnostics.clone();
-        for (name, defs) in &lookup {
-            if defs.len() > 1 {
-                diagnostics.push(json!({"code":"duplicate_declaration","name":name,"locations":defs.iter().map(|d|&d.location).collect::<Vec<_>>(),"note":"Source discovery does not prove which files the compiler includes"}));
-            }
-        }
-        for form in &self.forms {
-            if declaration(form).is_none() {
-                diagnostics.push(json!({"code":"unhandled_top_level_form","location":form.location,"head":form.head()}));
-            }
-        }
-        struct Walk<'a> {
-            cat: &'a Catalogue,
-            symbols: &'a BTreeMap<String, Vec<Value>>,
-            lookup: &'a BTreeMap<String, Vec<&'a Declaration>>,
-            calls: &'a mut Vec<Value>,
-            uses: &'a mut Vec<Value>,
-            globals: &'a mut Vec<Value>,
-            script_calls: &'a mut Vec<Value>,
-            unknown: &'a mut Vec<Value>,
-        }
-        impl Walk<'_> {
-            fn atom(
-                &mut self,
-                f: &Form,
-                d: &Declaration,
-                expected: Option<&str>,
-                call: Option<&str>,
-            ) {
-                let name = f.text().to_lowercase();
-                if f.quoted
-                    && !expected.is_some_and(|t| {
-                        matches!(
-                            t,
-                            "object"
-                                | "object_name"
-                                | "unit"
-                                | "vehicle"
-                                | "device"
-                                | "scenery"
-                                | "weapon"
-                                | "effect_scenery"
-                                | "trigger_volume"
-                                | "cutscene_flag"
-                                | "cutscene_camera_point"
-                                | "point_reference"
-                                | "ai"
-                                | "string_id"
-                        )
-                    })
-                {
-                    return;
-                }
-                if name.is_empty() || d.params.contains_key(&name) {
-                    return;
-                }
-                if let Some(defs) = self.lookup.get(&name) {
-                    if defs.iter().any(|v| v.kind == "global") {
-                        self.globals.push(json!({"name":name,"kind":"user_global","location":f.location,"enclosing_script":d.name}));
-                    }
-                    return;
-                }
-                if let Some(ty) = self.cat.h3.globals.get(&name).filter(|_| !f.quoted) {
-                    let target = self.cat.reach.globals.get(&name);
-                    self.globals.push(json!({"name":name,"kind":"engine_global","h3_type":ty,"reach_type":target,"classification":if target==Some(ty){"DIRECT"}else if target.is_some(){"SIGNATURE_CHANGE"}else{"UNSUPPORTED"},"location":f.location,"enclosing_script":d.name}));
-                    return;
-                }
-                let required = expected.is_some_and(|t| {
-                    matches!(
-                        t,
-                        "object"
-                            | "object_name"
-                            | "unit"
-                            | "vehicle"
-                            | "device"
-                            | "scenery"
-                            | "weapon"
-                            | "effect_scenery"
-                            | "trigger_volume"
-                            | "cutscene_flag"
-                            | "cutscene_camera_point"
-                            | "point_reference"
-                            | "ai"
-                            | "ai_command_script"
-                    )
-                });
-                if matches!(
-                    expected,
-                    Some("string") | Some("real") | Some("short") | Some("long") | Some("boolean")
-                ) {
-                    return;
-                }
-                let matches = self.symbols.get(&name);
-                if let Some(matches) = matches {
-                    self.uses.push(json!({"symbol":name,"location":f.location,"enclosing_script":d.name,"expected_type":expected,"call":call,"matches":matches,"status":if matches.len()==1{"RESOLVED"}else{"AMBIGUOUS"}}));
-                } else if required
-                    && !["none", "true", "false"].contains(&name.as_str())
-                    && name.parse::<f64>().is_err()
-                {
-                    self.unknown.push(json!({"symbol":name,"location":f.location,"enclosing_script":d.name,"expected_type":expected,"call":call,"reason":"No matching scenario name or script declaration; dynamic and engine special symbols may remain"}));
-                }
-            }
-            fn expression(
-                &mut self,
-                f: &Form,
-                d: &Declaration,
-                expected: Option<&str>,
-                call: Option<&str>,
-            ) {
-                if f.atom.is_some() {
-                    self.atom(f, d, expected, call);
-                    return;
-                }
-                let v = f.list();
-                if v.is_empty() {
-                    return;
-                }
-                if v[0].children.is_some() {
-                    for child in v {
-                        self.expression(child, d, None, call);
-                    }
-                    return;
-                }
-                let name = f.head().to_lowercase();
-                let argc = v.len() - 1;
-                let mut arg_types: Vec<String> = vec![];
-                if let Some(defs) = self.lookup.get(&name) {
-                    self.script_calls.push(json!({"name":name,"location":f.location,"enclosing_script":d.name,"argument_count":argc,"declaration_locations":defs.iter().map(|x|&x.location).collect::<Vec<_>>() }));
-                } else {
-                    let (classification, reason) = compatibility(&name, argc, self.cat);
-                    let sigs: Vec<_> = self
-                        .cat
-                        .h3
-                        .functions
-                        .get(&name)
-                        .into_iter()
-                        .flatten()
-                        .filter(|s| argc >= s.min_args && s.max_args.is_none_or(|n| argc <= n))
-                        .collect();
-                    if let Some(first) = sigs.first() {
-                        if sigs.iter().all(|s| s.args == first.args) {
-                            arg_types = first.args.clone();
-                        }
-                    }
-                    self.calls.push(json!({"name":name,"location":f.location,"enclosing_script":d.name,"argument_count":argc,"classification":classification,"reason":reason,"expression":f,"h3_signatures":self.cat.h3.functions.get(&name),"reach_signatures":self.cat.reach.functions.get(&name),"evidence":"documented_signature_comparison","proven_target_status":"NOT_TESTED","mission_impact":if classification=="STUB_CANDIDATE"{"presentation_candidate_requires_review"}else if classification=="UNSUPPORTED"{"control_flow_review_required"}else{"unknown"},"tentative_mvp_policy":if classification=="STUB_CANDIDATE"{"STUB_VOID"}else if classification=="UNSUPPORTED"{"MANUAL"}else{"REVIEW"}}));
-                }
-                if name == "cond" {
-                    for clause in &v[1..] {
-                        for arg in clause.list() {
-                            self.expression(arg, d, None, Some(&name));
-                        }
-                    }
-                } else {
-                    for (i, arg) in v[1..].iter().enumerate() {
-                        self.expression(arg, d, arg_types.get(i).map(String::as_str), Some(&name));
-                    }
-                }
-            }
-        }
-        let mut walk = Walk {
-            cat,
-            symbols,
-            lookup: &lookup,
-            calls: &mut calls,
-            uses: &mut symbol_uses,
-            globals: &mut global_uses,
-            script_calls: &mut script_calls,
-            unknown: &mut unknown,
-        };
-        for d in &declarations {
-            for f in &d.body {
-                walk.expression(f, d, None, None);
-            }
-        }
-        let mut inventory: BTreeMap<String, Value> = BTreeMap::new();
-        let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-        for call in &calls {
-            let name = call["name"].as_str().unwrap();
-            let row=inventory.entry(name.into()).or_insert_with(||json!({"name":name,"call_count":0,"classifications":[],"documented_h3":cat.h3.functions.contains_key(name)}));
-            row["call_count"] = json!(row["call_count"].as_u64().unwrap() + 1);
-            if !row["classifications"]
-                .as_array()
-                .unwrap()
-                .contains(&call["classification"])
-            {
-                row["classifications"]
-                    .as_array_mut()
-                    .unwrap()
-                    .push(call["classification"].clone());
-            }
-        }
-        for row in inventory.values() {
-            for status in row["classifications"].as_array().unwrap() {
-                *counts.entry(status.as_str().unwrap().into()).or_default() += 1;
-            }
-        }
-        let engine_count = inventory
-            .values()
-            .filter(|r| r["documented_h3"] == true)
-            .count();
-        let unsupported: Vec<_> = calls
-            .iter()
-            .filter(|r| r["classification"] != "DIRECT")
-            .cloned()
-            .collect();
-        let names: BTreeSet<_> = global_uses
-            .iter()
-            .filter(|r| r["kind"] == "engine_global")
-            .map(|r| r["name"].clone().to_string())
-            .collect();
-        json!({"files":self.files,"declarations":declarations.iter().map(|d|json!({"name":d.name,"kind":d.kind,"return_type":d.result,"parameters":d.params,"location":d.location})).collect::<Vec<_>>(),
-            "engine_functions":inventory.values().collect::<Vec<_>>(),"call_sites":calls,"unsupported_call_sites":unsupported,"user_script_calls":script_calls,"globals":global_uses,"scenario_symbol_uses":symbol_uses,"unresolved_symbols":unknown,"diagnostics":diagnostics,
-            "summary":{"source_files":self.files.len(),"analyzed_source_files":self.files.iter().filter(|f| f["scope"]!="discovered_not_in_scenario_source_table").count(),"declarations":declarations.len(),"unique_engine_functions":engine_count,"unique_engine_globals":names.len(),"function_classifications":counts,"classification_count_basis":"Unique function names per observed call classification, including unknown names; a name can occur in multiple classifications"},
-            "catalogue_evidence":cat.evidence,"limitations":["Static source inventory, not compiler include resolution or execution reachability","DIRECT compares documented overloads and argument counts, not expression types or runtime equivalence","Unresolved calls may be external shared scripts or undocumented functions; no guessed renames or emulation"]})
+        super::hsc_analysis::analyze(self, cat, symbols)
     }
 }
 

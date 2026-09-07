@@ -301,7 +301,12 @@ pub fn minimum_sets(graph: &Graph, scenario_path: &str) -> (Value, Value) {
     (boot, combat)
 }
 
-pub fn blockers(graph: &Graph, scripts: &Value, boot: &Value, source: &str) -> Vec<Value> {
+pub fn blockers(
+    graph: &Graph,
+    scripts: &Value,
+    missing_relevance: &[Value],
+    source: &str,
+) -> Vec<Value> {
     let mut result = Vec::new();
     for (id, severity, message, groups) in [
         (
@@ -351,38 +356,17 @@ pub fn blockers(graph: &Graph, scripts: &Value, boot: &Value, source: &str) -> V
             result.push(json!({"id":id,"severity":severity,"message":message,"source_tags":tags,"evidence_level":"PROVISIONAL","proven_target_status":"NOT_TESTED"}));
         }
     }
-    let missing: Vec<_> = graph
-        .tags
-        .iter()
-        .filter(|(_, v)| v["exists"] == false)
-        .map(|(p, _)| p.clone())
-        .collect();
-    if !missing.is_empty() {
-        let boot_missing = boot["source_assets"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|v| missing.iter().any(|m| v == m));
-        result.push(json!({"id":"missing_sources","severity":if boot_missing{"BOOT_BLOCKER"}else{"UNKNOWN"},"message":"Referenced H3 files are missing; runtime necessity needs ownership review","source_tags":missing,"evidence_level":"VERIFIED"}));
+    let mut missing_groups: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    for row in missing_relevance {
+        missing_groups
+            .entry(row["blocker_severity"].as_str().unwrap().into())
+            .or_default()
+            .push(row.clone());
     }
-    let bad:Vec<_>=scripts["unsupported_call_sites"].as_array().into_iter().flatten().filter(|r|r["classification"]=="UNSUPPORTED"||r["classification"]=="SIGNATURE_CHANGE").map(|r|json!({"name":r["name"],"location":r["location"],"enclosing_script":r["enclosing_script"]})).collect();
-    if !bad.is_empty() {
-        result.push(json!({"id":"script_control_flow","severity":"MISSION_BLOCKER","message":"Unsupported or changed documented calls require call-site and progression review","call_sites":bad,"evidence_level":"PROVISIONAL"}));
+    for (severity, rows) in missing_groups {
+        result.push(json!({"id":format!("missing_sources_{}",severity.to_lowercase()),"severity":severity,"message":"Missing source references grouped by observed planning relevance and resource role; runtime necessity remains unproven","source_tags":rows.iter().map(|r|&r["source_path"]).collect::<Vec<_>>(),"references":rows,"evidence_level":"PROVISIONAL"}));
     }
-    let cortana: Vec<_> = scripts["unsupported_call_sites"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|r| {
-            r["name"]
-                .as_str()
-                .is_some_and(|s| s.starts_with("cortana_"))
-        })
-        .map(|r| json!({"name":r["name"],"location":r["location"]}))
-        .collect();
-    if !cortana.is_empty() {
-        result.push(json!({"id":"cortana_presentation","severity":"FIDELITY_BLOCKER","message":"Cortana moment calls lack a documented Reach match; visual stubs require control-flow review","call_sites":cortana,"evidence_level":"PROVISIONAL"}));
-    }
+    result.extend(super::relevance::script_blockers(scripts));
     if graph.scans[source]
         .block_counts
         .get("node orientations")

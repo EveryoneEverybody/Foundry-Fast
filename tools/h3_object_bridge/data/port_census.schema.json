@@ -27,7 +27,8 @@
     "blockers",
     "diagnostics",
     "evidence",
-    "limitations"
+    "limitations",
+    "missing_reference_relevance"
   ],
   "properties": {
     "format": {
@@ -120,8 +121,62 @@
         "scenario_symbol_uses",
         "unsupported_call_sites",
         "catalogue_evidence",
-        "summary"
-      ]
+        "summary",
+        "user_script_calls",
+        "unresolved_call_sites",
+        "transpiler_mappings",
+        "resolution_policy"
+      ],
+      "properties": {
+        "call_sites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hsc_call"
+          }
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "unique_engine_functions",
+            "engine_call_sites",
+            "function_classifications",
+            "raw_function_classifications",
+            "call_site_classifications"
+          ]
+        },
+        "transpiler_mappings": {
+          "type": "object",
+          "required": [
+            "format",
+            "version",
+            "source_rewriting_performed",
+            "reviewed_catalogue",
+            "call_mappings"
+          ],
+          "properties": {
+            "source_rewriting_performed": {
+              "const": false
+            },
+            "reviewed_catalogue": {
+              "type": "object",
+              "required": [
+                "format",
+                "version",
+                "mappings",
+                "signature_supplements"
+              ],
+              "properties": {
+                "mappings": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/hsc_mapping"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "minimum_boot_set": {
       "type": "object",
@@ -187,6 +242,46 @@
               "PROVISIONAL",
               "UNKNOWN"
             ]
+          }
+        }
+      }
+    },
+    "missing_reference_relevance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source_path",
+          "dependency_relevance",
+          "blocker_severity",
+          "evidence",
+          "confidence",
+          "runtime_required"
+        ],
+        "properties": {
+          "dependency_relevance": {
+            "enum": [
+              "REQUIRED_BY_BOOT_SET",
+              "REQUIRED_BY_SELECTED_COMBAT_SET",
+              "REQUIRED_BY_MISSION_PROGRESSION",
+              "CINEMATIC_ONLY",
+              "FIDELITY_ONLY",
+              "OPTIONAL_OR_UNREACHED",
+              "UNKNOWN"
+            ]
+          },
+          "blocker_severity": {
+            "enum": [
+              "BOOT_BLOCKER",
+              "MISSION_BLOCKER",
+              "COMBAT_BLOCKER",
+              "FIDELITY_BLOCKER",
+              "OPTIONAL",
+              "UNKNOWN"
+            ]
+          },
+          "runtime_required": {
+            "const": "UNKNOWN"
           }
         }
       }
@@ -308,6 +403,141 @@
               "pattern": "^[a-f0-9]{64}$"
             }
           }
+        }
+      }
+    },
+    "hsc_call": {
+      "type": "object",
+      "required": [
+        "name",
+        "location",
+        "enclosing_script",
+        "original_source_expression",
+        "expression",
+        "classification",
+        "raw_name_match",
+        "signature_match",
+        "call_site_role",
+        "blocker_severity",
+        "evidence",
+        "confidence",
+        "impact_evidence",
+        "impact_confidence",
+        "impact_notes",
+        "source_overload_candidates",
+        "target_overload_candidates",
+        "mapping"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "DIRECT",
+            "RENAMED",
+            "SIGNATURE_CHANGE",
+            "EMULATABLE",
+            "STUB_CANDIDATE",
+            "UNSUPPORTED",
+            "UNKNOWN"
+          ]
+        },
+        "signature_match": {
+          "enum": [
+            "exact signature",
+            "compatible signature",
+            "transformed signature",
+            "ambiguous overload",
+            "incompatible signature"
+          ]
+        },
+        "blocker_severity": {
+          "enum": [
+            "BOOT_BLOCKER",
+            "MISSION_BLOCKER",
+            "COMBAT_BLOCKER",
+            "FIDELITY_BLOCKER",
+            "OPTIONAL",
+            "UNKNOWN"
+          ]
+        },
+        "location": {
+          "type": "object",
+          "required": [
+            "file",
+            "line",
+            "column",
+            "byte"
+          ],
+          "properties": {
+            "line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "call_site_role": {
+          "enum": [
+            "REQUIRED",
+            "MISSION_PROGRESSION",
+            "COMBAT",
+            "CINEMATIC",
+            "UI",
+            "METAGAME",
+            "FIDELITY",
+            "OPTIONAL",
+            "UNKNOWN"
+          ]
+        }
+      }
+    },
+    "hsc_mapping": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_game",
+        "source_function",
+        "target_game",
+        "target_function",
+        "mapping_kind",
+        "source_signature",
+        "target_signature",
+        "argument_transform",
+        "return_transform",
+        "evidence",
+        "confidence",
+        "notes",
+        "fidelity_compatibility",
+        "runtime_verified"
+      ],
+      "properties": {
+        "mapping_kind": {
+          "enum": [
+            "SAME",
+            "RENAMED",
+            "SIGNATURE_CHANGE",
+            "EMULATABLE",
+            "STUB_CANDIDATE",
+            "UNSUPPORTED",
+            "UNKNOWN"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "VERIFIED",
+            "HIGH",
+            "PROVISIONAL",
+            "UNKNOWN"
+          ]
+        },
+        "runtime_verified": {
+          "const": false
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1
         }
       }
     }

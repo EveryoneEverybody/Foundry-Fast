@@ -49,7 +49,7 @@ jobs:
         run: |
           from pathlib import Path
           import hashlib, json, os, shutil, subprocess, zipfile
-          stage = Path(os.environ['RUNNER_TEMP']) / 'H3-port-census-v1'
+          stage = Path(os.environ['RUNNER_TEMP']) / 'H3-port-census-1.9.46'
           stage.mkdir()
           exe = Path(os.environ['CARGO_TARGET_DIR']) / 'release/h3-scenario-inspect.exe'
           subprocess.run([str(exe), 'port-census', '--help'], check=True)
@@ -57,17 +57,20 @@ jobs:
           shutil.copy2('docs/h3-port-census.md', stage / 'README.md')
           shutil.copy2('tools/h3_object_bridge/data/port_census.schema.json', stage / 'port_census.schema.json')
           shutil.copy2('LICENSE', stage / 'LICENSE')
+          for name in ('hsc_compatibility.json', 'hsc_context_reviews.json', 'hsc_signatures.json'):
+              shutil.copy2(Path('tools/h3_object_bridge/data') / name, stage / name)
+          shutil.copy2('docs/h3-hsc-compatibility.md', stage / 'HSC-COMPATIBILITY.md')
           files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(stage.iterdir())}
-          (stage / 'build.json').write_text(json.dumps({'checkpoint':'h3-port-census-v1','commit':os.environ['GITHUB_SHA'],'sha256':files},indent=2))
-          archive = Path('H3-port-census-v1-windows.zip')
+          (stage / 'build.json').write_text(json.dumps({'checkpoint':'h3-port-census-1.9.46','commit':os.environ['GITHUB_SHA'],'sha256':files},indent=2))
+          archive = Path('H3-port-census-1.9.46-windows.zip')
           with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
               for p in sorted(stage.iterdir()): z.write(p, p.name)
-          Path('H3-port-census-v1-windows.sha256').write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + '  ' + archive.name + '\n')
+          Path('H3-port-census-1.9.46-windows.sha256').write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + '  ' + archive.name + '\n')
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: H3-port-census-v1-windows
+          name: H3-port-census-1.9.46-windows
           path: |
-            H3-port-census-v1-windows.zip
-            H3-port-census-v1-windows.sha256
+            H3-port-census-1.9.46-windows.zip
+            H3-port-census-1.9.46-windows.sha256
           if-no-files-found: error

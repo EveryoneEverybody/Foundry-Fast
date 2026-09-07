@@ -1,0 +1,3205 @@
+{
+  "format": "foundry.hsc-compatibility",
+  "version": 1,
+  "source_game": "halo3",
+  "target_game": "reach",
+  "catalogue_revision": "6ebf90fc134255385e9d10de3d9d74a1f257ae48",
+  "type_aliases": [],
+  "signature_supplements": [
+    {
+      "game": "h3",
+      "function": "sleep_until",
+      "signature": {
+        "result": "boolean",
+        "args": [
+          "boolean",
+          "short",
+          "long"
+        ],
+        "raw": "(<boolean> sleep_until <boolean> <short> <long>)",
+        "min_args": 3,
+        "max_args": 3
+      },
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "H3EK/data/levels/solo/040_voi/scripts/040_voi_mission.hsc:3738"
+        },
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "HREK/data/levels/solo/m45/scripts/m45_mission.hsc",
+          "expression": "(sleep_until (>= s_objcon_bch 10) 30 (* 30 7))"
+        },
+        {
+          "kind": "INFERENCE",
+          "source": "ManagedDonkey/game/source/hs/hs_library_internal_compile.cpp:500",
+          "note": "Reconstructed H3 compiler parses condition boolean, period short, expiration long; supporting evidence, not raw native proof"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "hs_doc lists only the optional polling period. Preserve the timeout overload independently; stock usage establishes existence, no runtime equivalence claim."
+    },
+    {
+      "game": "reach",
+      "function": "sleep_until",
+      "signature": {
+        "result": "boolean",
+        "args": [
+          "boolean",
+          "short",
+          "long"
+        ],
+        "raw": "(<boolean> sleep_until <boolean> <short> <long>)",
+        "min_args": 3,
+        "max_args": 3
+      },
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "H3EK/data/levels/solo/040_voi/scripts/040_voi_mission.hsc:3738"
+        },
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "HREK/data/levels/solo/m45/scripts/m45_mission.hsc",
+          "expression": "(sleep_until (>= s_objcon_bch 10) 30 (* 30 7))"
+        },
+        {
+          "kind": "INFERENCE",
+          "source": "ManagedDonkey/game/source/hs/hs_library_internal_compile.cpp:500",
+          "note": "Reconstructed H3 compiler parses condition boolean, period short, expiration long; supporting evidence, not raw native proof"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "hs_doc lists only the optional polling period. Preserve the timeout overload independently; stock usage establishes existence, no runtime equivalence claim."
+    }
+  ],
+  "mappings": [
+    {
+      "id": "h3-reach.campaign_is_finished_heroic.0",
+      "source_game": "halo3",
+      "source_function": "campaign_is_finished_heroic",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<boolean> campaign_is_finished_heroic)",
+        "result": "boolean"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "campaign_is_finished_heroic"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "No reviewed Reach equivalent for the H3 campaign completion/skull state. Optional only in the separately reviewed skull scripts; other uses require contextual review.",
+      "fidelity_compatibility": "UNSUPPORTED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.campaign_is_finished_legendary.0",
+      "source_game": "halo3",
+      "source_function": "campaign_is_finished_legendary",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<boolean> campaign_is_finished_legendary)",
+        "result": "boolean"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "campaign_is_finished_legendary"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "No reviewed Reach equivalent for the H3 campaign completion/skull state. Optional only in the separately reviewed skull scripts; other uses require contextual review.",
+      "fidelity_compatibility": "UNSUPPORTED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.campaign_is_finished_normal.0",
+      "source_game": "halo3",
+      "source_function": "campaign_is_finished_normal",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<boolean> campaign_is_finished_normal)",
+        "result": "boolean"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "campaign_is_finished_normal"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "No reviewed Reach equivalent for the H3 campaign completion/skull state. Optional only in the separately reviewed skull scripts; other uses require contextual review.",
+      "fidelity_compatibility": "UNSUPPORTED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.campaign_metagame_award_primary_skull.0",
+      "source_game": "halo3",
+      "source_function": "campaign_metagame_award_primary_skull",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [
+          "object",
+          "short"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> campaign_metagame_award_primary_skull <object> <short>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "campaign_metagame_award_primary_skull"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "No reviewed Reach equivalent for the H3 campaign completion/skull state. Optional only in the separately reviewed skull scripts; other uses require contextual review.",
+      "fidelity_compatibility": "UNSUPPORTED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.chud_show_fire_grenades.0",
+      "source_game": "halo3",
+      "source_function": "chud_show_fire_grenades",
+      "target_game": "reach",
+      "target_function": "chud_show_grenades",
+      "mapping_kind": "SIGNATURE_CHANGE",
+      "source_signature": {
+        "args": [
+          "boolean"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> chud_show_fire_grenades <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "boolean"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> chud_show_grenades <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity",
+        "requires": "accept_broader_grenade_hud_toggle"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "chud_show_fire_grenades"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "chud_show_grenades"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "H3 controls only the firebomb HUD. Reach toggles the whole grenade HUD. Proposed rough-port fallback changes visible scope; requires explicit fidelity policy. No claim of exact equivalence.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "chud_show_grenades",
+        "signature": {
+          "args": [
+            "boolean"
+          ],
+          "max_args": 1,
+          "min_args": 1,
+          "raw": "(<void> chud_show_grenades <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.cortana_effect_kill.0",
+      "source_game": "halo3",
+      "source_function": "cortana_effect_kill",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "STUB_CANDIDATE",
+      "source_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<void> cortana_effect_kill)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "reviewed_generated_stub",
+        "requires": "call_site_approval"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "cortana_effect_kill"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Presentation-only void stub is a proposal requiring call-site control-flow review, never an automatic drop.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "reviewed_generated_stub",
+        "name": "h3_compat_cortana_effect_kill",
+        "signature": {
+          "args": [],
+          "max_args": 0,
+          "min_args": 0,
+          "raw": "(<void> cortana_effect_kill)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.cortana_terminal_was_accessed.0",
+      "source_game": "halo3",
+      "source_function": "cortana_terminal_was_accessed",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "STUB_CANDIDATE",
+      "source_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<void> cortana_terminal_was_accessed)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "reviewed_generated_stub",
+        "requires": "call_site_approval"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "cortana_terminal_was_accessed"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Presentation-only void stub is a proposal requiring call-site control-flow review, never an automatic drop.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "reviewed_generated_stub",
+        "name": "h3_compat_cortana_terminal_was_accessed",
+        "signature": {
+          "args": [],
+          "max_args": 0,
+          "min_args": 0,
+          "raw": "(<void> cortana_terminal_was_accessed)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_activate_team_nav_point_flag.0",
+      "source_game": "halo3",
+      "source_function": "hud_activate_team_nav_point_flag",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "cutscene_flag",
+          "real"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> hud_activate_team_nav_point_flag <team> <cutscene_flag> <real>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_activate_team_nav_point_flag",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_activate_team_nav_point_flag"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_activate_team_nav_point_flag",
+        "signature": {
+          "args": [
+            "team",
+            "cutscene_flag",
+            "real"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> hud_activate_team_nav_point_flag <team> <cutscene_flag> <real>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_breadcrumbs_activate_team_nav_point_flag.0",
+      "source_game": "halo3",
+      "source_function": "hud_breadcrumbs_activate_team_nav_point_flag",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "cutscene_flag",
+          "real"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> hud_breadcrumbs_activate_team_nav_point_flag <team> <cutscene_flag> <real>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_activate_team_nav_point_flag",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_breadcrumbs_activate_team_nav_point_flag"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_activate_team_nav_point_flag",
+        "signature": {
+          "args": [
+            "team",
+            "cutscene_flag",
+            "real"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> hud_breadcrumbs_activate_team_nav_point_flag <team> <cutscene_flag> <real>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_breadcrumbs_activate_team_nav_point_object.0",
+      "source_game": "halo3",
+      "source_function": "hud_breadcrumbs_activate_team_nav_point_object",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "object",
+          "string",
+          "real"
+        ],
+        "max_args": 4,
+        "min_args": 4,
+        "raw": "(<void> hud_breadcrumbs_activate_team_nav_point_object <team> <object> <string> <real>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_activate_team_nav_point_object",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_breadcrumbs_activate_team_nav_point_object"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_activate_team_nav_point_object",
+        "signature": {
+          "args": [
+            "team",
+            "object",
+            "string",
+            "real"
+          ],
+          "max_args": 4,
+          "min_args": 4,
+          "raw": "(<void> hud_breadcrumbs_activate_team_nav_point_object <team> <object> <string> <real>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_breadcrumbs_activate_team_nav_point_position.0",
+      "source_game": "halo3",
+      "source_function": "hud_breadcrumbs_activate_team_nav_point_position",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "real",
+          "real",
+          "real",
+          "string",
+          "real"
+        ],
+        "max_args": 6,
+        "min_args": 6,
+        "raw": "(<void> hud_breadcrumbs_activate_team_nav_point_position <team> <real> <real> <real> <string> <real>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_activate_team_nav_point_position",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_breadcrumbs_activate_team_nav_point_position"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_activate_team_nav_point_position",
+        "signature": {
+          "args": [
+            "team",
+            "real",
+            "real",
+            "real",
+            "string",
+            "real"
+          ],
+          "max_args": 6,
+          "min_args": 6,
+          "raw": "(<void> hud_breadcrumbs_activate_team_nav_point_position <team> <real> <real> <real> <string> <real>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_breadcrumbs_deactivate_team_nav_point_flag.0",
+      "source_game": "halo3",
+      "source_function": "hud_breadcrumbs_deactivate_team_nav_point_flag",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "cutscene_flag"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> hud_breadcrumbs_deactivate_team_nav_point_flag <team> <cutscene_flag>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_deactivate_team_nav_point_flag",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_breadcrumbs_deactivate_team_nav_point_flag"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_deactivate_team_nav_point_flag",
+        "signature": {
+          "args": [
+            "team",
+            "cutscene_flag"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> hud_breadcrumbs_deactivate_team_nav_point_flag <team> <cutscene_flag>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_breadcrumbs_deactivate_team_nav_point_object.0",
+      "source_game": "halo3",
+      "source_function": "hud_breadcrumbs_deactivate_team_nav_point_object",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "string"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> hud_breadcrumbs_deactivate_team_nav_point_object <team> <string>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_deactivate_team_nav_point_object",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_breadcrumbs_deactivate_team_nav_point_object"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_deactivate_team_nav_point_object",
+        "signature": {
+          "args": [
+            "team",
+            "string"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> hud_breadcrumbs_deactivate_team_nav_point_object <team> <string>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_breadcrumbs_deactivate_team_nav_point_position.0",
+      "source_game": "halo3",
+      "source_function": "hud_breadcrumbs_deactivate_team_nav_point_position",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "string"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> hud_breadcrumbs_deactivate_team_nav_point_position <team> <string>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_deactivate_team_nav_point_position",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_breadcrumbs_deactivate_team_nav_point_position"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_breadcrumbs_deactivate_team_nav_point_position",
+        "signature": {
+          "args": [
+            "team",
+            "string"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> hud_breadcrumbs_deactivate_team_nav_point_position <team> <string>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.hud_breadcrumbs_using_revised_nav_points.0",
+      "source_game": "halo3",
+      "source_function": "hud_breadcrumbs_using_revised_nav_points",
+      "target_game": "reach",
+      "target_function": "chud_breadcrumbs_using_revised_nav_points",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<boolean> hud_breadcrumbs_using_revised_nav_points)",
+        "result": "boolean"
+      },
+      "target_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<boolean> chud_breadcrumbs_using_revised_nav_points)",
+        "result": "boolean"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_breadcrumbs_using_revised_nav_points"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "chud_breadcrumbs_using_revised_nav_points"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Both query the revised-navpoint mode and return boolean; preserve the branch condition.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "chud_breadcrumbs_using_revised_nav_points",
+        "signature": {
+          "args": [],
+          "max_args": 0,
+          "min_args": 0,
+          "raw": "(<boolean> chud_breadcrumbs_using_revised_nav_points)",
+          "result": "boolean"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.hud_deactivate_team_nav_point_flag.0",
+      "source_game": "halo3",
+      "source_function": "hud_deactivate_team_nav_point_flag",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "EMULATABLE",
+      "source_signature": {
+        "args": [
+          "team",
+          "cutscene_flag"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> hud_deactivate_team_nav_point_flag <team> <cutscene_flag>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "chud_track_flag_for_player",
+        "chud_track_object_for_player",
+        "chud_track_cutscene_flag_set_vertical_offset",
+        "chud_breadcrumbs_track_flag",
+        "chud_breadcrumbs_track_object",
+        "chud_breadcrumbs_track_position",
+        "chud_breadcrumbs_track_object_set_vertical_offset"
+      ],
+      "argument_transform": {
+        "op": "generated_wrapper",
+        "name": "h3_compat_hud_deactivate_team_nav_point_flag",
+        "arguments": "identity",
+        "state_key": [
+          "team",
+          "identifier_or_flag"
+        ],
+        "requires": [
+          "review_team_to_player_routing",
+          "track_activation_binding",
+          "review_vertical_offset_and_presentation"
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "hud_deactivate_team_nav_point_flag"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Proposed generated wrapper: retain a registry keyed by H3 team and navpoint identifier; select recipient players, record flag/object/position and vertical offset on activation, and recover that binding on deactivation. Use Reach CHUD tracking with enabled=true/false. Team filtering, duplicate IDs, revised versus legacy presentation and co-op visibility require review. No wrapper is emitted.",
+      "fidelity_compatibility": "LOSSY",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "generated_compatibility_wrapper",
+        "name": "h3_compat_hud_deactivate_team_nav_point_flag",
+        "signature": {
+          "args": [
+            "team",
+            "cutscene_flag"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> hud_deactivate_team_nav_point_flag <team> <cutscene_flag>)",
+          "result": "void"
+        },
+        "status": "PROPOSAL_REQUIRES_REVIEW"
+      }
+    },
+    {
+      "id": "h3-reach.object_get_variant_child_object_by_marker_id.0",
+      "source_game": "halo3",
+      "source_function": "object_get_variant_child_object_by_marker_id",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNKNOWN",
+      "source_signature": {
+        "args": [
+          "object",
+          "string_id"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<object> object_get_variant_child_object_by_marker_id <object> <string_id>)",
+        "result": "object"
+      },
+      "target_signature": null,
+      "target_candidates": [
+        "object_at_marker"
+      ],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "object_get_variant_child_object_by_marker_id"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "UNKNOWN",
+      "notes": "H3 describes finding a variant child by model target. Reach object_at_marker returns an attached object at a marker; both functions already exist independently in H3. Matching signatures do not prove identical target/marker semantics. Investigate the scarab destruction-child target before proposing a replacement.",
+      "fidelity_compatibility": "UNKNOWN",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.player0_set_pitch.0",
+      "source_game": "halo3",
+      "source_function": "player0_set_pitch",
+      "target_game": "reach",
+      "target_function": "player_set_pitch",
+      "mapping_kind": "SIGNATURE_CHANGE",
+      "source_signature": {
+        "args": [
+          "real",
+          "long"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> player0_set_pitch <real> <long>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "player",
+          "real",
+          "long"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> player_set_pitch <player> <real> <long>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "arguments",
+        "items": [
+          {
+            "op": "player_literal",
+            "name": "player0",
+            "type": "player"
+          },
+          {
+            "op": "argument",
+            "index": 0
+          },
+          {
+            "op": "argument",
+            "index": 1
+          }
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "player0_set_pitch"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "player_set_pitch"
+        },
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "HREK/data/globals/global_scripts.hsc:584",
+          "note": "Bare player0..player3 in the player-typed gaze API; these are typed player literals, not engine globals."
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reach takes an explicit player plus the same pitch and duration types. Insert the Reach player literal used by stock scripts for this fixed player slot. Only initialization fidelity is affected in the reviewed ins_scarab context; live camera behavior is not tested.",
+      "fidelity_compatibility": "UNVERIFIED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "player_set_pitch",
+        "signature": {
+          "args": [
+            "player",
+            "real",
+            "long"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> player_set_pitch <player> <real> <long>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.player1_set_pitch.0",
+      "source_game": "halo3",
+      "source_function": "player1_set_pitch",
+      "target_game": "reach",
+      "target_function": "player_set_pitch",
+      "mapping_kind": "SIGNATURE_CHANGE",
+      "source_signature": {
+        "args": [
+          "real",
+          "long"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> player1_set_pitch <real> <long>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "player",
+          "real",
+          "long"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> player_set_pitch <player> <real> <long>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "arguments",
+        "items": [
+          {
+            "op": "player_literal",
+            "name": "player1",
+            "type": "player"
+          },
+          {
+            "op": "argument",
+            "index": 0
+          },
+          {
+            "op": "argument",
+            "index": 1
+          }
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "player1_set_pitch"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "player_set_pitch"
+        },
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "HREK/data/globals/global_scripts.hsc:584",
+          "note": "Bare player0..player3 in the player-typed gaze API; these are typed player literals, not engine globals."
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reach takes an explicit player plus the same pitch and duration types. Insert the Reach player literal used by stock scripts for this fixed player slot. Only initialization fidelity is affected in the reviewed ins_scarab context; live camera behavior is not tested.",
+      "fidelity_compatibility": "UNVERIFIED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "player_set_pitch",
+        "signature": {
+          "args": [
+            "player",
+            "real",
+            "long"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> player_set_pitch <player> <real> <long>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.player2_set_pitch.0",
+      "source_game": "halo3",
+      "source_function": "player2_set_pitch",
+      "target_game": "reach",
+      "target_function": "player_set_pitch",
+      "mapping_kind": "SIGNATURE_CHANGE",
+      "source_signature": {
+        "args": [
+          "real",
+          "long"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> player2_set_pitch <real> <long>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "player",
+          "real",
+          "long"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> player_set_pitch <player> <real> <long>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "arguments",
+        "items": [
+          {
+            "op": "player_literal",
+            "name": "player2",
+            "type": "player"
+          },
+          {
+            "op": "argument",
+            "index": 0
+          },
+          {
+            "op": "argument",
+            "index": 1
+          }
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "player2_set_pitch"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "player_set_pitch"
+        },
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "HREK/data/globals/global_scripts.hsc:584",
+          "note": "Bare player0..player3 in the player-typed gaze API; these are typed player literals, not engine globals."
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reach takes an explicit player plus the same pitch and duration types. Insert the Reach player literal used by stock scripts for this fixed player slot. Only initialization fidelity is affected in the reviewed ins_scarab context; live camera behavior is not tested.",
+      "fidelity_compatibility": "UNVERIFIED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "player_set_pitch",
+        "signature": {
+          "args": [
+            "player",
+            "real",
+            "long"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> player_set_pitch <player> <real> <long>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.player3_set_pitch.0",
+      "source_game": "halo3",
+      "source_function": "player3_set_pitch",
+      "target_game": "reach",
+      "target_function": "player_set_pitch",
+      "mapping_kind": "SIGNATURE_CHANGE",
+      "source_signature": {
+        "args": [
+          "real",
+          "long"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> player3_set_pitch <real> <long>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "player",
+          "real",
+          "long"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> player_set_pitch <player> <real> <long>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "arguments",
+        "items": [
+          {
+            "op": "player_literal",
+            "name": "player3",
+            "type": "player"
+          },
+          {
+            "op": "argument",
+            "index": 0
+          },
+          {
+            "op": "argument",
+            "index": 1
+          }
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "player3_set_pitch"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "player_set_pitch"
+        },
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "HREK/data/globals/global_scripts.hsc:584",
+          "note": "Bare player0..player3 in the player-typed gaze API; these are typed player literals, not engine globals."
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reach takes an explicit player plus the same pitch and duration types. Insert the Reach player literal used by stock scripts for this fixed player slot. Only initialization fidelity is affected in the reviewed ins_scarab context; live camera behavior is not tested.",
+      "fidelity_compatibility": "UNVERIFIED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "player_set_pitch",
+        "signature": {
+          "args": [
+            "player",
+            "real",
+            "long"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> player_set_pitch <player> <real> <long>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.player_control_unlock_gaze.0",
+      "source_game": "halo3",
+      "source_function": "player_control_unlock_gaze",
+      "target_game": "reach",
+      "target_function": "player_control_unlock_gaze",
+      "mapping_kind": "SIGNATURE_CHANGE",
+      "source_signature": {
+        "args": [
+          "unit"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> player_control_unlock_gaze <unit>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "player"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> player_control_unlock_gaze <player>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "arguments",
+        "items": [
+          {
+            "op": "player_unit_to_player",
+            "index": 0,
+            "accepted_source_helpers": [
+              "player0",
+              "player1",
+              "player2",
+              "player3"
+            ],
+            "requires": "resolved_stock_player_helper"
+          }
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "player_control_unlock_gaze"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "player_control_unlock_gaze"
+        },
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "HREK/data/globals/global_scripts.hsc:584",
+          "note": "Bare player0..player3 in the player-typed gaze API; these are typed player literals, not engine globals."
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "H3 takes a unit; Reach takes a player. For a resolved stock player0..player3 unit helper, use the corresponding Reach player literal. Arbitrary unit expressions require reviewed player identity resolution; unit and player are not type aliases.",
+      "fidelity_compatibility": "UNVERIFIED",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "player_control_unlock_gaze",
+        "signature": {
+          "args": [
+            "player"
+          ],
+          "max_args": 1,
+          "min_args": 1,
+          "raw": "(<void> player_control_unlock_gaze <player>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vehicle_test_seat_list.0",
+      "source_game": "halo3",
+      "source_function": "vehicle_test_seat_list",
+      "target_game": "reach",
+      "target_function": "vehicle_test_seat_unit_list",
+      "mapping_kind": "SIGNATURE_CHANGE",
+      "source_signature": {
+        "args": [
+          "vehicle",
+          "string_id",
+          "object_list"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<boolean> vehicle_test_seat_list <vehicle> <string_id> <object_list>)",
+        "result": "boolean"
+      },
+      "target_signature": {
+        "args": [
+          "vehicle",
+          "unit_seat_mapping",
+          "object_list"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<boolean> vehicle_test_seat_unit_list <vehicle> <unit_seat_mapping> <object_list>)",
+        "result": "boolean"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "arguments",
+        "items": [
+          {
+            "op": "argument",
+            "index": 0
+          },
+          {
+            "op": "resolve_unit_seat_mapping",
+            "index": 1,
+            "vehicle_argument": 0,
+            "empty_selector": "all_seats",
+            "requires": "reviewed_target_vehicle_seats"
+          },
+          {
+            "op": "argument",
+            "index": 2
+          }
+        ]
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vehicle_test_seat_list"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "vehicle_test_seat_unit_list"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Both test whether the selected vehicle seats contain members of an object list. Reach compiles a unit_seat_mapping rather than an H3 string_id. Keep the seat selector text (including empty selector), then resolve against the future Reach vehicle seat mapping; identical text alone does not prove equivalent seats.",
+      "fidelity_compatibility": "REQUIRES_TARGET_BINDING",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "vehicle_test_seat_unit_list",
+        "signature": {
+          "args": [
+            "vehicle",
+            "unit_seat_mapping",
+            "object_list"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<boolean> vehicle_test_seat_unit_list <vehicle> <unit_seat_mapping> <object_list>)",
+          "result": "boolean"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_abort_on_damage.0",
+      "source_game": "halo3",
+      "source_function": "vs_abort_on_damage",
+      "target_game": "reach",
+      "target_function": "cs_abort_on_damage",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "boolean"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> vs_abort_on_damage <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "boolean"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> cs_abort_on_damage <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_abort_on_damage"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_abort_on_damage"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_abort_on_damage",
+        "signature": {
+          "args": [
+            "boolean"
+          ],
+          "max_args": 1,
+          "min_args": 1,
+          "raw": "(<void> cs_abort_on_damage <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_abort_on_damage.1",
+      "source_game": "halo3",
+      "source_function": "vs_abort_on_damage",
+      "target_game": "reach",
+      "target_function": "cs_abort_on_damage",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_abort_on_damage <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> cs_abort_on_damage <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_abort_on_damage"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_abort_on_damage"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_abort_on_damage",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> cs_abort_on_damage <ai> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_custom_animation.0",
+      "source_game": "halo3",
+      "source_function": "vs_custom_animation",
+      "target_game": "reach",
+      "target_function": "cs_custom_animation",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "animation_graph",
+          "string_id",
+          "boolean"
+        ],
+        "max_args": 5,
+        "min_args": 5,
+        "raw": "(<void> vs_custom_animation <ai> <boolean> <animation_graph> <string_id> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "animation_graph",
+          "string_id",
+          "boolean"
+        ],
+        "max_args": 5,
+        "min_args": 5,
+        "raw": "(<void> cs_custom_animation <ai> <boolean> <animation_graph> <string_id> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_custom_animation"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_custom_animation"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_custom_animation",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "animation_graph",
+            "string_id",
+            "boolean"
+          ],
+          "max_args": 5,
+          "min_args": 5,
+          "raw": "(<void> cs_custom_animation <ai> <boolean> <animation_graph> <string_id> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_custom_animation.1",
+      "source_game": "halo3",
+      "source_function": "vs_custom_animation",
+      "target_game": "reach",
+      "target_function": "cs_custom_animation",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "animation_graph",
+          "string_id",
+          "boolean",
+          "point_reference"
+        ],
+        "max_args": 6,
+        "min_args": 6,
+        "raw": "(<void> vs_custom_animation <ai> <boolean> <animation_graph> <string_id> <boolean> <point_reference>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "animation_graph",
+          "string_id",
+          "boolean",
+          "point_reference"
+        ],
+        "max_args": 6,
+        "min_args": 6,
+        "raw": "(<void> cs_custom_animation <ai> <boolean> <animation_graph> <string_id> <boolean> <point_reference>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_custom_animation"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_custom_animation"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_custom_animation",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "animation_graph",
+            "string_id",
+            "boolean",
+            "point_reference"
+          ],
+          "max_args": 6,
+          "min_args": 6,
+          "raw": "(<void> cs_custom_animation <ai> <boolean> <animation_graph> <string_id> <boolean> <point_reference>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_custom_animation_loop.0",
+      "source_game": "halo3",
+      "source_function": "vs_custom_animation_loop",
+      "target_game": "reach",
+      "target_function": "cs_custom_animation_loop",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "animation_graph",
+          "string_id",
+          "boolean"
+        ],
+        "max_args": 4,
+        "min_args": 4,
+        "raw": "(<void> vs_custom_animation_loop <ai> <animation_graph> <string_id> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "animation_graph",
+          "string_id",
+          "boolean"
+        ],
+        "max_args": 4,
+        "min_args": 4,
+        "raw": "(<void> cs_custom_animation_loop <ai> <animation_graph> <string_id> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_custom_animation_loop"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_custom_animation_loop"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_custom_animation_loop",
+        "signature": {
+          "args": [
+            "ai",
+            "animation_graph",
+            "string_id",
+            "boolean"
+          ],
+          "max_args": 4,
+          "min_args": 4,
+          "raw": "(<void> cs_custom_animation_loop <ai> <animation_graph> <string_id> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_custom_animation_loop.1",
+      "source_game": "halo3",
+      "source_function": "vs_custom_animation_loop",
+      "target_game": "reach",
+      "target_function": "cs_custom_animation_loop",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "animation_graph",
+          "string_id",
+          "boolean",
+          "point_reference"
+        ],
+        "max_args": 5,
+        "min_args": 5,
+        "raw": "(<void> vs_custom_animation_loop <ai> <animation_graph> <string_id> <boolean> <point_reference>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "animation_graph",
+          "string_id",
+          "boolean",
+          "point_reference"
+        ],
+        "max_args": 5,
+        "min_args": 5,
+        "raw": "(<void> cs_custom_animation_loop <ai> <animation_graph> <string_id> <boolean> <point_reference>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_custom_animation_loop"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_custom_animation_loop"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_custom_animation_loop",
+        "signature": {
+          "args": [
+            "ai",
+            "animation_graph",
+            "string_id",
+            "boolean",
+            "point_reference"
+          ],
+          "max_args": 5,
+          "min_args": 5,
+          "raw": "(<void> cs_custom_animation_loop <ai> <animation_graph> <string_id> <boolean> <point_reference>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_enable_looking.0",
+      "source_game": "halo3",
+      "source_function": "vs_enable_looking",
+      "target_game": "reach",
+      "target_function": "cs_enable_looking",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_enable_looking <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> cs_enable_looking <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_enable_looking"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_enable_looking"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_enable_looking",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> cs_enable_looking <ai> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_enable_moving.0",
+      "source_game": "halo3",
+      "source_function": "vs_enable_moving",
+      "target_game": "reach",
+      "target_function": "cs_enable_moving",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_enable_moving <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> cs_enable_moving <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_enable_moving"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_enable_moving"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_enable_moving",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> cs_enable_moving <ai> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_enable_pathfinding_failsafe.0",
+      "source_game": "halo3",
+      "source_function": "vs_enable_pathfinding_failsafe",
+      "target_game": "reach",
+      "target_function": "cs_enable_pathfinding_failsafe",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_enable_pathfinding_failsafe <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> cs_enable_pathfinding_failsafe <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_enable_pathfinding_failsafe"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_enable_pathfinding_failsafe"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_enable_pathfinding_failsafe",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> cs_enable_pathfinding_failsafe <ai> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_enable_targeting.0",
+      "source_game": "halo3",
+      "source_function": "vs_enable_targeting",
+      "target_game": "reach",
+      "target_function": "cs_enable_targeting",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_enable_targeting <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> cs_enable_targeting <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_enable_targeting"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_enable_targeting"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_enable_targeting",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> cs_enable_targeting <ai> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_face_object.0",
+      "source_game": "halo3",
+      "source_function": "vs_face_object",
+      "target_game": "reach",
+      "target_function": "cs_face_object",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "object"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> vs_face_object <ai> <boolean> <object>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "object"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> cs_face_object <ai> <boolean> <object>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_face_object"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_face_object"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_face_object",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "object"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> cs_face_object <ai> <boolean> <object>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_force_combat_status.0",
+      "source_game": "halo3",
+      "source_function": "vs_force_combat_status",
+      "target_game": "reach",
+      "target_function": "cs_force_combat_status",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "short"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_force_combat_status <ai> <short>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "short"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> cs_force_combat_status <ai> <short>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_force_combat_status"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_force_combat_status"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_force_combat_status",
+        "signature": {
+          "args": [
+            "ai",
+            "short"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> cs_force_combat_status <ai> <short>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_go_to.0",
+      "source_game": "halo3",
+      "source_function": "vs_go_to",
+      "target_game": "reach",
+      "target_function": "cs_go_to",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "point_reference"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> vs_go_to <ai> <boolean> <point_reference>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "point_reference"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> cs_go_to <ai> <boolean> <point_reference>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_go_to"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_go_to"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_go_to",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "point_reference"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> cs_go_to <ai> <boolean> <point_reference>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_go_to.1",
+      "source_game": "halo3",
+      "source_function": "vs_go_to",
+      "target_game": "reach",
+      "target_function": "cs_go_to",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "point_reference",
+          "real"
+        ],
+        "max_args": 4,
+        "min_args": 4,
+        "raw": "(<void> vs_go_to <ai> <boolean> <point_reference> <real>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "point_reference",
+          "real"
+        ],
+        "max_args": 4,
+        "min_args": 4,
+        "raw": "(<void> cs_go_to <ai> <boolean> <point_reference> <real>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_go_to"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_go_to"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_go_to",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "point_reference",
+            "real"
+          ],
+          "max_args": 4,
+          "min_args": 4,
+          "raw": "(<void> cs_go_to <ai> <boolean> <point_reference> <real>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_go_to_and_face.0",
+      "source_game": "halo3",
+      "source_function": "vs_go_to_and_face",
+      "target_game": "reach",
+      "target_function": "cs_go_to_and_face",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "point_reference",
+          "point_reference"
+        ],
+        "max_args": 4,
+        "min_args": 4,
+        "raw": "(<void> vs_go_to_and_face <ai> <boolean> <point_reference> <point_reference>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "point_reference",
+          "point_reference"
+        ],
+        "max_args": 4,
+        "min_args": 4,
+        "raw": "(<void> cs_go_to_and_face <ai> <boolean> <point_reference> <point_reference>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_go_to_and_face"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_go_to_and_face"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_go_to_and_face",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "point_reference",
+            "point_reference"
+          ],
+          "max_args": 4,
+          "min_args": 4,
+          "raw": "(<void> cs_go_to_and_face <ai> <boolean> <point_reference> <point_reference>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_play_line.0",
+      "source_game": "halo3",
+      "source_function": "vs_play_line",
+      "target_game": "reach",
+      "target_function": "cs_play_line",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "ai_line"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> vs_play_line <ai> <boolean> <ai_line>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "ai_line"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> cs_play_line <ai> <boolean> <ai_line>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_play_line"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_play_line"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_play_line",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "ai_line"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> cs_play_line <ai> <boolean> <ai_line>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_release.0",
+      "source_game": "halo3",
+      "source_function": "vs_release",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [
+          "ai"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> vs_release <ai>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_release"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "H3 detaches the specified actor from the current script. A Reach abort command script may stop behavior but is not proven to restore identical ownership or queue state.",
+      "fidelity_compatibility": "UNKNOWN",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.vs_release_all.0",
+      "source_game": "halo3",
+      "source_function": "vs_release_all",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [],
+        "max_args": 0,
+        "min_args": 0,
+        "raw": "(<void> vs_release_all)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_release_all"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "H3 detaches all actors owned by the current thread. The explicit-AI Reach cs calls do not establish a replacement for this thread-owned set. Never delete this call automatically.",
+      "fidelity_compatibility": "UNKNOWN",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.vs_reserve.0",
+      "source_game": "halo3",
+      "source_function": "vs_reserve",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "short"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_reserve <ai> <short>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_reserve"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "H3 assigns actor ownership to the current script with priority and discards queued command scripts. Reach cs_run_command_script replaces a command script but does not document the same ownership/priority contract. No safe rename or no-op is established.",
+      "fidelity_compatibility": "UNKNOWN",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.vs_reserve.1",
+      "source_game": "halo3",
+      "source_function": "vs_reserve",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "short"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> vs_reserve <ai> <boolean> <short>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_reserve"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "H3 assigns actor ownership to the current script with priority and discards queued command scripts. Reach cs_run_command_script replaces a command script but does not document the same ownership/priority contract. No safe rename or no-op is established.",
+      "fidelity_compatibility": "UNKNOWN",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.vs_set_cleanup_script.0",
+      "source_game": "halo3",
+      "source_function": "vs_set_cleanup_script",
+      "target_game": "reach",
+      "target_function": null,
+      "mapping_kind": "UNSUPPORTED",
+      "source_signature": {
+        "args": [
+          "script"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> vs_set_cleanup_script <script>)",
+        "result": "void"
+      },
+      "target_signature": null,
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "return_transform": {
+        "op": "no_emitted_replacement"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_set_cleanup_script"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "catalogue absence"
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "H3 registers cleanup on current thread termination, including abort paths. Merely appending a cleanup call misses abnormal exits. Future whole-script lifecycle emulation needs explicit ownership and termination modeling.",
+      "fidelity_compatibility": "UNKNOWN",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "no_emitted_replacement"
+      }
+    },
+    {
+      "id": "h3-reach.vs_shoot.0",
+      "source_game": "halo3",
+      "source_function": "vs_shoot",
+      "target_game": "reach",
+      "target_function": "cs_shoot",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> vs_shoot <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean"
+        ],
+        "max_args": 2,
+        "min_args": 2,
+        "raw": "(<void> cs_shoot <ai> <boolean>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_shoot"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_shoot"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_shoot",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean"
+          ],
+          "max_args": 2,
+          "min_args": 2,
+          "raw": "(<void> cs_shoot <ai> <boolean>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_shoot.1",
+      "source_game": "halo3",
+      "source_function": "vs_shoot",
+      "target_game": "reach",
+      "target_function": "cs_shoot",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "object"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> vs_shoot <ai> <boolean> <object>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai",
+          "boolean",
+          "object"
+        ],
+        "max_args": 3,
+        "min_args": 3,
+        "raw": "(<void> cs_shoot <ai> <boolean> <object>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_shoot"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_shoot"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_shoot",
+        "signature": {
+          "args": [
+            "ai",
+            "boolean",
+            "object"
+          ],
+          "max_args": 3,
+          "min_args": 3,
+          "raw": "(<void> cs_shoot <ai> <boolean> <object>)",
+          "result": "void"
+        }
+      }
+    },
+    {
+      "id": "h3-reach.vs_stop_custom_animation.0",
+      "source_game": "halo3",
+      "source_function": "vs_stop_custom_animation",
+      "target_game": "reach",
+      "target_function": "cs_stop_custom_animation",
+      "mapping_kind": "RENAMED",
+      "source_signature": {
+        "args": [
+          "ai"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> vs_stop_custom_animation <ai>)",
+        "result": "void"
+      },
+      "target_signature": {
+        "args": [
+          "ai"
+        ],
+        "max_args": 1,
+        "min_args": 1,
+        "raw": "(<void> cs_stop_custom_animation <ai>)",
+        "result": "void"
+      },
+      "target_candidates": [],
+      "argument_transform": {
+        "op": "identity"
+      },
+      "return_transform": {
+        "op": "identity"
+      },
+      "evidence": [
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/h3/engine/scripting/#functions",
+          "function": "vs_stop_custom_animation"
+        },
+        {
+          "kind": "DOCS_MATCH",
+          "source": "https://c20.reclaimers.net/hr/engine/scripting/#functions",
+          "function": "cs_stop_custom_animation"
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Return type, parameter sequence and documented operation match this specific overload. Preserve explicit AI and blocking/control boolean arguments. Implicit command-script forms remain separate overloads. Actor ownership, thread termination and resource parity require separate review.",
+      "fidelity_compatibility": "DOCS_EQUIVALENT",
+      "runtime_verified": false,
+      "replacement": {
+        "kind": "engine_call",
+        "name": "cs_stop_custom_animation",
+        "signature": {
+          "args": [
+            "ai"
+          ],
+          "max_args": 1,
+          "min_args": 1,
+          "raw": "(<void> cs_stop_custom_animation <ai>)",
+          "result": "void"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Explicit reviewed overload mappings only; no prefix substitution",
+    "No runtime or loader validation",
+    "No unit/player or string_id/unit_seat_mapping global alias",
+    "Wrappers and stubs are proposals only"
+  ],
+  "source_language_rules": [
+    {
+      "rule": "script name is a documentation label for a script reference, not a distinct runtime type",
+      "evidence": [
+        "c20 H3/Reach wake signatures",
+        "040_voi_mission.hsc wake factory_a_start"
+      ]
+    },
+    {
+      "rule": "Unquoted names are resolved in the expected scenario/script namespace after local/global variables; script declarations are not variables",
+      "evidence": [
+        "040_voi: switch_zone_set scarab and ai_place scarab refer to different authored namespaces",
+        "ManagedDonkey hs_compile.cpp hs_parse_primitive and hs_parse_variable (reconstructed supporting evidence)"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "rule": "Boolean 0/1 and on/off spellings are accepted; other numeric literals are not assumed boolean",
+      "evidence": [
+        "040_voi_mission.hsc device_operates_automatically_set and hud_show_training_text",
+        "ManagedDonkey hs_compile.cpp hs_parse_boolean (reconstructed supporting evidence)"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "rule": "game_difficulty has ordered numeric comparison in source scripts",
+      "evidence": [
+        "040_voi_ambient.hsc:3446",
+        "c20 game_difficulty_get_real and >= signatures"
+      ],
+      "confidence": "HIGH"
+    }
+  ]
+}

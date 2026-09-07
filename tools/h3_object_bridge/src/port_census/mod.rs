@@ -3,11 +3,15 @@ mod assets;
 mod compat;
 mod graph;
 mod hsc;
+mod hsc_analysis;
+mod hsc_compat;
+mod hsc_context;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod integration_tests;
 mod markdown;
 mod policy;
+mod relevance;
 mod scenario;
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
@@ -255,6 +259,7 @@ pub fn run(args: Vec<String>) -> Result<()> {
         "portability_report.md",
         "dependency_graph.json",
         "timings.json",
+        "hsc_transpiler_mappings.json",
     ] {
         if output.join(format!("{mission}_{suffix}")).exists() {
             bail!(
@@ -491,8 +496,16 @@ pub fn run(args: Vec<String>) -> Result<()> {
             json!(census["strategies"][strategy].as_u64().unwrap_or(0) + 1);
     }
     let scenario_report = scenario::report(&graph.scans[&source_path]);
-    let (boot, combat) = policy::minimum_sets(&graph, &source_path);
-    let blockers = policy::blockers(&graph, &script_report, &boot, &source_path);
+    let (boot, mut combat) = policy::minimum_sets(&graph, &source_path);
+    relevance::select_factory_a(&mut combat, &script_report, &source_path);
+    let missing_relevance = relevance::missing(&graph, &boot, &combat, &source_path);
+    for row in &missing_relevance {
+        graph
+            .tags
+            .get_mut(row["source_path"].as_str().unwrap())
+            .unwrap()["dependency_relevance"] = row.clone();
+    }
+    let blockers = policy::blockers(&graph, &script_report, &missing_relevance, &source_path);
     let (audio, effects, ai) = assets::inventories(&graph, mission_dir);
     // Everything that needs source scan rows has finished. Material provenance
     // uses tag identities and its own existing decoder, so release rows now.
@@ -510,7 +523,7 @@ pub fn run(args: Vec<String>) -> Result<()> {
     }
     let summary = json!({"unique_h3_tags":graph.tags.len(),"direct_scenario_dependencies":graph.tags.values().filter(|t|t["direct_dependency"]==true).count(),"transitive_dependencies":graph.tags.values().filter(|t|t["only_transitive"]==true).count(),"missing_references":graph.tags.values().filter(|t|t["exists"]==false).count(),"tag_groups":groups.len(),"dependency_edges":graph.edges.len(),"strategies":strategies,"scripts":script_report["summary"],"blockers":severity_counts,"path_collisions":collisions.len(),"field_walked_tags":graph.tags.values().filter(|r|r["dependency_scan"]["parsed_fields"]==true).count()});
     let evidence = json!({"levels":{"VERIFIED":"Direct source/schema/tool observation","INFERRED":"Derived mapping, not runtime validation","PROVISIONAL":"Planning hypothesis","UNKNOWN":"Insufficient evidence"},"boundaries":["serialized tag truth","semantic interpretation","official loader acceptance","live Reach runtime"],"foundry_capabilities":policy::capabilities(),"licensing":{"direct_source_copied_from_baboon_or_blam_tags":false,"existing_dependency":"Foundry's pre-existing pinned blam-tags dependency retained; public read/compare APIs used","reference_source_license":"No top-level grant found at inspected Baboon/blam-tags revisions; do not infer permission for source transplantation","conceptual_reuse":["source-scoped canonical identities","dependency source disagreement","schema facts separate from reviewed policy","native versus generated layouts","official acceptance separate from runtime behavior"]}});
-    let report = json!({"format":FORMAT,"version":VERSION,"source":{"scenario":source_path,"h3_tags_root":display(&h3),"reach_tags_root":display(&reach),"h3_data_root":data.as_deref().map(display),"definitions_root":definitions.as_deref().map(display),"definitions_revision":def_identity,"foundry_fast_revision":env!("FOUNDRY_FAST_REVISION"),"decoder_revision":crate::DECODER,"baboon_reference_revision":baboon.as_deref().and_then(revision).unwrap_or_else(||"f4df490579f83697aa7d56ade53abf8071ff5449".into()),"troop_reference_revision":troop.as_deref().and_then(revision).unwrap_or_else(||"69c574d238315c05e0f49140509d9548e20fcc0e".into()),"reference_revision_basis":"explicit checkout when supplied; otherwise implementation-study pin","scenario_sha256":digest(&fs::read(&input)?)},"safety":{"game_content_written":false,"tag_writer_invoked":false,"official_tools_invoked":false,"blender_required":false},"summary":summary,"tag_groups":group_rows.values().collect::<Vec<_>>(),"schema_compatibility_profiles":compatibility,"serialized_layout_comparisons":actual_compatibility,"tags":graph.tags.values().collect::<Vec<_>>(),"dependencies":graph.edges,"scenarios":scenario_report,"materials":materials,"audio":audio,"effects":effects,"ai":ai,"scripts":script_report,"scenario_symbol_table":source_symbols,"path_collisions":collisions,"proposed_path_map":path_map,"minimum_boot_set":boot,"minimum_combat_set":combat,"blockers":blockers,"diagnostics":diagnostics,"evidence":evidence,"limitations":["This is a source census and proposed build plan, not a porter","Generic dependency graph is a union of observed main fields and declared want; dynamic script references and runtime implicit dependencies can remain unknown","Large resource tags with want are not field-walked by default; use --all-fields for a slower audit","Serialized-layout comparisons are attached when available; definition-only fallbacks remain explicit. All losses are potential schema losses, not per-value loss","No Reach loader, Tool, shader, sound, scenario or runtime acceptance is claimed","Cached reads use source root, definitions digest, decoder, file size and mtime; unchanged metadata after content edits can invalidate that assumption"]});
+    let report = json!({"format":FORMAT,"version":VERSION,"source":{"scenario":source_path,"h3_tags_root":display(&h3),"reach_tags_root":display(&reach),"h3_data_root":data.as_deref().map(display),"definitions_root":definitions.as_deref().map(display),"definitions_revision":def_identity,"foundry_fast_revision":env!("FOUNDRY_FAST_REVISION"),"decoder_revision":crate::DECODER,"baboon_reference_revision":baboon.as_deref().and_then(revision).unwrap_or_else(||"f4df490579f83697aa7d56ade53abf8071ff5449".into()),"troop_reference_revision":troop.as_deref().and_then(revision).unwrap_or_else(||"69c574d238315c05e0f49140509d9548e20fcc0e".into()),"reference_revision_basis":"explicit checkout when supplied; otherwise implementation-study pin","scenario_sha256":digest(&fs::read(&input)?)},"safety":{"game_content_written":false,"tag_writer_invoked":false,"official_tools_invoked":false,"blender_required":false},"summary":summary,"tag_groups":group_rows.values().collect::<Vec<_>>(),"schema_compatibility_profiles":compatibility,"serialized_layout_comparisons":actual_compatibility,"tags":graph.tags.values().collect::<Vec<_>>(),"dependencies":graph.edges,"scenarios":scenario_report,"materials":materials,"audio":audio,"effects":effects,"ai":ai,"scripts":script_report,"scenario_symbol_table":source_symbols,"path_collisions":collisions,"proposed_path_map":path_map,"missing_reference_relevance":missing_relevance,"minimum_boot_set":boot,"minimum_combat_set":combat,"blockers":blockers,"diagnostics":diagnostics,"evidence":evidence,"limitations":["This is a source census and proposed build plan, not a porter","Generic dependency graph is a union of observed main fields and declared want; dynamic script references and runtime implicit dependencies can remain unknown","Large resource tags with want are not field-walked by default; use --all-fields for a slower audit","Serialized-layout comparisons are attached when available; definition-only fallbacks remain explicit. All losses are potential schema losses, not per-value loss","No Reach loader, Tool, shader, sound, scenario or runtime acceptance is claimed","Cached reads use source root, definitions digest, decoder, file size and mtime; unchanged metadata after content edits can invalidate that assumption"]});
     let started = Instant::now();
     write_json_new(
         &output.join(format!("{mission}_portability_report.json")),
@@ -523,6 +536,10 @@ pub fn run(args: Vec<String>) -> Result<()> {
     write_json_new(
         &output.join(format!("{mission}_dependency_graph.json")),
         &json!({"format":"foundry.h3-dependency-graph","version":1,"scenario":source_path,"nodes":graph.tags.keys().collect::<Vec<_>>(),"edges":report["dependencies"]}),
+    )?;
+    write_json_new(
+        &output.join(format!("{mission}_hsc_transpiler_mappings.json")),
+        &report["scripts"]["transpiler_mappings"],
     )?;
     timings.insert("report_generation_seconds", started.elapsed().as_secs_f64());
     write_json_new(
@@ -571,3 +588,6 @@ mod tests {
         assert!(schema["$defs"]["tag"].is_object());
     }
 }
+
+#[cfg(test)]
+mod hsc_tests;

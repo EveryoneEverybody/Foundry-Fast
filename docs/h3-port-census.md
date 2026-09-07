@@ -1,4 +1,4 @@
-# H3 portability census prototype, schema v1
+# H3 portability census prototype 1.9.46, schema v1
 
 `h3-scenario-inspect port-census` analyzes a loose H3 MCC editing-kit scenario
 and its reachable tags without Blender. It generates a proposed Reach build
@@ -11,7 +11,7 @@ Foundry's active Reach/Omaha project is not changed.
 
 ## Windows command
 
-Extract the standalone `H3-port-census-v1-windows.zip` into, for example,
+Extract the standalone `H3-port-census-1.9.46-windows.zip` into, for example,
 `D:\HaloRE\PortCensus\helper`. In PowerShell:
 
 ```powershell
@@ -38,6 +38,7 @@ existing reports are never overwritten. The files are:
 
 - `040_voi_portability_report.json` — machine-readable engineering report.
 - `040_voi_portability_report.md` — engineering summary.
+- `040_voi_hsc_transpiler_mappings.json` — reviewed mapping catalog and call AST plans; no source emitted.
 - `040_voi_dependency_graph.json` — dependency nodes and evidence-bearing edges.
 - `040_voi_timings.json` — measured phase times and cache hits.
 - `cache/` — disposable, source-scoped scan cache, unless `--cache` is supplied.
@@ -169,22 +170,16 @@ c20's GPL-3.0 facts-only catalogue generation is reproducible with
   `block_counts` contains totals across every same-named nested block.
 - The source-file table distinguishes physical, missing and engine-generated
   HSC. Generated cinematic/Cortana source is not decompiled. Classification
-  counts are per function name and observed classification, so a function with
-  multiple call shapes can contribute to more than one count.
+  counts now assign each engine name one conservative bucket, with per-call and raw-name totals separately retained. Unresolved source names are separate from documented engine functions.
 - Source fields establish authored names and relationships, not runtime
   activation, active zones, attachment transforms or designer intent.
 - Minimum boot assets are a filtered closure around one authored BSP candidate
   and the scenario sky, plus target-side requirements. Other BSP candidates remain
   visible. No loader-validated minimum is claimed.
-- Combat candidates come from actual squad groups and palette joins. No early
-  encounter is chosen without evidence of activation and player access.
+- Combat candidates come from actual squad groups and palette joins. The reviewed Factory A / tank room candidate is preserved with its authored script dependencies; no runtime access is claimed.
 - HSC has a real nested parser with comments, strings, declarations, parameter
   scopes and line/column/byte locations. Malformed forms are diagnostics.
-  `DIRECT` is a documented overload/argument-count match, not expression type
-  checking or semantic equivalence. Missing catalogue entries remain unknown
-  when not documented in H3; documented H3-only calls are flagged for review.
-- No guessed renames/emulations. Cortana void calls absent from Reach are only
-  stub candidates; control-flow review remains necessary.
+  `DIRECT` compares the resolved overload and active target signature using partial type inference. It does not establish range safety or semantic equivalence. See the [reviewed compatibility catalog](h3-hsc-compatibility.md) for explicit renames, transforms, wrapper proposals and context reviews. Unknown overloads and missing source names remain explicit. No blanket prefix substitution or automatic stub is applied.
 - Ordinary `.shader` source snapshots can be eligible for current Reach node
   staging; target sockets, pixel support and final shader-tag parity are separate.
   Terrain preview does not imply ordinary Reach node staging.
@@ -193,10 +188,14 @@ c20's GPL-3.0 facts-only catalogue generation is reproducible with
   metadata may extend the observed graph. `want` can also include build-only or
   transitive entries. The report is a factual observed graph with explicit limits.
 
+## HaloScript compatibility checkpoint
+
+Prototype 1.9.46 adds a deterministic reviewed mapping catalog, raw versus effective totals, exact source expressions, compiled scenario script declarations, overload resolution and content-pinned context reviews. The machine-readable transpiler table is a separate output and is also embedded in the report. Missing-reference severity is per relevance group. See [evidence and real 040_voi results](h3-hsc-compatibility.md).
+
 ## Validation and delivery
 
 The standalone prototype workflow tests the helper on Windows and Linux and
-uploads `H3-port-census-v1-windows.zip` with a SHA-256 file and build commit.
+uploads `H3-port-census-1.9.46-windows.zip` with a SHA-256 file and build commit.
 The existing scenario prototype workflow still provides Blender regression
 coverage. Neither workflow deploys the normal Foundry release/feed for this branch.
 No Foundry addon installation is required to use the census.

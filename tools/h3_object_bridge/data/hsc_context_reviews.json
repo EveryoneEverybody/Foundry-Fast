@@ -1,0 +1,2085 @@
+{
+  "format": "foundry.hsc-context-reviews",
+  "version": 1,
+  "reviews": [
+    {
+      "file": "globals/global_scripts.hsc",
+      "source_sha256": "6f57fd05a11b8c1f8a61912077e6a24710e581d00e26f0a56e9748ae8cf357ed",
+      "enclosing_script": "cinematic_fade_to_gameplay",
+      "functions": [
+        "player_control_unlock_gaze"
+      ],
+      "call_site_role": "CINEMATIC",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "globals/global_scripts.hsc",
+          "lines": [
+            359,
+            360,
+            361,
+            362
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reviewed cinematic transition releases gaze for the stock four player helpers. Reach uses explicit player identities; preserve that release when remapping the helper expressions."
+    },
+    {
+      "file": "globals/global_scripts.hsc",
+      "source_sha256": "6f57fd05a11b8c1f8a61912077e6a24710e581d00e26f0a56e9748ae8cf357ed",
+      "enclosing_script": "cinematic_fade_to_title",
+      "functions": [
+        "player_control_unlock_gaze"
+      ],
+      "call_site_role": "CINEMATIC",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "globals/global_scripts.hsc",
+          "lines": [
+            224,
+            225,
+            226,
+            227
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reviewed cinematic transition releases gaze for the stock four player helpers. Reach uses explicit player identities; preserve that release when remapping the helper expressions."
+    },
+    {
+      "file": "globals/global_scripts.hsc",
+      "source_sha256": "6f57fd05a11b8c1f8a61912077e6a24710e581d00e26f0a56e9748ae8cf357ed",
+      "enclosing_script": "cinematic_fade_to_title_slow",
+      "functions": [
+        "player_control_unlock_gaze"
+      ],
+      "call_site_role": "CINEMATIC",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "globals/global_scripts.hsc",
+          "lines": [
+            264,
+            265,
+            266,
+            267
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reviewed cinematic transition releases gaze for the stock four player helpers. Reach uses explicit player identities; preserve that release when remapping the helper expressions."
+    },
+    {
+      "file": "globals/global_scripts.hsc",
+      "source_sha256": "6f57fd05a11b8c1f8a61912077e6a24710e581d00e26f0a56e9748ae8cf357ed",
+      "enclosing_script": "cinematic_title_to_gameplay",
+      "functions": [
+        "player_control_unlock_gaze"
+      ],
+      "call_site_role": "CINEMATIC",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "globals/global_scripts.hsc",
+          "lines": [
+            293,
+            294,
+            295,
+            296
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reviewed cinematic transition releases gaze for the stock four player helpers. Reach uses explicit player identities; preserve that release when remapping the helper expressions."
+    },
+    {
+      "file": "globals/global_scripts.hsc",
+      "source_sha256": "6f57fd05a11b8c1f8a61912077e6a24710e581d00e26f0a56e9748ae8cf357ed",
+      "enclosing_script": "perspective_skipped",
+      "functions": [
+        "player_control_unlock_gaze"
+      ],
+      "call_site_role": "CINEMATIC",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "globals/global_scripts.hsc",
+          "lines": [
+            552,
+            553,
+            554,
+            555
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reviewed cinematic transition releases gaze for the stock four player helpers. Reach uses explicit player identities; preserve that release when remapping the helper expressions."
+    },
+    {
+      "file": "globals/global_scripts.hsc",
+      "source_sha256": "6f57fd05a11b8c1f8a61912077e6a24710e581d00e26f0a56e9748ae8cf357ed",
+      "enclosing_script": "perspective_stop",
+      "functions": [
+        "player_control_unlock_gaze"
+      ],
+      "call_site_role": "CINEMATIC",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "globals/global_scripts.hsc",
+          "lines": [
+            493,
+            494,
+            495,
+            496
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reviewed cinematic transition releases gaze for the stock four player helpers. Reach uses explicit player identities; preserve that release when remapping the helper expressions."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "cinematic_title_to_gameplay_loc",
+      "functions": [
+        "player_control_unlock_gaze"
+      ],
+      "call_site_role": "CINEMATIC",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            3166,
+            3167,
+            3168,
+            3169
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Reviewed cinematic transition releases gaze for the stock four player helpers. Reach uses explicit player identities; preserve that release when remapping the helper expressions."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "gs_award_primary_skull",
+      "functions": [
+        "campaign_metagame_award_primary_skull"
+      ],
+      "call_site_role": "METAGAME",
+      "blocker_severity": "OPTIONAL",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            3475,
+            3476,
+            3477,
+            3478
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Dormant skull eligibility/spawn/award flow. It waits on combat state to manage skull_catch, but does not open a mission gate or advance the mission. Preserve separately from core mission progression."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "gs_create_primary_skull",
+      "functions": [
+        "campaign_is_finished_heroic",
+        "campaign_is_finished_legendary",
+        "campaign_is_finished_normal"
+      ],
+      "call_site_role": "METAGAME",
+      "blocker_severity": "OPTIONAL",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            3449,
+            3450,
+            3451
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Dormant skull eligibility/spawn/award flow. It waits on combat state to manage skull_catch, but does not open a mission gate or advance the mission. Preserve separately from core mission progression."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_arb_entrance",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2458,
+            2459,
+            2460,
+            2461,
+            2462,
+            2477
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_arb_truth_response",
+      "functions": [
+        "vs_enable_pathfinding_failsafe",
+        "vs_face_object",
+        "vs_go_to",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2738,
+            2743,
+            2744,
+            2746,
+            2756
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_bfg_joh_hints",
+      "functions": [
+        "hud_activate_team_nav_point_flag",
+        "hud_breadcrumbs_activate_team_nav_point_flag",
+        "hud_breadcrumbs_using_revised_nav_points"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2873,
+            2879,
+            2880
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_cor_mar_locked_down",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2498,
+            2499,
+            2500,
+            2501,
+            2502,
+            2522
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_cor_mar_safest_place",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2584,
+            2585,
+            2586,
+            2587,
+            2588,
+            2610
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_faa_cov_flee",
+      "functions": [
+        "vs_custom_animation",
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_go_to",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script",
+        "vs_stop_custom_animation"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            676,
+            677,
+            678,
+            679,
+            680,
+            686,
+            694,
+            696,
+            698,
+            699,
+            702
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_faa_door_go",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            822,
+            823,
+            824,
+            825,
+            827,
+            837
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_faa_door_go_02",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            899,
+            900,
+            901,
+            902,
+            904,
+            914
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_faa_door_hint_01a",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            720,
+            721,
+            722,
+            723,
+            725,
+            734
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_faa_door_hint_01b",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            753,
+            754,
+            755,
+            756,
+            758,
+            767
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_faa_door_hint_01c",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            782,
+            783,
+            784,
+            785,
+            787,
+            796
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_faa_door_hint_02",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            863,
+            864,
+            865,
+            866,
+            868,
+            878
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_flush",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1316,
+            1317,
+            1318,
+            1319,
+            1321,
+            1335
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_goose",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1644,
+            1645,
+            1646,
+            1648,
+            1657
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_hog_door",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1359,
+            1360,
+            1361,
+            1362,
+            1364,
+            1390
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_last_mags",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1414,
+            1415,
+            1416,
+            1417,
+            1419,
+            1425,
+            1433,
+            1440
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_mar_buggers",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1510,
+            1511,
+            1512,
+            1513,
+            1515,
+            1516,
+            1517,
+            1518,
+            1520,
+            1535
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_mar_buggers_02",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1559,
+            1560,
+            1561,
+            1562,
+            1564,
+            1565,
+            1566,
+            1567,
+            1569,
+            1588
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_mar_lab_help_02",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1718,
+            1719,
+            1720,
+            1722,
+            1732
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_new_contact",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1278,
+            1279,
+            1280,
+            1281,
+            1283,
+            1293
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_new_rahrah",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1244,
+            1245,
+            1246,
+            1247,
+            1249,
+            1257
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_fab_thanks",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1461,
+            1462,
+            1463,
+            1464,
+            1466,
+            1471,
+            1475,
+            1479,
+            1483,
+            1488
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_int_dead_01",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            362,
+            363,
+            364,
+            365,
+            367,
+            374,
+            380,
+            385,
+            390,
+            394,
+            399,
+            404,
+            411
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_int_dead_02",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            435,
+            436,
+            437,
+            438,
+            439,
+            445,
+            449,
+            453,
+            457,
+            464,
+            468,
+            472,
+            479,
+            483,
+            492,
+            496,
+            501,
+            508,
+            512,
+            517,
+            525
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_int_door",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            547,
+            548,
+            549,
+            550,
+            551,
+            611
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_int_hog_cover",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            630,
+            631,
+            632,
+            633,
+            636,
+            646,
+            654,
+            660
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_laa_joh_fab_help",
+      "functions": [
+        "vs_release_all"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1182
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_laa_last_night",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2545,
+            2546,
+            2547,
+            2548,
+            2549,
+            2562
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_laa_mar_fab_help_01",
+      "functions": [
+        "vs_release_all"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1149
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_laa_mar_fab_help_02",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1204,
+            1205,
+            1206,
+            1207,
+            1208,
+            1214,
+            1218,
+            1224
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_laa_pier_help",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1051,
+            1052,
+            1053,
+            1054,
+            1056,
+            1064,
+            1068,
+            1072,
+            1079
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_laa_wraith_dead",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1099,
+            1100,
+            1101,
+            1102,
+            1104,
+            1118
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_lab_mar_scarab",
+      "functions": [
+        "vs_release_all"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2027
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_lab_mar_scarab_dead",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2386,
+            2387,
+            2388,
+            2389,
+            2390,
+            2404
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_lab_mar_scarab_hints_01",
+      "functions": [
+        "vs_release_all"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2117
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_lab_wraith01",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1754,
+            1755,
+            1756,
+            1757,
+            1758,
+            1763,
+            1767
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_lake_a_radio_sitrep",
+      "functions": [
+        "vs_release_all"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            958
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_lake_a_radio_sitrep02",
+      "functions": [
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            990,
+            1020
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_office_morphine",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all",
+        "vs_set_cleanup_script"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2630,
+            2631,
+            2632,
+            2633,
+            2634,
+            2643
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "md_punch_hard",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_release_all"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            1678,
+            1679,
+            1680,
+            1696
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed body serializes dialogue with g_playing_dialogue, actor casting and md_cleanup; its observed follow-ups are dialogue, hints, music or objective display. No door mutation is present in this body. Cleanup must still restore actor/shared dialogue state; this is not permission to drop it and indirect reachability remains unproven."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "vig_cor_mar_open_up",
+      "functions": [
+        "vs_enable_pathfinding_failsafe",
+        "vs_go_to",
+        "vs_play_line",
+        "vs_release_all",
+        "vs_reserve"
+      ],
+      "call_site_role": "MISSION_PROGRESSION",
+      "blocker_severity": "MISSION_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2988,
+            2992,
+            2998,
+            3000,
+            3004,
+            3008
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed script contains vignette ownership/movement plus a door power/position operation. Preserve ordering, release and abnormal termination before claiming the authored door path works. This is a conservative blocker for this path, not proof no player-operated alternative exists."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "vig_war_sgt_brute_pack",
+      "functions": [
+        "vs_enable_pathfinding_failsafe",
+        "vs_force_combat_status",
+        "vs_go_to_and_face",
+        "vs_release_all",
+        "vs_shoot"
+      ],
+      "call_site_role": "COMBAT",
+      "blocker_severity": "COMBAT_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            3021,
+            3026,
+            3029,
+            3031,
+            3035
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed actor/animation sequence places or controls combat participants. Actor release/cleanup parity must be resolved before claiming combat behavior."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "vig_ware_brute02",
+      "functions": [
+        "vs_custom_animation",
+        "vs_custom_animation_loop",
+        "vs_release",
+        "vs_release_all"
+      ],
+      "call_site_role": "COMBAT",
+      "blocker_severity": "COMBAT_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            3054,
+            3055,
+            3059,
+            3060,
+            3062,
+            3067
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed actor/animation sequence places or controls combat participants. Actor release/cleanup parity must be resolved before claiming combat behavior."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+      "source_sha256": "97933662e71d42f8d3c16ebda7d30930105ec7c6100a7037a59fb817f2ed0423",
+      "enclosing_script": "vs_scarab_intro",
+      "functions": [
+        "vs_custom_animation",
+        "vs_stop_custom_animation"
+      ],
+      "call_site_role": "COMBAT",
+      "blocker_severity": "COMBAT_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_ambient.hsc",
+          "lines": [
+            2911,
+            2913
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed actor/animation sequence places or controls combat participants. Actor release/cleanup parity must be resolved before claiming combat behavior."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_insertion.hsc",
+      "source_sha256": "7b230050772d03c583663a7aca70bab185cd776f09cc2bd6ee5d71360b280fa1",
+      "enclosing_script": "ins_scarab",
+      "functions": [
+        "player0_set_pitch",
+        "player1_set_pitch",
+        "player2_set_pitch",
+        "player3_set_pitch"
+      ],
+      "call_site_role": "FIDELITY",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_insertion.hsc",
+          "lines": [
+            88,
+            89,
+            90,
+            91
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Pitch setup follows teleport, unhide and movement enable, before ally placement. Loss affects the initial view angle, not the teleport or mission gate."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_factory_b",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_position",
+        "hud_breadcrumbs_deactivate_team_nav_point_position"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3821,
+            3823
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_factory_b2",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_position",
+        "hud_breadcrumbs_deactivate_team_nav_point_position"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3828,
+            3830
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_hangar_door_switch1",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_object",
+        "hud_breadcrumbs_deactivate_team_nav_point_object"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3752,
+            3754
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_hangar_door_switch2",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_object",
+        "hud_breadcrumbs_deactivate_team_nav_point_object"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3759,
+            3761
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_workertown",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_position",
+        "hud_breadcrumbs_deactivate_team_nav_point_position"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3902,
+            3904
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_wraith",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_object",
+        "hud_breadcrumbs_deactivate_team_nav_point_object"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3785,
+            3787
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_wraith_b1",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_object",
+        "hud_breadcrumbs_deactivate_team_nav_point_object"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3839,
+            3841
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bcs_nav_wraith_b2",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_object",
+        "hud_breadcrumbs_deactivate_team_nav_point_object"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3845,
+            3847
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "bfg_damage",
+      "functions": [
+        "hud_deactivate_team_nav_point_flag"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3156
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "button_pusher01",
+      "functions": [
+        "vs_abort_on_damage",
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_go_to",
+        "vs_release_all"
+      ],
+      "call_site_role": "MISSION_PROGRESSION",
+      "blocker_severity": "MISSION_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            367,
+            368,
+            372,
+            373,
+            374,
+            376,
+            378
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed script contains vignette ownership/movement plus a door power/position operation. Preserve ordering, release and abnormal termination before claiming the authored door path works. This is a conservative blocker for this path, not proof no player-operated alternative exists."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "button_pusher02",
+      "functions": [
+        "vs_abort_on_damage",
+        "vs_enable_pathfinding_failsafe",
+        "vs_go_to",
+        "vs_release_all"
+      ],
+      "call_site_role": "MISSION_PROGRESSION",
+      "blocker_severity": "MISSION_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            397,
+            398,
+            402,
+            404
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed script contains vignette ownership/movement plus a door power/position operation. Preserve ordering, release and abnormal termination before claiming the authored door path works. This is a conservative blocker for this path, not proof no player-operated alternative exists."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "button_pusher03",
+      "functions": [
+        "vs_enable_moving",
+        "vs_enable_pathfinding_failsafe",
+        "vs_go_to",
+        "vs_release_all"
+      ],
+      "call_site_role": "MISSION_PROGRESSION",
+      "blocker_severity": "MISSION_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            421,
+            422,
+            423,
+            425
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed script contains vignette ownership/movement plus a door power/position operation. Preserve ordering, release and abnormal termination before claiming the authored door path works. This is a conservative blocker for this path, not proof no player-operated alternative exists."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "faa_nav_exit",
+      "functions": [
+        "hud_activate_team_nav_point_flag",
+        "hud_breadcrumbs_using_revised_nav_points",
+        "hud_deactivate_team_nav_point_flag"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3771,
+            3776,
+            3778
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "fab_button_pusher",
+      "functions": [
+        "vs_enable_looking",
+        "vs_enable_pathfinding_failsafe",
+        "vs_enable_targeting",
+        "vs_go_to",
+        "vs_release_all"
+      ],
+      "call_site_role": "MISSION_PROGRESSION",
+      "blocker_severity": "MISSION_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            1511,
+            1512,
+            1513,
+            1515,
+            1517
+          ]
+        }
+      ],
+      "confidence": "PROVISIONAL",
+      "notes": "Reviewed script contains vignette ownership/movement plus a door power/position operation. Preserve ordering, release and abnormal termination before claiming the authored door path works. This is a conservative blocker for this path, not proof no player-operated alternative exists."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "intro_nav_exit",
+      "functions": [
+        "hud_activate_team_nav_point_flag",
+        "hud_breadcrumbs_using_revised_nav_points",
+        "hud_deactivate_team_nav_point_flag"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3737,
+            3742,
+            3744
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "laa_nav_exit",
+      "functions": [
+        "hud_activate_team_nav_point_flag",
+        "hud_breadcrumbs_using_revised_nav_points",
+        "hud_deactivate_team_nav_point_flag"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3801,
+            3812,
+            3814
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "lake_b_nav_exit",
+      "functions": [
+        "hud_activate_team_nav_point_flag",
+        "hud_breadcrumbs_using_revised_nav_points",
+        "hud_deactivate_team_nav_point_flag"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3851,
+            3856,
+            3858
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "mission_voi",
+      "functions": [
+        "chud_show_fire_grenades"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            4107
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Mission startup hides only the firebomb HUD with false. Reach general grenade toggle also hides usable grenade indicators; a broader fallback needs an explicit fidelity decision."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "scarab_bcs_nav_exit",
+      "functions": [
+        "hud_breadcrumbs_activate_team_nav_point_object",
+        "hud_breadcrumbs_deactivate_team_nav_point_object",
+        "object_get_variant_child_object_by_marker_id"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3911,
+            3918
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    },
+    {
+      "file": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04",
+      "enclosing_script": "ware_nav_exit",
+      "functions": [
+        "hud_activate_team_nav_point_flag",
+        "hud_breadcrumbs_using_revised_nav_points",
+        "hud_deactivate_team_nav_point_flag"
+      ],
+      "call_site_role": "UI",
+      "blocker_severity": "FIDELITY_BLOCKER",
+      "evidence": [
+        {
+          "kind": "STOCK_SCRIPT_MATCH",
+          "source": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+          "lines": [
+            3867,
+            3872,
+            3875,
+            3877,
+            3883,
+            3886,
+            3891,
+            3893
+          ]
+        }
+      ],
+      "confidence": "HIGH",
+      "notes": "Nav hint operations read door/combat state and enable/disable an indicator. The indicator does not mutate that observed mission state. Team and identifier binding must be retained by future wrappers."
+    }
+  ],
+  "limitations": [
+    "Source hash mismatch invalidates the review. Unreviewed context is UNKNOWN.",
+    "Static script roles are not runtime reachability proof."
+  ]
+}

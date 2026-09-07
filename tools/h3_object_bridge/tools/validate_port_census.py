@@ -57,6 +57,23 @@ def validate(path):
     for call in report['scripts']['call_sites']:
         assert call['location']['line'] >= 1 and call['location']['column'] >= 1
         assert call['classification'] in {'DIRECT', 'SIGNATURE_CHANGE', 'RENAMED', 'EMULATABLE', 'STUB_CANDIDATE', 'UNSUPPORTED', 'UNKNOWN'}
+    scripts = report['scripts']
+    names = [r['name'] for r in scripts['engine_functions']]
+    assert names == sorted(set(names))
+    assert len(names) == scripts['summary']['unique_engine_functions']
+    assert sum(scripts['summary']['function_classifications'].values()) == len(names)
+    assert sum(scripts['summary']['call_site_classifications'].values()) == len(scripts['call_sites'])
+    assert len(scripts['transpiler_mappings']['call_mappings']) == len(scripts['call_sites'])
+    for call in scripts['call_sites']:
+        assert call['name'] in names
+        assert call['original_source_expression'].startswith('(')
+        assert call['location'] == call['expression']['location']
+        assert call['proven_target_status'] == 'NOT_TESTED'
+        assert call['classification'] not in ('DIRECT', 'RENAMED') or not call['requires_review']
+    missing = report['missing_reference_relevance']
+    assert {r['source_path'] for r in missing} == {t['source_path'] for t in tags if not t['exists']}
+    assert len(missing) == report['summary']['missing_references']
+    assert all(r['runtime_required'] == 'UNKNOWN' for r in missing)
     assert not any(report['safety'].values())
     print(f'PASS: schema v1 and graph invariants; {len(tags)} tags, {len(edges)} edges')
     return report

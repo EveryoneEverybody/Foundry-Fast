@@ -269,6 +269,8 @@ pub fn scan(path: &Path, scenario: bool, all_fields: bool) -> Scan {
                             | "light volumes"
                             | "terminals"
                             | "source files"
+                            | "scripts"
+                            | "globals"
                             | "ai user hint data"
                             | "device groups"
                             | "decals"
@@ -412,6 +414,9 @@ fn build_using(
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_nanos().to_string());
             let mut key_input = format!("{cache_scope}\n{path}\n{size:?}\n{mtime:?}\n{all_fields}");
+            if extension(&path) == "scenario" {
+                key_input.push_str("\nscript-declarations-v2");
+            }
             if path == scenario {
                 key_input.push_str("\nscenario-metadata-4");
             }

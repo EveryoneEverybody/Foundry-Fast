@@ -59,6 +59,8 @@ pub fn field<'a>(entity: &'a Value, name: &str) -> Option<&'a Value> {
 }
 pub fn symbols(scan: &Scan) -> BTreeMap<String, Vec<Value>> {
     let categories = [
+        "scripts",
+        "globals",
         "object names",
         "squads",
         "squad groups",
@@ -82,7 +84,7 @@ pub fn symbols(scan: &Scan) -> BTreeMap<String, Vec<Value>> {
                 table
                     .entry(name.to_lowercase())
                     .or_default()
-                    .push(json!({"category":category,"address":entity["address"],"name":name}));
+                    .push(json!({"category":category,"address":entity["address"],"name":name,"declared_type":field(&entity,"return type").or_else(||field(&entity,"type")),"script_type":field(&entity,"script type")}));
             }
         }
     }
