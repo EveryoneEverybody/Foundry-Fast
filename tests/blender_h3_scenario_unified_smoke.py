@@ -18,6 +18,15 @@ from h3_scenario_fixture import scene, Fields, write_bundle
 package = base['mod'].__package__
 Options = importlib.import_module(package + '.scenario_options').ScenarioOptions
 assets_module = importlib.import_module(package + '.scenario_assets')
+sky_choices = [dict(index=3, source_tag='levels/a/sky.scenery'),
+               dict(index=7, source_tag='levels/b/sky.scenery')]
+assert assets_module.selected_sky(sky_choices, '3') is sky_choices[0]
+assert assets_module.selected_sky(sky_choices, 'h3:7') is sky_choices[1]
+for invalid in ('sky', 'sky.scenery', '0', 'sky0'):
+    try: assets_module.selected_sky(sky_choices, invalid)
+    except ValueError as error: assert 'Choose from the Sky search' in str(error)
+    else: raise AssertionError('Ambiguous or missing source sky was accepted')
+assert assets_module.selected_sky(sky_choices, 'none') is None
 object_module = importlib.import_module(package + '.scenario_objects')
 Session = base['mod'].ScenarioBuildSession
 def count(): return (*base['count'](), len(bpy.data.node_groups))

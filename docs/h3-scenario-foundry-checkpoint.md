@@ -1,4 +1,23 @@
-# Foundry scenario source adapter — prototype 1.9.44
+# Foundry scenario source adapter — prototype 1.9.45
+
+## Sky selector correction in 1.9.45
+
+Blender search and enum callbacks receive an RNA `OperatorProperties` wrapper,
+which cannot store arbitrary Python attributes. Version 1.9.44 kept sky-search
+state on that wrapper and could repeatedly raise `AttributeError` in the file
+browser. The cache now lives outside the operator, is keyed by source and project
+settings, and invalidates when the scenario file changes. Dynamic enum strings
+remain alive independently of the bounded source cache.
+
+Use the normal Sky search to choose `0: levels/solo/040_voi/sky/sky.scenery`.
+The source index `0`, the full source path and the unique name `sky` are also
+accepted. Ambiguous names are rejected. Invalid values such as `sky0` now show
+the actual choices before full scenario/BSP extraction starts.
+
+The Windows Blender 5.2.1 operator tests now exercise the real RNA search wrapper
+and dynamic enum assignment, repeated callbacks, source invalidation, early
+selection rejection and the unchanged Reach backend boundary. Previous direct
+operator tests did not exercise the failing file-browser property callback.
 
 Use the normal **Foundry Import** command for both Reach and H3 loose scenarios.
 The file browser and drag/drop dialog retain Foundry's standard scenario options

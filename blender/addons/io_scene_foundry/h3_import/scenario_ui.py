@@ -1,6 +1,9 @@
 """Thin source adapter for the existing Foundry import operators and dialog."""
 import json
 import os
+from collections import OrderedDict
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 import subprocess
 
@@ -8,6 +11,63 @@ import bpy
 from .. import utils
 from .scenario_options import INSPECTION_PROPERTIES, ScenarioOptions, classify_source
 from .scenario_content import tag_reference
+
+
+# RNA search/enum callbacks receive OperatorProperties, not the Python Operator.
+# Keep callback state outside both wrappers. Cached values contain no Blender IDs.
+_last_selection_keys = OrderedDict()
+_enum_strings = {}
+_NONE_SKY_ITEMS = (('none', 'None', ''),)
+
+
+@dataclass(frozen=True)
+class SelectionState:
+    source: str | None = None
+    error: str = ''
+    skies: tuple = ()
+    enum_items: tuple = _NONE_SKY_ITEMS
+    search_items: tuple = ()
+
+
+def _stamp(path):
+    try:
+        stat = Path(path).stat()
+        return stat.st_size, stat.st_mtime_ns
+    except OSError:
+        return None
+
+
+def _selection_key(operator, path=None):
+    path = path if path is not None else getattr(operator, 'filepath', '')
+    if not path or Path(path).suffix.lower() != '.scenario': return None
+    path = bpy.path.abspath(path)
+    prefs = utils.get_prefs()
+    helper = prefs.h3_extraction_helper
+    return (path, utils.get_tags_path(), prefs.h3_tags_root, helper, _stamp(path),
+            _stamp(bpy.path.abspath(helper)) if helper else None)
+
+
+@lru_cache(maxsize=32)
+def _selection_state(key):
+    if key is None: return SelectionState()
+    source = None
+    try:
+        source, _ = classify(key[0])
+        rows = tuple(selection(key[0])) if source == 'halo3' else ()
+        # Blender retains pointers to dynamic enum strings beyond the callback.
+        # Keep these small strings alive even when a source-cache entry is evicted.
+        def retain(value): return _enum_strings.setdefault(value, value)
+        items = _NONE_SKY_ITEMS + tuple(tuple(retain(v) for v in (
+            f"h3:{r['index']}", f"{r['index']}: {Path(r['source_tag']).stem}", r['source_tag']))
+            for r in rows if r['source_tag'])
+        search = tuple((f"{r['index']}: {r['source_tag']}", r['source_tag']) for r in rows if r['source_tag'])
+        return SelectionState(source=source, skies=rows, enum_items=items, search_items=search)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        return SelectionState(source=source, error=str(error))
+
+
+def selection_state(operator, path=None):
+    return _selection_state(_selection_key(operator, path))
 
 
 def scenario_properties(cls):
@@ -45,30 +105,21 @@ def selection(path):
 
 
 def refresh(operator):
-    path = getattr(operator, 'filepath', '')
-    if not path or Path(path).suffix.lower() != '.scenario':
-        operator._scenario_source = None
-        return False
-    signature = (path, utils.get_tags_path(), utils.get_prefs().h3_tags_root)
-    if getattr(operator, '_scenario_selection_key', None) == signature:
-        return False
-    operator._scenario_selection_key = signature
-    operator._scenario_source = None
-    operator._scenario_error = ''
-    operator._h3_skies = []
-    try:
-        operator._scenario_source, _ = classify(path)
-        if operator._scenario_source == 'halo3':
-            operator._h3_skies = selection(path)
-    except (OSError, ValueError, subprocess.SubprocessError) as error:
-        operator._scenario_error = str(error)
-    return True
+    key = _selection_key(operator)
+    _selection_state(key)
+    pointer = operator.as_pointer()
+    changed = pointer not in _last_selection_keys or _last_selection_keys[pointer] != key
+    _last_selection_keys[pointer] = key
+    _last_selection_keys.move_to_end(pointer)
+    if len(_last_selection_keys) > 32: _last_selection_keys.popitem(last=False)
+    return changed
 
 
 def draw_inspection(operator, layout):
-    if getattr(operator, '_scenario_error', ''):
-        layout.label(text=operator._scenario_error, icon='ERROR')
-    if getattr(operator, '_scenario_source', None) != 'halo3': return
+    state = selection_state(operator)
+    if state.error:
+        layout.label(text=state.error, icon='ERROR')
+    if state.source != 'halo3': return
     box = layout.box()
     box.label(text='Advanced Scenario Inspection')
     for name in INSPECTION_PROPERTIES:
@@ -78,17 +129,11 @@ def draw_inspection(operator, layout):
 
 
 def sky_items(operator, context):
-    # Retain enum strings on the operator for Blender's dynamic enum lifetime.
-    operator._sky_enum_items = [('none', 'None', '')] + [
-        (f"h3:{r['index']}", f"{r['index']}: {Path(r['source_tag']).stem}", r['source_tag'])
-        for r in getattr(operator, '_h3_skies', []) if r['source_tag']]
-    return operator._sky_enum_items
+    return selection_state(operator).enum_items
 
 
 def search_skies(operator, context, edit_text):
-    refresh(operator)
-    return [(f"{r['index']}: {r['source_tag']}", r['source_tag']) for r in getattr(operator, '_h3_skies', [])
-            if r['source_tag']]
+    return selection_state(operator).search_items
 
 
 def route(operator, context, paths):
@@ -100,6 +145,12 @@ def route(operator, context, paths):
     if getattr(operator, 'tag_zone_set', '') not in ('', 'all_zone_sets'):
         raise ValueError('H3 Zone Set filtering is not available in this checkpoint; choose All Zone Sets')
     from . import ScenarioImportJob
-    operator._h3_job = ScenarioImportJob(operator, ScenarioOptions.from_operator(operator))
+    from .scenario_assets import selected_sky
+    options = ScenarioOptions.from_operator(operator)
+    if options.sky and options.sky.lower().strip() != 'none':
+        state = selection_state(operator, paths[0])
+        if state.error: raise ValueError(state.error)
+        selected_sky(state.skies, options.sky)
+    operator._h3_job = ScenarioImportJob(operator, options)
     operator._h3_job.filepath = paths[0]
     return operator._h3_job.execute(context)

@@ -23,6 +23,7 @@ args.add_argument('--no-objects', action='store_true')
 args.add_argument('--no-sky', action='store_true')
 args.add_argument('--no-materials', action='store_true')
 args.add_argument('--no-geometry', action='store_true')
+args.add_argument('--sky', default='h3:0')
 opts = args.parse_args(sys.argv[sys.argv.index('--') + 1:])
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'blender/addons'))
@@ -48,7 +49,7 @@ memory_before = memory_metrics()
 source_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
 started = time.perf_counter()
 result = bpy.ops.nwo.foundry_import(filepath=str(source), tag_bsp_import_geometry=not opts.no_geometry,
-    tag_sky='' if opts.no_sky else 'h3:0', tag_scenario_import_objects=not opts.no_objects,
+    tag_sky='' if opts.no_sky else opts.sky, tag_scenario_import_objects=not opts.no_objects,
     build_blender_materials=not opts.no_materials, tag_bsp_render_only=True, setup_as_asset=False,
     h3_inspect_ai=opts.inspection, h3_inspect_giant_hints=opts.inspection,
     h3_inspect_firing_positions=opts.inspection)
@@ -65,20 +66,25 @@ session = job._session
 if not opts.no_materials:
     material_report = json.loads(bpy.data.texts[session.root['h3_material_report']].as_string())
     assert session.profile.counts['unique_images'] > 0, 'Material extraction produced no packed images'
-    assert any(r.get('preview', {}).get('status') == 'approximate_preview' for r in material_report if r.get('preview'))
+    if not opts.no_geometry:
+        assert any(r.get('preview', {}).get('status') == 'approximate_preview' for r in material_report if r.get('preview'))
+    assert any(m.get('h3_material_preview') == 'approximate_preview' for m in bpy.data.materials
+               if m.get('h3_source_shader'))
     sky_shaders = [m for m in bpy.data.materials if '/040_voi/sky/' in m.get('h3_source_shader', '')]
     if not opts.no_sky:
         assert sky_shaders and any(m.get('h3_material_preview') == 'approximate_preview' for m in sky_shaders)
     assert all(not m.nwo.shader_path for m in bpy.data.materials if m.get('h3_source_shader'))
-report = dict(seconds=elapsed, baseline_seconds=1469.4,
-    improvement_percent=(1469.4-elapsed)/1469.4*100, counts=session.counts,
+comparable = not any((opts.inspection, opts.no_objects, opts.no_sky, opts.no_materials, opts.no_geometry))
+report = dict(seconds=elapsed, baseline_seconds=1469.4 if comparable else None,
+    improvement_percent=(1469.4-elapsed)/1469.4*100 if comparable else None, counts=session.counts,
     profile=session.profile.report(), memory_before=memory_before, memory_after=memory_metrics(),
     project=project_before, source_sha256=source_hash,
     sky=session.sky_entry, warnings=session.warnings,
     helper_output=str(session.directory), source_read_only=True,
     source_commit=source_commit, invocation=vars(opts),
     helper_sha256={p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in Path(opts.helper).parent.glob('*.exe')},
-    comparison='Fresh extraction and construction with a 100 ms modal cadence; OS file cache is uncontrolled; baseline supplied by user')
+    comparison=('Fresh extraction and construction with a 100 ms modal cadence; OS file cache is uncontrolled; baseline supplied by user'
+                if comparable else 'Targeted option set differs from the full-import baseline; no percentage comparison is valid'))
 (output/'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
 bpy.ops.wm.save_as_mainfile(filepath=str(output/'040_voi.blend'))
 print('REAL_UNIFIED_RESULT', json.dumps({k:report[k] for k in ('seconds','improvement_percent','counts','memory_after','sky')}), flush=True)

@@ -1146,7 +1146,7 @@ class NWO_Import(bpy.types.Operator):
     
     tag_sky: bpy.props.StringProperty(
         name="Sky",
-        description="Enter the tag relative path to the sky to import with this Scenario",
+        description="Select a scenario sky or enter its relative tag path. H3 also accepts a source sky index",
         search=h3_scenario_ui.search_skies,
     )
     
@@ -5121,7 +5121,7 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         return items
     
     def items_sky(self, context):
-        if getattr(self, "_scenario_source", None) == "halo3":
+        if h3_scenario_ui.selection_state(self).source == "halo3":
             return h3_scenario_ui.sky_items(self, context)
         items = [("none", "None", "")]
         for sky in sky_items:
@@ -5468,8 +5468,9 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
                 try:
                     h3_scenario_ui.refresh(self)
                     source_kind, _ = h3_scenario_ui.classify(self.filepath)
-                    if self._scenario_error:
-                        raise ValueError(self._scenario_error)
+                    selection_error = h3_scenario_ui.selection_state(self).error
+                    if selection_error:
+                        raise ValueError(selection_error)
                 except (OSError, ValueError) as error:
                     self.report({'ERROR'}, str(error))
                     return {'CANCELLED'}

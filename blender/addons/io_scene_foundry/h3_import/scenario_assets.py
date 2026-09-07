@@ -26,11 +26,16 @@ def skies(inventory):
 
 
 def selected_sky(rows, value):
+    value = (value or '').strip().replace('\\', '/').casefold()
     if not value or value == 'none': return None
-    matches = [r for r in rows if value in (f"h3:{r['index']}", f"{r['index']}: {r['source_tag']}",
-        r['source_tag'], r['source_tag'].replace('/', '\\'))]
+    matches = [r for r in rows if value in (f"h3:{r['index']}", str(r['index']),
+        f"{r['index']}: {r['source_tag']}".casefold(), r['source_tag'].casefold())]
+    if not matches:
+        matches = [r for r in rows if value in (Path(r['source_tag']).name.casefold(),
+                                               Path(r['source_tag']).stem.casefold())]
     if len(matches) != 1 or not matches[0]['source_tag']:
-        raise ValueError(f'Sky selection {value!r} does not identify exactly one source scenario sky')
+        choices = ', '.join(f"{r['index']}: {r['source_tag']}" for r in rows if r['source_tag']) or 'None'
+        raise ValueError(f'Sky selection {value!r} does not identify exactly one source scenario sky. Choose from the Sky search: {choices}')
     return matches[0]
 
 
