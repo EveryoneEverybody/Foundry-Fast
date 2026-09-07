@@ -317,6 +317,12 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 self._steps.close()
             if rollback and self._session is not None:
                 self._session.rollback()
+            if not rollback and self._is_scenario and self._session is not None:
+                self._session.finish_profile(time.monotonic() - self._started)
+                if getattr(self, 'options', None) and self.options.setup_as_asset:
+                    from ..tools.importer import set_asset
+                    set_asset('.scenario')
+                    utils.get_export_props().create_debug_zone_set = False
             if rollback:
                 for ob in context.selected_objects:
                     ob.select_set(False)

@@ -21,6 +21,7 @@ class BuildSession:
         self.settings = utils.get_scene_props()
         self.scale = import_transform.scale_factor(self.settings)
         self.rotation = import_transform.rotation_matrix(self.settings)
+        self.source_axes = source_axes
         if source_axes:
             self.rotation = Matrix.Identity(4)
         self.variant = variant
@@ -102,6 +103,16 @@ class BuildSession:
             ob.parent = self.armature
             ob.parent_type = 'BONE'
             ob.parent_bone = node
+            if self.source_axes:
+                # Fresh source templates have rest-pose bones and an identity
+                # armature object. Blender's ordinary bone parent is at its tail.
+                # Set the local basis directly, avoiding one full-scene depsgraph
+                # evaluation per marker while preserving the same world matrix.
+                bone = self.armature.data.bones[node]
+                parent = self.armature.matrix_world @ bone.matrix_local @ Matrix.Translation((0., bone.length, 0.))
+                ob.matrix_parent_inverse = Matrix.Identity(4)
+                ob.matrix_basis = parent.inverted_safe() @ matrix
+                return
             self.context.view_layer.update()
         ob.matrix_world = matrix
 

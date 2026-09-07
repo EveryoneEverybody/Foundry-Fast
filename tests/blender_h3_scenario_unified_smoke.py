@@ -1,10 +1,12 @@
 """Unified scenario adapter: pruning, native hierarchy, sky, compact points and persistence."""
 import dataclasses
+import copy
 import importlib
 import json
 from pathlib import Path
 import runpy
 import tempfile
+import time
 from unittest.mock import patch
 
 import bpy
@@ -39,7 +41,7 @@ def layer_for(collection):
     raise AssertionError(collection.name)
 
 
-def fixture():
+def fixture(point_count=1):
     inventory = content_inventory()
     f = Fields(); f.ordinals[''] = 400
     sky = f.block('', 'skies', 2)
@@ -48,6 +50,15 @@ def fixture():
         f.add(p, 'sky', dict(path='objects/test/panel', extension='scenery'), field_type='tag reference')
         f.add(p, 'active on bsps', 255)
     inventory['records'].extend(f.rows)
+    block = next(r for r in inventory['records'] if r['name'] == 'firing positions' and r['kind'] == 'block')
+    original = block['address'] + '[0]'
+    children = [r for r in inventory['records'] if r['address'].startswith(original + '/')]
+    block['count'] = point_count
+    for i in range(1, point_count):
+        for row in children:
+            clone = copy.deepcopy(row)
+            clone['address'] = clone['address'].replace(original, block['address'] + f'[{i}]', 1)
+            inventory['records'].append(clone)
     return inventory
 
 
@@ -112,5 +123,64 @@ with tempfile.TemporaryDirectory() as d:
         layer.hide_viewport = False
         assert not layer.hide_viewport
     assert bpy.data.collections[root_name]['h3_sky_entries']
+
+    # An unavailable selected sky is nonfatal and never substitutes a different sky.
+    before = count()
+    session = Session(bpy.context, data, fixture(), directory, object_assets={},
+                      options=Options(sky='h3:1'), preview_materials=False)
+    list(session.steps())
+    assert not any(o.get('h3_source_role') == 'scenario_sky' for o in session.root.all_objects)
+    assert session.counts['bsp_meshes'] and any('Sky 1' in w for w in session.warnings)
+    session.rollback(); assert count() == before
+
+    # Measure both representations; correctness guards use counts, never wall time.
+    inventory = fixture(4612)
+    benchmark = {}
+    for detailed in (False, True):
+        before = count(); started = time.perf_counter()
+        session = Session(bpy.context, data, inventory, directory, options=Options(
+            geometry=False, firing_positions=True, detailed_points=detailed), preview_materials=False)
+        list(session.steps())
+        points = [o for o in session.root.all_objects if o.get('h3_source_role') == 'firing_positions']
+        benchmark['detailed' if detailed else 'compact'] = dict(seconds=time.perf_counter()-started,
+            objects=len(points), mesh_vertices=sum(len(o.data.vertices) for o in points if o.type == 'MESH'))
+        assert len(points) == (4612 if detailed else 1)
+        assert session.counts['firing_positions'] == 4612
+        session.rollback(); assert count() == before
+    print('POINT_BENCHMARK', json.dumps(benchmark))
+
+    # A source template's bone parenting matches the ordinary builder, without
+    # one full depsgraph evaluation for every individual marker.
+    class ViewLayer:
+        def __init__(self): self.calls = 0
+        @property
+        def objects(self): return bpy.context.view_layer.objects
+        def update(self):
+            self.calls += 1
+            bpy.context.view_layer.update()
+    class Context:
+        def __init__(self): self.view_layer = ViewLayer()
+        def __getattr__(self, name): return getattr(bpy.context, name)
+    source = payload(); source['physics'] = None
+    source['render']['nodes'][1]['rotation'] = [.9238795325, 0., 0., .3826834324]
+    source['render']['markers'] = [dict(source['render']['markers'][0], name=f'marker_{i}', position=[10.+i, 0., 0.]) for i in range(100)]
+    settings = base['base']['settings']; settings.scale='blender'; settings.forward_direction='x'
+    builds = []
+    for direct in (False, True):
+        context = Context()
+        build = base['base']['BuildSession'](context, source, directory/'synthetic.h3asset.json', source_axes=direct)
+        list(build.build()); bpy.context.view_layer.update()
+        markers = {o['h3_source_marker']: o for o in build.root.all_objects if o.get('h3_source_marker')}
+        builds.append((build, markers, context.view_layer.calls))
+    assert builds[1][2] <= 2 and builds[0][2] >= 100, [b[2] for b in builds]
+    for pose in (False, True):
+        if pose:
+            for build, _, _ in builds:
+                build.armature.pose.bones['b_panel'].location.z += 1.
+            bpy.context.view_layer.update()
+        for name, marker in builds[0][1].items():
+            a = marker.matrix_world; b = builds[1][1][name].matrix_world
+            assert max(abs(a[r][c]-b[r][c]) for r in range(4) for c in range(4)) < 1e-4, name
+    for build, _, _ in reversed(builds): build.rollback()
 
 print('Unified H3 scenario passed: options, source skies, BSP semantics/colors, excluded placements, compact points, visibility, rollback and save/reopen')

@@ -132,8 +132,32 @@ jobs:
       - name: Test reference frames, semantic sources and child attachments
         run: .cache/blender-5.2.1-linux-x64/blender --background --factory-startup --python-exit-code 1 --python tests/blender_h3_scenario_references_smoke.py
 
+  operator:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Windows Blender
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/blender-5.2.1-windows-x64
+          key: blender-5.2.1-windows-x64
+      - name: Download Windows Blender
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .cache | Out-Null
+          curl.exe -L --fail --retry 3 https://download.blender.org/release/Blender5.2/blender-5.2.1-windows-x64.zip -o "$env:RUNNER_TEMP/blender.zip"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Expand-Archive "$env:RUNNER_TEMP/blender.zip" .cache
+      - name: Test registered Foundry operator and actual collection property callbacks
+        shell: pwsh
+        run: |
+          & .cache/blender-5.2.1-windows-x64/blender.exe --background --factory-startup --python-exit-code 1 --python tests/blender_h3_scenario_operator_smoke.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
   package:
-    needs: [inspect, blender]
+    needs: [inspect, blender, operator]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

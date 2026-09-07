@@ -5,6 +5,34 @@ from functools import wraps
 from time import perf_counter
 
 
+def memory_metrics():
+    """Parent Blender process only; no claim about external helper memory."""
+    import os
+    try:
+        if os.name == 'nt':
+            import ctypes
+            from ctypes import wintypes
+            class Counters(ctypes.Structure):
+                _fields_ = [('cb', wintypes.DWORD), ('PageFaultCount', wintypes.DWORD)] + [
+                    (name, ctypes.c_size_t) for name in ('PeakWorkingSetSize', 'WorkingSetSize',
+                    'QuotaPeakPagedPoolUsage', 'QuotaPagedPoolUsage', 'QuotaPeakNonPagedPoolUsage',
+                    'QuotaNonPagedPoolUsage', 'PagefileUsage', 'PeakPagefileUsage')]
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.GetCurrentProcess.restype = wintypes.HANDLE
+            read = ctypes.WinDLL('psapi', use_last_error=True).GetProcessMemoryInfo
+            read.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+            data = Counters(); data.cb = ctypes.sizeof(data)
+            if not read(kernel.GetCurrentProcess(), ctypes.byref(data), data.cb): return {}
+            return dict(working_set_bytes=data.WorkingSetSize, peak_working_set_bytes=data.PeakWorkingSetSize,
+                        private_commit_bytes=data.PagefileUsage, scope='parent process only')
+        import resource
+        import sys
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return dict(peak_working_set_bytes=peak * (1 if sys.platform == 'darwin' else 1024), scope='parent process only')
+    except (OSError, ImportError, AttributeError):
+        return {}
+
+
 CAPABILITIES = ('Experimental reconstruction', 'All decoded permutations', 'Animations, gameplay',
                 'Render topology', 'Blender material previews', 'Reference Only', 'Materials are placeholders',
                 'No explicit model variant')

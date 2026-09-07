@@ -1,6 +1,7 @@
 """Source routing and option pruning without Blender or proprietary source tags."""
 import ast
 import importlib
+import hashlib
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -22,7 +23,7 @@ class OptionsTests(unittest.TestCase):
             reach.mkdir(parents=True); h3.mkdir(parents=True)
             for folder, kind in ((reach, 'reach'), (h3, 'halo3')):
                 path = folder / 'test.scenario'; path.touch()
-                self.assertEqual(m.classify_source(path, reach), (kind, folder))
+                self.assertEqual(m.classify_source(path, reach), (kind, folder.resolve()))
             self.assertEqual(m.classify_source(h3/'test.scenario', reach, h3.parent)[0], 'halo3')
             unknown = root / 'test.scenario'; unknown.touch()
             with self.assertRaisesRegex(ValueError, 'Unknown'): m.classify_source(unknown, reach)
@@ -71,6 +72,19 @@ class OptionsTests(unittest.TestCase):
         for node in tree.body:
             if isinstance(node, ast.FunctionDef) and 'template' in node.name:
                 self.assertFalse(any(isinstance(n, ast.Attribute) and n.attr in m.INSPECTION_PROPERTIES for n in ast.walk(node)))
+
+    def test_reach_backend_and_templates_unchanged(self):
+        # Normalized AST from the verified fea63b47 prototype, before this adapter.
+        expected = {
+            'apply_import_template': '629cb00b3371789b1b1000d30c947d911f4fc5b3fe98a7790926256d657b9b77',
+            'set_default_import_template': '0af0e87cdf3d8a9b3e3e33c976ca9e521ff36b4568878e7ad5f480024c79ddfa',
+            'import_scenarios': '96f36f5e925538c1152235f7931bf284165f761ac2ba49db084d87d08a76d775',
+            'import_bsp': 'b28da8eec63e954e67706c229aa5067c76938dd0dcd0b804b797510a38e7ce44',
+        }
+        tree = ast.parse((ROOT/'blender/addons/io_scene_foundry/tools/importer.py').read_text())
+        actual = {node.name: hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+                  for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name in expected}
+        self.assertEqual(actual, expected)
 
 
 if __name__ == '__main__': unittest.main()

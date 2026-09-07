@@ -2,6 +2,7 @@
 import base64
 import json
 import hashlib
+from dataclasses import asdict
 from collections import Counter
 from pathlib import Path
 
@@ -397,6 +398,16 @@ class ScenarioBuildSession(ContentBuilder):
         self.root['h3_coordinate_encoding'] = 'source_world_units_unmodified'
         self.root['h3_display_scale_mode'] = self.context.scene.nwo.scale
         self.root['h3_display_forward'] = self.context.scene.nwo.forward_direction
+        if self.options:
+            self.root['h3_requested_import_options'] = json.dumps(asdict(self.options))
+            unsupported = []
+            if self.options.lights: unsupported.append('BSP light conversion')
+            if self.options.decals: unsupported.append('decals')
+            if self.options.decorators: unsupported.append('decorators')
+            if self.options.design and not self.options.render_only: unsupported.append('structure design')
+            if not self.options.render_only: unsupported.append('BSP collision/portal conversion and structure merge')
+            if unsupported:
+                self.warnings.append('H3 source-only in this checkpoint: ' + ', '.join(unsupported) + '. Source records are retained; no destination data is invented.')
         if self.preview:
             self.shader_source = self.text('H3 shader source - ' + self.root.name, self.preview.manifest)
             self.root['h3_shader_manifest'] = self.shader_source.name
@@ -441,6 +452,26 @@ class ScenarioBuildSession(ContentBuilder):
                             'scale_mode': self.context.scene.nwo.scale, 'forward': self.context.scene.nwo.forward_direction},
             'destination_tags_written': False, 'reference_only': True}).name
         yield 'Scenario reference complete'
+
+    def finish_profile(self, total_seconds):
+        from .scenario_reporting import memory_metrics
+        self.profile.elapsed('Total import elapsed', total_seconds)
+        memory = memory_metrics()
+        report = bpy.data.texts[self.root['h3_performance_report']]
+        data = json.loads(report.as_string())
+        data.update(self.profile.report(), memory=memory, sky=self.sky_entry)
+        report.clear(); report.write(json.dumps(data, indent=2))
+        print(f'H3 total import: {total_seconds:.3f}s; counters: {dict(self.profile.counts)}; memory: {memory}', flush=True)
+        # All of these source records are now retained in packed Text reports or
+        # the source inventory. Release query/template planning copies.
+        if self.options:
+            with self.profile.span('transient source cleanup'):
+                self.source_payloads.clear()
+                if self.frame_resolver:
+                    self.frame_resolver.index.children.clear()
+                    self.frame_resolver.index.names.clear()
+                self.content_plan = None
+                self.object_assets = None
 
     def rollback(self):
         for store, item in reversed(self.created):
