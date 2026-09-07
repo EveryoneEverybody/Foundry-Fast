@@ -11,7 +11,7 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'blender/addons'))
 bpy.ops.preferences.addon_enable(module='io_scene_foundry')
 from io_scene_foundry import h3_import, utils
-from io_scene_foundry.h3_import import scenario_ui
+from io_scene_foundry.h3_import import scenario_ui, scenario_assets
 from io_scene_foundry.tools import importer
 
 calls = []
@@ -31,7 +31,54 @@ with tempfile.TemporaryDirectory() as d:
     project.tags_directory = str(reach); project.data_directory = str(reach.parent/'data')
     utils.get_scene_props().scene_project = 'Omaha'
     prefs.h3_tags_root = str(h3)
-    with patch.object(h3_import, 'ScenarioImportJob', Job), patch.object(importer, 'start_mb_for_import') as mb:
+    skies = [dict(index=0, source_tag='levels/test/sky/sky.scenery'),
+             dict(index=1, source_tag='levels/test/sky/clouds.scenery')]
+    # The actual RNA wrappers passed to property callbacks forbid Python attrs.
+    normal = bpy.context.window_manager.operator_properties_last('nwo.foundry_import')
+    drop = bpy.context.window_manager.operator_properties_last('nwo.import_from_drop')
+    assert isinstance(normal, bpy.types.OperatorProperties)
+    assert isinstance(drop, bpy.types.OperatorProperties)
+    normal.filepath = drop.filepath = str(h3/'test.scenario')
+    try: normal._scenario_selection_key = 'must fail'
+    except AttributeError: pass
+    else: raise AssertionError('Regression fixture must use a restricted RNA wrapper')
+    scenario_ui._selection_state.cache_clear()
+    with patch.object(scenario_ui, 'selection', return_value=skies) as decode:
+        for _ in range(3):
+            suggestions = scenario_ui.search_skies(normal, bpy.context, '')
+            assert suggestions == (('0: levels/test/sky/sky.scenery', 'levels/test/sky/sky.scenery'),
+                                   ('1: levels/test/sky/clouds.scenery', 'levels/test/sky/clouds.scenery'))
+            scenario_ui.refresh(normal)
+            # Assignment invokes Blender's dynamic EnumProperty callback.
+            drop.tag_sky = 'h3:1'
+            assert drop.tag_sky == 'h3:1'
+        assert decode.call_count == 1
+        for value in ('0', 'h3:0', 'sky', 'sky.scenery', suggestions[0][0],
+                      'LEVELS\\TEST\\SKY\\SKY.SCENERY'):
+            assert scenario_assets.selected_sky(skies, value)['index'] == 0
+        with patch.object(h3_import, 'ScenarioImportJob', Job), patch.object(importer, 'start_mb_for_import') as mb:
+            for value in ('sky0', '99'):
+                try: bpy.ops.nwo.foundry_import(filepath=normal.filepath, tag_sky=value)
+                except RuntimeError as error: assert 'Choose from the Sky search' in str(error)
+                else: raise AssertionError('Invalid sky must fail before starting a scenario job')
+            assert not calls
+            mb.assert_not_called()
+        # Source changes invalidate cached rows; reopening another source cannot
+        # inherit the previous source's classification, error or sky entries.
+        (h3/'test.scenario').write_bytes(b'changed source')
+        scenario_ui.search_skies(normal, bpy.context, '')
+        assert decode.call_count == 2
+        normal.filepath = str(reach/'test.scenario')
+        assert not scenario_ui.search_skies(normal, bpy.context, '')
+        assert scenario_ui.selection_state(normal).source == 'reach'
+        assert decode.call_count == 2
+        normal.filepath = str(h3/'missing.scenario')
+        assert not scenario_ui.search_skies(normal, bpy.context, '')
+        assert scenario_ui.selection_state(normal).error
+        normal.filepath = str(h3/'test.scenario')
+        assert not scenario_ui.selection_state(normal).error
+    with patch.object(scenario_ui, 'selection', return_value=skies), \
+            patch.object(h3_import, 'ScenarioImportJob', Job), patch.object(importer, 'start_mb_for_import') as mb:
         result = bpy.ops.nwo.foundry_import(filepath=str(h3/'test.scenario'),
             tag_sky='h3:1', tag_bsp_import_geometry=False, tag_scenario_import_objects=True,
             build_blender_materials=True, h3_inspect_firing_positions=True)
@@ -72,4 +119,4 @@ with tempfile.TemporaryDirectory() as d:
         assert col.color_tag == color
     bpy.data.collections.remove(col)
 
-print('Registered Foundry operator passed: shared properties, H3 routing, unchanged Reach boundary, source rejection, project preservation and collection colors')
+print('Registered Foundry operator passed: RNA sky search/enum callbacks, source cache invalidation, early sky validation, shared properties, H3 routing, unchanged Reach boundary, source rejection, project preservation and collection colors')
