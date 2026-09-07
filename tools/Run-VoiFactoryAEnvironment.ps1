@@ -13,6 +13,7 @@ param(
     [string]$SourceCacheEvidence,
     [string]$SourceHistoryEvidence,
     [string]$SemanticBaseline,
+    [string]$AcceptedPlan,
     [string]$SourceCacheReader,
     [string]$ReclaimerRoot = 'D:\HaloRE\PortCensus\references\Reclaimer',
     [string]$SourceCache = 'D:\SteamLibrary\steamapps\common\Halo The Master Chief Collection\halo3\maps\040_voi.map',
@@ -45,7 +46,8 @@ if ($Helpers) { $compilerArgs += @('--helpers', $Helpers) }
 if ($SourceCacheEvidence) { $compilerArgs += @('--source-cache-evidence', $SourceCacheEvidence) }
 if ($SourceHistoryEvidence) { $compilerArgs += @('--source-history-evidence', $SourceHistoryEvidence) }
 if ($SemanticBaseline) { $compilerArgs += @('--semantic-baseline', $SemanticBaseline) }
-if (-not $SourceCacheEvidence -and -not $SourceCacheReader -and (Test-Path -LiteralPath $SourceCache)) {
+if ($AcceptedPlan) { $compilerArgs += @('--accepted-plan', $AcceptedPlan) }
+if (-not $AcceptedPlan -and -not $SourceCacheEvidence -and -not $SourceCacheReader -and (Test-Path -LiteralPath $SourceCache)) {
     $readerProject = Join-Path $PSScriptRoot 'h3_cache_evidence\H3CacheEvidence.csproj'
     if ((Test-Path -LiteralPath $readerProject) -and (Test-Path -LiteralPath $ReclaimerRoot)) {
         & (Join-Path $PSScriptRoot 'Build-H3CacheEvidence.ps1') -ReclaimerRoot $ReclaimerRoot

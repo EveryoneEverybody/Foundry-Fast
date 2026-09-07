@@ -148,6 +148,14 @@ def save_image_as(image, dir, tiff_name=""):
     dir = Path(dir)
     data_dir = Path(utils.get_data_path())
     temp_scene = bpy.data.scenes.new("temp_tiff_export_scene")
+    # These are texture source pixels, not a rendered view. The default AgX
+    # transform changes colors (including reflection cubes) during save_render.
+    # Standard round-trips sRGB pixels; data/normal images bypass this transform.
+    temp_scene.view_settings.view_transform = "Standard"
+    temp_scene.view_settings.look = "None"
+    temp_scene.view_settings.exposure = 0
+    temp_scene.view_settings.gamma = 1
+    temp_scene.display_settings.display_device = "sRGB"
     settings = temp_scene.render.image_settings
     settings.file_format = "TIFF"
     settings.color_mode = "RGBA" if image.alpha_mode != "NONE" else "RGB"

@@ -3,8 +3,9 @@ import re
 import math
 
 NATIVE_TAG_EXTENSIONS = {'.scenario', '.scenario_structure_bsp', '.scenario_structure_lighting_info',
-    '.structure_design', '.structure_seams', '.scenery', '.model', '.render_model', '.shader', '.bitmap',
-    '.scenario_lightmap', '.scenario_lightmap_bsp_data'}
+    '.structure_design', '.structure_seams', '.scenery', '.model', '.render_model', '.shader', '.shader_terrain', '.shader_foliage', '.bitmap',
+    '.scenario_lightmap', '.scenario_lightmap_bsp_data', '.render_method_definition',
+    '.render_method_template', '.pixel_shader', '.vertex_shader'}
 
 
 def geometry_errors(log):

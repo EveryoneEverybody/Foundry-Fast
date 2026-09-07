@@ -253,131 +253,145 @@ def build(args):
                 metadata = json.loads(package.read_text(encoding='utf-8'))
                 report['package'] = {key:metadata[key] for key in ('source_commit','extension_sha256')}
             commands.run('blender-version', [blender,'--version'], addon)
-            (run/'source').mkdir()
-            (run/'sky').mkdir()
-            (run/'materials').mkdir()
-            commands.run('h3-xml-scenario',[paths.h3/'tool.exe','export-tag-to-xml',paths.source(source_scenario),run/'scenario.xml'],paths.h3)
-            scenario_xml=fixtures.read_authoring(run/'scenario.xml',SCENARIO_FIELDS)
-            selection=select(scenario_xml,source_scenario,args.zone_set,args.spawn_flag)
-            report['selection']=selection
-            atomic_json(run/'selection.plan.json',selection)
-            selected_indices=','.join(str(r['source_index']) for r in selection['bsps'])
-            commands.run('h3-scenario-decode', [helpers/'h3-scenario-inspect.exe', '--input', paths.source(source_scenario),
-                         '--tags-root', paths.h3_tags, '--output', run/'source', '--geometry', '--bsp-indices', selected_indices,
-                         '--environment-semantics', *(['--environment-only'] if source_scenario != SOURCE_SCENARIO else [])], helpers)
-            scene = json.loads((run/'source/scene.h3scene.json').read_text(encoding='utf-8'))
-            bsps=[];skies=[];lighting_xmls={};designs={};sky_xmls={};sky_render_xmls={};light_xmls={}
-            def xml(name,tag):
-                target=run/(name+'.xml')
-                commands.run('h3-xml-'+name,[paths.h3/'tool.exe','export-tag-to-xml',paths.source(tag),target],paths.h3)
-                return fixtures.parse(target.read_bytes())
-            for row in selection['bsps']:
-                entry=next(e for e in scene['bsp_entries'] if e['index']==row['source_index'])
-                if entry['status']!='extracted': raise ValueError('Selected BSP extraction failed: '+json.dumps(entry))
-                bsps.append(json.loads((run/'source'/entry['geometry']).read_text(encoding='utf-8')))
-                lighting_xmls[row['lighting_info']]=xml('lighting-'+str(row['source_index']),row['lighting_info'])
-                if row['structure_design'] and row['structure_design'] not in designs:
-                    designs[row['structure_design']]=xml('design-'+str(row['source_index']),row['structure_design'])
-            seams_xml=xml('seams',selection['structure_seams']) if selection['structure_seams'] else None
-            seam_source_context = None
-            if seams_xml is not None and selection['classification'] != 'TARGET_DEFAULT':
-                from port_environment import seam_states
-                def seam_metadata(source_index, tag):
-                    target = run/f'seam-neighbor-{source_index}.xml'
-                    commands.run('h3-xml-seam-neighbor-'+str(source_index),
-                        [paths.h3/'tool.exe','export-tag-to-xml',paths.source(tag),target],paths.h3)
-                    return fixtures.read_authoring(target, {'seam identifiers'}), dict(
-                        source_sha256=digest(paths.source(tag)), xml=target.name, xml_sha256=digest(target))
-                seam_source_context = seam_states.discover_neighbors(scenario_xml,bsps,seams_xml,seam_metadata)
-                atomic_json(run/'source-seam-context.json',seam_source_context)
-            for row in selection['light_palette']:
-                source=row['source_tag']
-                if source and source not in light_xmls:
-                    light_xmls[source]=xml('light-tag-'+str(row['source_index']),source)
-            for row in selection['skies']:
-                name='sky-'+str(row['source_index']);directory=run/'sky'/name;directory.mkdir()
-                commands.run('h3-'+name+'-decode',[helpers/'h3-object-bridge.exe','--input',paths.source(row['source_tag']),
-                             '--tags-root',paths.h3_tags,'--output',directory],helpers)
-                sky=json.loads((directory/'asset.h3asset.json').read_text(encoding='utf-8'));skies.append(sky)
-                sky_xmls[row['source_tag']]=xml(name,row['source_tag'])
-                sky_render_xmls[row['source_tag']]=xml(name+'-render',sky['dependencies']['render_model'])
-            request = dict(scene, shader_paths=used_shaders(bsps,skies))
-            atomic_json(run/'materials/request.json', request)
-            commands.run('h3-material-decode', [helpers/'h3-shader-bridge.exe', '--asset', run/'materials/request.json',
-                         '--tags-root', paths.h3_tags, '--reach-tags-root', paths.roots['tags'], '--output', run/'materials',
-                         '--single-image-pixels'], helpers)
-            shaders = json.loads((run/'materials/shader_manifest.json').read_text(encoding='utf-8'))
-            authoring_manifest = 'shader_manifest.json'
-            if selection['classification'] != 'TARGET_DEFAULT':
-                dependency_started = time.perf_counter()
-                inventory = dependencies.TagInventory(paths.h3_tags)
-                atomic_json(run/'h3-tags.inventory.json', dict(inventory.summary, files=sorted(inventory.files)), compact=True)
-                usage = dependencies.shader_usage(bsps, skies)
-                atomic_json(run/'selected-shader-usage.json', usage, compact=True)
-                cache_records = []
-                cache_evidence = getattr(args, 'source_cache_evidence', None)
-                if cache_evidence:
-                    cache_records = json.loads(Path(cache_evidence).read_text(encoding='utf-8-sig'))
-                    report['supplied_cache_evidence'] = dict(file=str(Path(cache_evidence).resolve()), sha256=digest(cache_evidence))
-                cache_reader = getattr(args, 'source_cache_reader', None)
-                cache_files = getattr(args, 'source_cache', None)
-                request = dependencies.cache_request(shaders, inventory, usage=usage)
-                if request['shaders'] and cache_reader and cache_files:
-                    reader = Path(cache_reader).resolve(strict=True)
-                    report['build_tools_and_project'][str(reader)] = digest(reader)
-                    atomic_json(run/'cache-dependency-request.json', request)
-                    try:
-                        commands.run('h3-stock-cache-bindings', [reader, run/'cache-dependency-request.json', *cache_files], run)
-                        cache_records.extend(json.loads((run/'h3-stock-cache-bindings.log').read_text(encoding='utf-8-sig')))
-                    except (RuntimeError, json.JSONDecodeError) as exc:
-                        # An unavailable reader does not prove a missing runtime
-                        # dependency. Finish the usage audit and preserve the error.
-                        report['source_cache_reader_failure'] = str(exc)
-                        cache_records = []
-                shaders, dependency_report = dependencies.audit(shaders, bsps, skies, selection, inventory, cache_records, usage=usage)
-                history_path = getattr(args, 'source_history_evidence', None)
-                if history_path:
-                    from port_environment import source_history
-                    history = json.loads(Path(history_path).read_text(encoding='utf-8-sig'))
-                    source_history.annotate(dependency_report, history)
-                    report['source_history_evidence'] = dict(file=str(Path(history_path).resolve()), sha256=digest(history_path))
-                    atomic_json(run/'source-history-evidence.json', dependency_report['source_history'])
-                authoring_manifest = 'authoring-shader-manifest.json'
-                atomic_json(run/'materials'/authoring_manifest, shaders)
-                atomic_json(run/'source-dependencies.json', dependency_report)
-                report['source_dependencies'] = dependency_report
-                report['source_dependency_audit_seconds'] = time.perf_counter()-dependency_started
-            plan_started=time.perf_counter()
-            if selection['classification']=='TARGET_DEFAULT':
-                first=selection['bsps'][0];ss=selection['skies'][0]['source_tag']
-                plan=construct(paths,scene,bsps[0],skies[0],shaders,scenario_xml,lighting_xmls[first['lighting_info']],
-                               sky_xmls[ss],sky_render_xmls[ss],lighting_quality=args.lighting)
+            snapshot_input = None
+            if getattr(args, 'accepted_plan', None):
+                from . import snapshot
+                plan, shaders, snapshot_input = snapshot.load(args.accepted_plan, paths, source_scenario, args.zone_set)
+                snapshot.save_receipt(run, snapshot_input)
+                scene = {}
+                authoring_manifest = snapshot_input['shader_manifest']
+                report['source_validation_basis'] = snapshot_input
+                report['selection'] = plan['selection']
+                report['source_semantic_accounting'] = {k:v for k,v in plan['source_semantic_resolution'].items() if k != 'records'}
+                for name, value in [('source-semantic-resolution', plan['source_semantic_resolution']),
+                                    ('source-dependencies', plan['source_dependencies'])]:
+                    atomic_json(run/(name+'.json'), value)
             else:
-                plan=construct(paths,scene,bsps,skies,shaders,scenario_xml,lighting_xmls,sky_xmls,sky_render_xmls,
-                               lighting_quality=args.lighting,selection=selection,designs=designs,seams_xml=seams_xml,
-                               light_xmls=light_xmls,seam_source_context=seam_source_context)
-            report['semantic_planning_seconds']=time.perf_counter()-plan_started
-            if plan.get('source_semantic_resolution') is not None:
-                from port_environment import semantics
-                baseline_path = getattr(args, 'semantic_baseline', None)
-                if baseline_path:
-                    baseline = json.loads(Path(baseline_path).read_text(encoding='utf-8-sig'))
-                    report['source_semantic_baseline'] = dict(file=str(Path(baseline_path).resolve()), sha256=digest(baseline_path))
-                    semantics.reconcile_baseline(plan, baseline)
-                plan['plan_sha256'] = stable_hash({k:v for k,v in plan.items() if k != 'plan_sha256'})
-                resolution = plan['source_semantic_resolution']
-                resolution['kit_source_evidence'] = report['semantic_kit_source_evidence']
-                plan['plan_sha256'] = stable_hash({k:v for k,v in plan.items() if k != 'plan_sha256'})
-                atomic_json(run/'source-semantic-resolution.json', resolution)
-                atomic_json(run/'original-source-contracts.json', plan['source_contract_observations'])
-                atomic_json(run/'semantic-mapping-catalog.json', semantics.CATALOG)
-                (run/'source-semantic-resolution.md').write_text(semantics.markdown(resolution), encoding='utf-8')
-                from port_environment import breakables
-                breakable_report = breakables.report(resolution)
-                atomic_json(run/'breakable-collision-report.json', breakable_report)
-                (run/'breakable-collision-report.md').write_text(breakables.markdown(breakable_report), encoding='utf-8')
-                report['breakable_collision_report'] = str(run/'breakable-collision-report.json')
-                report['source_semantic_accounting'] = {k:v for k,v in resolution.items() if k != 'records'}
+                (run/'source').mkdir()
+                (run/'sky').mkdir()
+                (run/'materials').mkdir()
+                commands.run('h3-xml-scenario',[paths.h3/'tool.exe','export-tag-to-xml',paths.source(source_scenario),run/'scenario.xml'],paths.h3)
+                scenario_xml=fixtures.read_authoring(run/'scenario.xml',SCENARIO_FIELDS)
+                selection=select(scenario_xml,source_scenario,args.zone_set,args.spawn_flag)
+                report['selection']=selection
+                atomic_json(run/'selection.plan.json',selection)
+                selected_indices=','.join(str(r['source_index']) for r in selection['bsps'])
+                commands.run('h3-scenario-decode', [helpers/'h3-scenario-inspect.exe', '--input', paths.source(source_scenario),
+                             '--tags-root', paths.h3_tags, '--output', run/'source', '--geometry', '--bsp-indices', selected_indices,
+                             '--environment-semantics', *(['--environment-only'] if source_scenario != SOURCE_SCENARIO else [])], helpers)
+                scene = json.loads((run/'source/scene.h3scene.json').read_text(encoding='utf-8'))
+                bsps=[];skies=[];lighting_xmls={};designs={};sky_xmls={};sky_render_xmls={};light_xmls={}
+                def xml(name,tag):
+                    target=run/(name+'.xml')
+                    commands.run('h3-xml-'+name,[paths.h3/'tool.exe','export-tag-to-xml',paths.source(tag),target],paths.h3)
+                    return fixtures.parse(target.read_bytes())
+                for row in selection['bsps']:
+                    entry=next(e for e in scene['bsp_entries'] if e['index']==row['source_index'])
+                    if entry['status']!='extracted': raise ValueError('Selected BSP extraction failed: '+json.dumps(entry))
+                    bsps.append(json.loads((run/'source'/entry['geometry']).read_text(encoding='utf-8')))
+                    lighting_xmls[row['lighting_info']]=xml('lighting-'+str(row['source_index']),row['lighting_info'])
+                    if row['structure_design'] and row['structure_design'] not in designs:
+                        designs[row['structure_design']]=xml('design-'+str(row['source_index']),row['structure_design'])
+                seams_xml=xml('seams',selection['structure_seams']) if selection['structure_seams'] else None
+                seam_source_context = None
+                if seams_xml is not None and selection['classification'] != 'TARGET_DEFAULT':
+                    from port_environment import seam_states
+                    def seam_metadata(source_index, tag):
+                        target = run/f'seam-neighbor-{source_index}.xml'
+                        commands.run('h3-xml-seam-neighbor-'+str(source_index),
+                            [paths.h3/'tool.exe','export-tag-to-xml',paths.source(tag),target],paths.h3)
+                        return fixtures.read_authoring(target, {'seam identifiers'}), dict(
+                            source_sha256=digest(paths.source(tag)), xml=target.name, xml_sha256=digest(target))
+                    seam_source_context = seam_states.discover_neighbors(scenario_xml,bsps,seams_xml,seam_metadata)
+                    atomic_json(run/'source-seam-context.json',seam_source_context)
+                for row in selection['light_palette']:
+                    source=row['source_tag']
+                    if source and source not in light_xmls:
+                        light_xmls[source]=xml('light-tag-'+str(row['source_index']),source)
+                for row in selection['skies']:
+                    name='sky-'+str(row['source_index']);directory=run/'sky'/name;directory.mkdir()
+                    commands.run('h3-'+name+'-decode',[helpers/'h3-object-bridge.exe','--input',paths.source(row['source_tag']),
+                                 '--tags-root',paths.h3_tags,'--output',directory],helpers)
+                    sky=json.loads((directory/'asset.h3asset.json').read_text(encoding='utf-8'));skies.append(sky)
+                    sky_xmls[row['source_tag']]=xml(name,row['source_tag'])
+                    sky_render_xmls[row['source_tag']]=xml(name+'-render',sky['dependencies']['render_model'])
+                request = dict(scene, shader_paths=used_shaders(bsps,skies))
+                atomic_json(run/'materials/request.json', request)
+                commands.run('h3-material-decode', [helpers/'h3-shader-bridge.exe', '--asset', run/'materials/request.json',
+                             '--tags-root', paths.h3_tags, '--reach-tags-root', paths.roots['tags'], '--output', run/'materials',
+                             '--single-image-pixels'], helpers)
+                shaders = json.loads((run/'materials/shader_manifest.json').read_text(encoding='utf-8'))
+                authoring_manifest = 'shader_manifest.json'
+                if selection['classification'] != 'TARGET_DEFAULT':
+                    dependency_started = time.perf_counter()
+                    inventory = dependencies.TagInventory(paths.h3_tags)
+                    atomic_json(run/'h3-tags.inventory.json', dict(inventory.summary, files=sorted(inventory.files)), compact=True)
+                    usage = dependencies.shader_usage(bsps, skies)
+                    atomic_json(run/'selected-shader-usage.json', usage, compact=True)
+                    cache_records = []
+                    cache_evidence = getattr(args, 'source_cache_evidence', None)
+                    if cache_evidence:
+                        cache_records = json.loads(Path(cache_evidence).read_text(encoding='utf-8-sig'))
+                        report['supplied_cache_evidence'] = dict(file=str(Path(cache_evidence).resolve()), sha256=digest(cache_evidence))
+                    cache_reader = getattr(args, 'source_cache_reader', None)
+                    cache_files = getattr(args, 'source_cache', None)
+                    request = dependencies.cache_request(shaders, inventory, usage=usage)
+                    if request['shaders'] and cache_reader and cache_files:
+                        reader = Path(cache_reader).resolve(strict=True)
+                        report['build_tools_and_project'][str(reader)] = digest(reader)
+                        atomic_json(run/'cache-dependency-request.json', request)
+                        try:
+                            commands.run('h3-stock-cache-bindings', [reader, run/'cache-dependency-request.json', *cache_files], run)
+                            cache_records.extend(json.loads((run/'h3-stock-cache-bindings.log').read_text(encoding='utf-8-sig')))
+                        except (RuntimeError, json.JSONDecodeError) as exc:
+                            # An unavailable reader does not prove a missing runtime
+                            # dependency. Finish the usage audit and preserve the error.
+                            report['source_cache_reader_failure'] = str(exc)
+                            cache_records = []
+                    shaders, dependency_report = dependencies.audit(shaders, bsps, skies, selection, inventory, cache_records, usage=usage)
+                    history_path = getattr(args, 'source_history_evidence', None)
+                    if history_path:
+                        from port_environment import source_history
+                        history = json.loads(Path(history_path).read_text(encoding='utf-8-sig'))
+                        source_history.annotate(dependency_report, history)
+                        report['source_history_evidence'] = dict(file=str(Path(history_path).resolve()), sha256=digest(history_path))
+                        atomic_json(run/'source-history-evidence.json', dependency_report['source_history'])
+                    authoring_manifest = 'authoring-shader-manifest.json'
+                    atomic_json(run/'materials'/authoring_manifest, shaders)
+                    atomic_json(run/'source-dependencies.json', dependency_report)
+                    report['source_dependencies'] = dependency_report
+                    report['source_dependency_audit_seconds'] = time.perf_counter()-dependency_started
+                plan_started=time.perf_counter()
+                if selection['classification']=='TARGET_DEFAULT':
+                    first=selection['bsps'][0];ss=selection['skies'][0]['source_tag']
+                    plan=construct(paths,scene,bsps[0],skies[0],shaders,scenario_xml,lighting_xmls[first['lighting_info']],
+                                   sky_xmls[ss],sky_render_xmls[ss],lighting_quality=args.lighting)
+                else:
+                    plan=construct(paths,scene,bsps,skies,shaders,scenario_xml,lighting_xmls,sky_xmls,sky_render_xmls,
+                                   lighting_quality=args.lighting,selection=selection,designs=designs,seams_xml=seams_xml,
+                                   light_xmls=light_xmls,seam_source_context=seam_source_context)
+                report['semantic_planning_seconds']=time.perf_counter()-plan_started
+                if plan.get('source_semantic_resolution') is not None:
+                    from port_environment import semantics
+                    baseline_path = getattr(args, 'semantic_baseline', None)
+                    if baseline_path:
+                        baseline = json.loads(Path(baseline_path).read_text(encoding='utf-8-sig'))
+                        report['source_semantic_baseline'] = dict(file=str(Path(baseline_path).resolve()), sha256=digest(baseline_path))
+                        semantics.reconcile_baseline(plan, baseline)
+                    plan['plan_sha256'] = stable_hash({k:v for k,v in plan.items() if k != 'plan_sha256'})
+                    resolution = plan['source_semantic_resolution']
+                    resolution['kit_source_evidence'] = report['semantic_kit_source_evidence']
+                    plan['plan_sha256'] = stable_hash({k:v for k,v in plan.items() if k != 'plan_sha256'})
+                    atomic_json(run/'source-semantic-resolution.json', resolution)
+                    atomic_json(run/'original-source-contracts.json', plan['source_contract_observations'])
+                    atomic_json(run/'semantic-mapping-catalog.json', semantics.CATALOG)
+                    (run/'source-semantic-resolution.md').write_text(semantics.markdown(resolution), encoding='utf-8')
+                    from port_environment import breakables
+                    breakable_report = breakables.report(resolution)
+                    atomic_json(run/'breakable-collision-report.json', breakable_report)
+                    (run/'breakable-collision-report.md').write_text(breakables.markdown(breakable_report), encoding='utf-8')
+                    report['breakable_collision_report'] = str(run/'breakable-collision-report.json')
+                    report['source_semantic_accounting'] = {k:v for k,v in resolution.items() if k != 'records'}
             plan_path = run/'environment.plan.json'
             atomic_json(plan_path, plan,compact=plan['version']>=2)
             report.update(plan=str(plan_path), plan_sha256=plan['plan_sha256'], source=plan['source'],
@@ -410,7 +424,8 @@ def build(args):
             report['debug_fallbacks'] = []
             snippet = 'game_start '+paths.scenario.replace('/', '\\')+'\n'
             snippet_path=ownership.directory/(report['report_prefix']+'_init_snippet.txt')
-            config = dict(plan=str(plan_path), source_directory=str(run/'materials'),
+            config = dict(plan=str(plan_path), source_directory=(snapshot_input['source_directory'] if snapshot_input else str(run/'materials')),
+                          snapshot_input=snapshot_input,
                           shader_manifest=authoring_manifest,
                           source_scenario=source_scenario,
                           h3_root=str(paths.h3), reach_root=str(paths.reach), namespace=paths.namespace,
@@ -499,6 +514,7 @@ def main():
     parser.add_argument('--helpers', help='Override directory containing the bundled source helper executables')
     parser.add_argument('--lighting', choices=('direct_only', 'draft', 'none'), default='direct_only')
     parser.add_argument('--plan-only', action='store_true')
+    parser.add_argument('--accepted-plan', help='Build a hash-verified accepted decoded snapshot; do not reopen loose H3 inputs')
     parser.add_argument('--semantic-baseline', help='Original unsupported-semantics.json to reconcile by stable source-record identity')
     args = parser.parse_args()
     try:

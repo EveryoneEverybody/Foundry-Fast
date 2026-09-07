@@ -44,6 +44,31 @@ with tempfile.TemporaryDirectory() as directory:
     assert utils.get_scene_props().regions_table[0].name=='proof_box_bsp'
     assert utils.get_export_props().event_level=='DEFAULT'
     assert not utils.get_export_props().lightmap_structure
+    # Exercise the actual texture exporter with asymmetric synthetic cube
+    # faces. No game pixels are needed to catch AgX color transforms or a
+    # changed axis/rotation during native source-atlas authoring.
+    import numpy as np
+    from io_scene_foundry.tools.export_bitmaps import save_image_as
+    from port_environment.native_bitmaps import author_cube,REACH_CELLS
+    cells=((0,1),(2,1),(1,0),(1,2),(1,1),(3,1))
+    original=np.zeros((12,16,4),dtype=np.float32)
+    for face,(x,y) in enumerate(cells):
+        for py in range(4):
+            for px in range(4):
+                original[y*4+py,x*4+px]=[(face+1)/8,(px+1)/5,(py+1)/5,1]
+    source=bpy.data.images.new('synthetic cube',width=16,height=12,alpha=True)
+    source.colorspace_settings.name='sRGB';source.alpha_mode='CHANNEL_PACKED'
+    source.pixels.foreach_set(np.ascontiguousarray(original[::-1]).ravel())
+    cube=author_cube(source,dict(layout='directx_cross_4x3',
+        face_order=['+X','-X','+Y','-Y','+Z','-Z'],cells=cells))
+    filename=save_image_as(cube,paths.roots['data'],tiff_name='synthetic_cube.tif')
+    read=bpy.data.images.load(str(paths.roots['data']/filename),check_existing=False)
+    read.colorspace_settings.name='Non-Color'
+    pixels=np.empty(16*12*4,dtype=np.float32);read.pixels.foreach_get(pixels)
+    actual=pixels.reshape(12,16,4)[::-1]
+    for (sx,sy),(dx,dy) in zip(cells,REACH_CELLS):
+        np.testing.assert_allclose(actual[dy*4:(dy+1)*4,dx*4:(dx+1)*4],
+            original[sy*4:(sy+1)*4,sx*4:(sx+1)*4],atol=1/255)
     assert not list(paths.roots['tags'].rglob('*')), 'Geometry test must not write tags'
 # Unit-test the real shared Reach orchestration's command decisions. No Tool
 # result is simulated as native acceptance; only dispatch and early aborts are

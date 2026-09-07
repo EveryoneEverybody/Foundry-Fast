@@ -50,6 +50,11 @@ class OutputPaths:
             raise ValueError('Output must be a dedicated levels/h3_port/<asset> namespace')
         if self.namespace.startswith(DEFAULT_NAMESPACE + '/'):
             raise ValueError('The proof_box regression namespace cannot contain other generated environments')
+        # Reach requires generated shader code identities to start with
+        # shaders\ (tag_path_is_valid_for_location). Keep the same generated
+        # asset identity and hash ownership under that engine-required root.
+        self.infrastructure_namespace = ('shaders/'+self.namespace[len('levels/'):]
+            if allow_nested and self.namespace != DEFAULT_NAMESPACE else None)
         self.roots = {}
         for name in ('data', 'tags'):
             root = (self.reach / name).resolve(strict=True)
@@ -79,9 +84,11 @@ class OutputPaths:
             raise ValueError('Source tag escapes H3 tags root')
         return path
 
-    def destination(self, kind, suffix=''):
+    def destination(self, kind, suffix='', *, infrastructure=False):
         root = self.roots[kind]
-        namespace = root / self.namespace
+        if infrastructure and (kind != 'tags' or not self.infrastructure_namespace):
+            raise ValueError('This target has no owned shader infrastructure namespace')
+        namespace = root / (self.infrastructure_namespace if infrastructure else self.namespace)
         path = namespace / relative(suffix) if suffix else namespace
         # Reject any redirected component, even a link back inside the kit. This
         # prevents two textual asset identities from owning the same output.
@@ -96,15 +103,31 @@ class OutputPaths:
             raise ValueError('Output escapes the compiler namespace: ' + str(path))
         return resolved
 
+    def owned_tag(self, identity):
+        identity=relative(identity).as_posix()
+        for namespace, infrastructure in [(self.namespace,False),(self.infrastructure_namespace,True)]:
+            if namespace and identity.startswith(namespace+'/'):
+                return self.destination('tags',identity[len(namespace)+1:],infrastructure=infrastructure)
+        raise ValueError('Tag identity is outside the owned target namespaces: '+identity)
+
+    def tag_directories(self):
+        result=[self.destination('tags')]
+        if self.infrastructure_namespace:
+            result.append(self.destination('tags',infrastructure=True))
+        return result
+
     def snapshot(self):
         result = {}
-        for kind in self.roots:
-            base = self.destination(kind)
+        locations=[('data',False),('tags',False)]
+        if self.infrastructure_namespace:
+            locations.append(('tags',True))
+        for kind,infrastructure in locations:
+            base = self.destination(kind,infrastructure=infrastructure)
             if not base.exists():
                 continue
             for path in sorted(base.rglob('*')):
                 # Check directories too; do not traverse a redirected subtree.
-                checked = self.destination(kind, path.relative_to(base).as_posix())
+                checked = self.destination(kind, path.relative_to(base).as_posix(),infrastructure=infrastructure)
                 if checked.is_file():
                     result[kind + '/' + checked.relative_to(self.roots[kind]).as_posix()] = digest(checked)
         return result

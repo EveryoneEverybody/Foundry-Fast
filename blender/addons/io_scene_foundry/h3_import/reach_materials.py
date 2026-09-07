@@ -23,6 +23,8 @@ def stage_name(source, label=''):
 
 def image_usage(name):
     name = normalized(name)
+    if name == 'height_map':
+        return 'data', 'Height Map (for Parallax)'
     if 'bump' in name or 'normal' in name:
         return 'data', 'Detail Normal Map' if 'detail' in name else 'Normal Map (aka zbump)'
     if 'self_illum' in name:
@@ -38,6 +40,10 @@ def image_usage(name):
 
 def staged_image_key(bitmap, parameter_name):
     role, usage = image_usage(parameter_name)
+    if bitmap.get('type') == 'cube map':
+        role, usage = 'color', 'Cube Map (Reflection Map)'
+    elif normalized(parameter_name) == 'blend_map':
+        role, usage = 'data', 'Blend Map (linear for terrains)'
     return (bitmap['path'].replace('\\', '/').casefold(), bitmap['index'],
             color_space(bitmap, role), usage)
 

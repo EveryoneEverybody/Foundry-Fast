@@ -66,8 +66,18 @@ class ToolJournal:
                 self.paths.destination(kind)
         elif action == 'export-tag-to-xml':
             source, target = Path(command[2]).resolve(), Path(command[3]).resolve()
-            if not source.is_relative_to(self.paths.destination('tags')) or not target.is_relative_to(self.run):
+            if not any(source.is_relative_to(base) for base in self.paths.tag_directories()) or not target.is_relative_to(self.run):
                 raise ValueError('Tag validation XML path escapes this build')
+        elif action == 'generate-specified-template':
+            definition=command[3].replace('\\','/')
+            if (len(command)!=5 or command[2]!='win' or
+                not self.paths.infrastructure_namespace or
+                not definition.startswith(self.paths.infrastructure_namespace+'/') or
+                Path(command[4]).name!=command[4]):
+                raise ValueError('Shader template generation is outside the owned definition namespace')
+            source=self.paths.roots['tags']/(definition+'.render_method_definition')
+            if not source.is_file():
+                raise ValueError('Owned Reach shader definition is absent')
         elif action.startswith('faux'):
             allowed = {'faux_data_sync', 'faux_farm_begin', 'faux_farm_dillum', 'faux_farm_dillum_merge',
                        'faux_farm_pcast', 'faux_farm_pcast_merge', 'faux_farm_radest_extillum',
@@ -131,9 +141,7 @@ def protect_tag_writes(paths):
 
     def check(tag):
         name = str(tag.tag_path.RelativePathWithExtension).replace('\\', '/')
-        if not name.startswith(paths.namespace+'/'):
-            raise ValueError('Refusing ManagedBlam write outside compiler namespace: '+name)
-        expected = paths.destination('tags', name[len(paths.namespace)+1:])
+        expected = paths.owned_tag(name)
         if Path(str(tag.tag_path.Filename)).resolve() != expected:
             raise ValueError('ManagedBlam target resolves to a different project: '+str(tag.tag_path.Filename))
 
@@ -243,11 +251,14 @@ def materials(plan, config, paths, report):
     adapted = deepcopy(manifest)
     source_images = {}
     for key, bitmap in manifest['bitmaps'].items():
-        source_path = (source_dir/relative(plan['bitmaps'][key]['source_image'])).resolve(strict=True)
+        spec = plan['bitmaps'][key]
+        image_name = spec.get('source_image') or spec['source_layout']['tiff']
+        source_path = (source_dir/relative(image_name)).resolve(strict=True)
         if not source_path.is_relative_to(source_dir):
             raise ValueError('Source bitmap escapes extraction directory')
         image = bpy.data.images.load(str(source_path), check_existing=False)
-        if tuple(image.size) != (bitmap['width'], bitmap['height']) or not image.has_data:
+        size = (spec['source_layout']['width'],spec['source_layout']['height']) if bitmap.get('type') == 'cube map' else (bitmap['width'], bitmap['height'])
+        if tuple(image.size) != size or not image.has_data:
             raise ValueError('Blender could not decode source bitmap pixels: '+str(source_path))
         image['h3_source_bitmap'] = bitmap['path']
         image['h3_bitmap_index'] = bitmap['index']
@@ -255,12 +266,18 @@ def materials(plan, config, paths, report):
         source_images[key] = image
         # ReachStager consumes already-loaded source pixels. Its source manifest
         # remains independent from the target shader/image identities.
-        adapted['bitmaps'][key]['preview'] = plan['bitmaps'][key]['source_image']
-    text = bpy.data.texts.new('H3 proof source shader snapshots')
-    text.write(json.dumps(adapted))
-    stager = ReachStager()
+        if bitmap.get('type') != 'cube map':
+            adapted['bitmaps'][key]['preview'] = image_name
+    text = bpy.data.texts.new('H3 source shader snapshots')
+    # Blender's text buffer inserts a very long line quadratically. Campaign
+    # manifests need line breaks; the JSON content/decoded values stay identical.
+    text.write(json.dumps(adapted, indent=1))
+    stager = ReachStager(native_cube_sources=plan['version']>=2)
+    report['material_staging'] = stager.results
+    material_errors = []
     result = {}
-    for row in plan['materials']:
+    for material_index,row in enumerate(plan['materials']):
+        print(f'Staging material {material_index+1}/{len(plan["materials"])}: {row["source_shader"]}',flush=True)
         source = bpy.data.materials.new('source_'+Path(row['destination']).stem)
         source.use_nodes = True
         source['h3_source_shader'] = row['source_shader']
@@ -269,31 +286,56 @@ def materials(plan, config, paths, report):
         for p in row['source_parameters']:
             if p.get('bitmap') in source_images:
                 source.node_tree.nodes.new('ShaderNodeTexImage').image = source_images[p['bitmap']]
-        target = stager.build(source)
+        from .native_contracts import material as material_contract
+        contract = material_contract(row) if plan['version'] >= 2 else None
+        target = stager.build(source, contract) if contract else stager.build(source)
         if target is None:
-            raise ValueError('Reach material staging failed: '+json.dumps(stager.results[-1]))
+            material_errors.append(dict(source=row['source_shader'],reason=stager.results[-1]))
+            continue
         mapped = {p['name']: p['status'] for p in stager.results[-1]['parameters']}
-        for p in row['source_parameters']:
-            if p['type'] == 'bitmap' and mapped.get(p['name']) != 'mapped':
-                raise ValueError('Required source bitmap was not mapped to a Reach socket: '+p['name'])
+        for p in (contract['parameters'].values() if contract else row['source_parameters']):
+            if p['type'] == 'bitmap' and not p.get('extern') and mapped.get(p['name']) not in {'mapped','snapshot','native_supplemental'}:
+                material_errors.append(dict(source=row['source_shader'],parameter=p['name'],status=mapped.get(p['name'])))
         target.nwo.shader_path = row['destination'].replace('/', '\\')
         result[row['source_shader']] = target
+    if material_errors:
+        report['material_errors'] = material_errors
+        raise ValueError('Native material staging has unresolved bindings: '+json.dumps(material_errors))
     # Export each usage-specific staged image once; several shaders share the
     # concrete detail and default textures. The ordinary shader writer sees
     # existing target identities and does not rebuild these bitmap tags.
+    from .native_cache import previous_bitmaps
+    previous = previous_bitmaps(paths,plan,config) if plan['version']>=2 else {}
+    report['bitmap_cache_reused'] = []
     for image in dict.fromkeys(stager.images.values()):
         # Image.copy retains packed bytes but Blender loads the copied buffer
         # lazily. Foundry's bitmap exporter intentionally checks has_data first.
         if len(image.pixels) != image.size[0]*image.size[1]*4 or not image.has_data:
             raise ValueError('Staged image cannot load its packed source pixels: '+image.name)
-        bitmap_path = export_bitmap(image)
+        from io_scene_foundry import utils
+        identity=paths.namespace+'/bitmaps/'+utils.valid_image_name(image.name)
+        if identity in previous:
+            image.nwo.filepath=(identity+'.tif').replace('/','\\')
+            image.nwo.source_name=Path(identity).name+'.tif'
+            bitmap_path=Path(identity+'.bitmap')
+            report['bitmap_cache_reused'].append(identity)
+        else:
+            bitmap_path = export_bitmap(image)
         if not bitmap_path or not (paths.roots['tags']/bitmap_path).is_file():
             raise ValueError('Reach bitmap import did not produce a tag for '+image.name)
     for target in result.values():
-        build_shader(target, False)
+        if plan['version']>=2:
+            from .native_materials import complete_tag
+            complete_tag(target,manifest,report,paths)
+        else:
+            build_shader(target, False)
     report['material_staging'] = stager.results
-    report['bitmap_builds'] = [dict(name=i.name, destination=i.nwo.filepath,
+    from .native_bitmaps import PIXEL_EXPORT
+    report['bitmap_builds'] = [dict(name=i.name, destination=i.nwo.filepath,native_cube_layout=i.get('h3_native_cube_layout'),pixel_export=PIXEL_EXPORT,
                                   source_bitmap=i.get('h3_source_bitmap')) for i in dict.fromkeys(stager.images.values())]
+    if plan['version']>=2:
+        from . import native_validation
+        native_validation.bitmaps(plan,paths,report,config)
     return result
 
 
@@ -348,6 +390,9 @@ def export(scene, paths, relative_asset, name):
 
 
 def configure_scenario(paths, plan):
+    if plan['version'] >= 2:
+        from .native_scene import configure_scenario as configure_selected
+        return configure_selected(paths, plan)
     from io_scene_foundry.managed_blam.scenario import ScenarioTag
     path = plan['target']['scenario'].replace('/', '\\')
     with ScenarioTag(path=path) as tag:
@@ -457,52 +502,59 @@ def validate_lighting_inputs(plan, report):
         limitation='Counts and nonzero sky energy; not a claim of photometric or surface-mapping parity')
     if errors:
         raise ValueError('Lighting inputs rejected before Faux: '+errors[0])
+    if plan['version']>=2:
+        from . import native_validation
+        native_validation.lighting(plan,report)
 
 
 def validate_native(paths, plan, run, report):
     from io_scene_foundry.managed_blam import Tag
     from io_scene_foundry import utils
     from io_scene_foundry.managed_blam.scenario import ScenarioTag
-    with ScenarioTag(path=plan['target']['scenario'], tag_must_exist=True) as tag:
-        actual_bsp = tag.block_bsps.Elements[0].SelectField('structure bsp').Path.RelativePathWithExtension.replace('\\','/')
-        actual_sky = tag.block_skies.Elements[0].SelectField('sky').Path.RelativePathWithExtension.replace('\\','/')
-        if actual_bsp != plan['bsp']['destination'] or actual_sky != plan['sky']['destination']:
-            raise ValueError('Native scenario points to an unexpected environment or sky')
-        if tag.block_bsps.Elements.Count != 1 or tag.block_skies.Elements.Count != 1:
-            raise ValueError('Native BSP/sky count differs from the compiler plan')
-        starts = tag.tag.SelectField('Block:player starting locations')
-        if not starts.Elements.Count or not tag.block_zone_sets.Elements.Count:
-            raise ValueError('Native scenario lacks player-start/zone-set authoring')
-        report['scenario_readback'] = dict(bsp=actual_bsp, sky=actual_sky,
-            player_position=list(starts.Elements[0].SelectField('position').Data),
-            default_sky=tag.block_bsps.Elements[0].SelectField('default sky').Value,
-            zone_sets=tag.block_zone_sets.Elements.Count)
-    with Tag(path=plan['bsp']['destination'], tag_must_exist=True) as tag:
-        clusters = tag.tag.SelectField('Block:clusters')
-        indices = [e.SelectField('scenario sky index').Data for e in clusters.Elements]
-        if indices != [0]:
-            raise ValueError('Generated Reach cluster is not associated with the generated sky')
-        report['cluster_sky_indices'] = indices
-    with Tag(path=plan['sky']['destination'].rsplit('.',1)[0]+'.render_model', tag_must_exist=True) as tag:
-        count = tag.tag.SelectField('Block:sky lights').Elements.Count
-        values = [e.Fields[0].Data for e in tag.tag.SelectField('Array:sun').Elements]
-        expected = plan['lighting']['sky']
-        if count != len(expected['source_samples']) or len(values) != 6 or any(
-                abs(a-b) > .0001 for a,b in zip(values[3:],expected['sun_irradiance'])):
-            raise ValueError('Native sky lighting differs from the source authoring plan')
-        report['sky_lighting_readback'] = dict(samples=count, sun_direction_and_intensity=values)
-    with Tag(path=plan['sky']['destination'].rsplit('.',1)[0]+'.model', tag_must_exist=True) as tag:
-        policy = tag.tag.SelectField('ShortEnum:imposter policy')
-        if str(policy.Items[policy.Value].EnumName) != 'never':
-            raise ValueError('Generated sky model still requires an ungenerated imposter asset')
-        report['sky_imposter_policy'] = 'never'
+    if plan['version'] >= 2:
+        from .native_scene import validate_scenario
+        validate_scenario(plan, report)
+    else:
+        with ScenarioTag(path=plan['target']['scenario'], tag_must_exist=True) as tag:
+            actual_bsp = tag.block_bsps.Elements[0].SelectField('structure bsp').Path.RelativePathWithExtension.replace('\\','/')
+            actual_sky = tag.block_skies.Elements[0].SelectField('sky').Path.RelativePathWithExtension.replace('\\','/')
+            if actual_bsp != plan['bsp']['destination'] or actual_sky != plan['sky']['destination']:
+                raise ValueError('Native scenario points to an unexpected environment or sky')
+            if tag.block_bsps.Elements.Count != 1 or tag.block_skies.Elements.Count != 1:
+                raise ValueError('Native BSP/sky count differs from the compiler plan')
+            starts = tag.tag.SelectField('Block:player starting locations')
+            if not starts.Elements.Count or not tag.block_zone_sets.Elements.Count:
+                raise ValueError('Native scenario lacks player-start/zone-set authoring')
+            report['scenario_readback'] = dict(bsp=actual_bsp, sky=actual_sky,
+                player_position=list(starts.Elements[0].SelectField('position').Data),
+                default_sky=tag.block_bsps.Elements[0].SelectField('default sky').Value,
+                zone_sets=tag.block_zone_sets.Elements.Count)
+        with Tag(path=plan['bsp']['destination'], tag_must_exist=True) as tag:
+            clusters = tag.tag.SelectField('Block:clusters')
+            indices = [e.SelectField('scenario sky index').Data for e in clusters.Elements]
+            if indices != [0]:
+                raise ValueError('Generated Reach cluster is not associated with the generated sky')
+            report['cluster_sky_indices'] = indices
+        with Tag(path=plan['sky']['destination'].rsplit('.',1)[0]+'.render_model', tag_must_exist=True) as tag:
+            count = tag.tag.SelectField('Block:sky lights').Elements.Count
+            values = [e.Fields[0].Data for e in tag.tag.SelectField('Array:sun').Elements]
+            expected = plan['lighting']['sky']
+            if count != len(expected['source_samples']) or len(values) != 6 or any(
+                    abs(a-b) > .0001 for a,b in zip(values[3:],expected['sun_irradiance'])):
+                raise ValueError('Native sky lighting differs from the source authoring plan')
+            report['sky_lighting_readback'] = dict(samples=count, sun_direction_and_intensity=values)
+        with Tag(path=plan['sky']['destination'].rsplit('.',1)[0]+'.model', tag_must_exist=True) as tag:
+            policy = tag.tag.SelectField('ShortEnum:imposter policy')
+            if str(policy.Items[policy.Value].EnumName) != 'never':
+                raise ValueError('Generated sky model still requires an ungenerated imposter asset')
+            report['sky_imposter_policy'] = 'never'
     output = run/'native-tag-xml'
     output.mkdir()
     references = set()
     report['native_reference_details'] = []
     report['optional_native_placeholders'] = []
     report['auxiliary_outputs_without_xml_validation'] = []
-    for index, source in enumerate(sorted(paths.destination('tags').rglob('*'))):
+    for index, source in enumerate(sorted(p for base in paths.tag_directories() for p in base.rglob('*'))):
         if not source.is_file():
             continue
         if source.suffix not in NATIVE_TAG_EXTENSIONS:
@@ -525,10 +577,10 @@ def validate_native(paths, plan, run, report):
                     # instances. Preserve that compiler output; do not fabricate
                     # an imposter resource or broadly permit missing references.
                     optional_bsp = (source.suffix == '.scenario_structure_bsp'
-                        and name == plan['bsp']['destination'].rsplit('.',1)[0]+'.instance_imposter_definition'
+                        and name in {b['destination'].rsplit('.',1)[0]+'.instance_imposter_definition' for b in plan_bsps(plan)}
                         and tag.tag.SelectField('Block:instanced geometry instances').Elements.Count == 0)
                     optional_sky = (source.suffix == '.model'
-                        and name == plan['sky']['destination'].rsplit('.',1)[0]+'.imposter_model'
+                        and name in {s['destination'].rsplit('.',1)[0]+'.imposter_model' for s in plan_skies(plan)}
                         and tag.tag.SelectField('ShortEnum:imposter policy').Value == 1)
                     if optional_bsp or optional_sky:
                         report['optional_native_placeholders'].append(dict(reference=name, classification='UNRESOLVED',
@@ -537,7 +589,7 @@ def validate_native(paths, plan, run, report):
                             runtime_status='PENDING_NATE'))
                         continue
                     raise ValueError('Missing/foreign native reference: '+name)
-                generated = name.startswith(paths.namespace+'/')
+                generated = name.startswith(paths.namespace+'/') or bool(paths.infrastructure_namespace and name.startswith(paths.infrastructure_namespace+'/'))
                 if name.startswith('levels/') and not generated:
                     raise ValueError('Generated tag depends on a stock environment: '+name)
                 report['native_reference_details'].append(dict(owner=source.relative_to(paths.roots['tags']).as_posix(),
@@ -571,18 +623,22 @@ def main():
     # assumptions or create partial target assets before that boundary is explicit.
     if plan.get('unsupported'):
         raise ValueError('Native authoring refused: unresolved source semantics in environment plan')
-    if plan.get('version') != 1:
-        raise ValueError('Native authoring for campaign plan schema 2 is not yet implemented; no target writes were attempted')
-    paths = OutputPaths(config['h3_root'], config['reach_root'], config['namespace'])
+    if plan.get('version') not in {1,2}:
+        raise ValueError('Unsupported environment plan version')
+    paths = OutputPaths(config['h3_root'], config['reach_root'], config['namespace'], allow_nested=plan['version']>=2)
     expected_hash = plan.pop('plan_sha256')
     if stable_hash(plan) != expected_hash or expected_hash != config['plan_sha256']:
         raise ValueError('Worker plan integrity mismatch')
     plan['plan_sha256'] = expected_hash
     if plan['target']['project_fingerprint'] != paths.fingerprint():
         raise ValueError('Worker plan belongs to a different Reach root')
-    for source, sha in plan['source']['hashes'].items():
-        if digest(paths.source(source)) != sha:
-            raise ValueError('Source changed after planning: '+source)
+    if config.get('snapshot_input'):
+        from .snapshot import verify_files
+        verify_files(config['snapshot_input']['verified_files'])
+    else:
+        for source, sha in plan['source']['hashes'].items():
+            if digest(paths.source(source)) != sha:
+                raise ValueError('Source changed after planning: '+source)
     addon = Path(__file__).resolve().parents[2]
     report = dict(format='foundry.h3-reach-environment.worker', version=1, builder_version=BUILDER_VERSION,
                   status='BUILDING', stage='bootstrap', tool_invocations=[], geometry=[], lighting_status='NOT_RUN')
@@ -624,8 +680,8 @@ def main():
         prefs.tool_type = 'tool'
         prefs.link_resource_nodes = False
         foundry_output.child_stream = lambda: sys.stdout
-        sky_asset = plan['sky']['destination'].rsplit('/', 1)[0]
-        sky_name = 'proof_box_sky'
+        sky_asset = plan_skies(plan)[0]['destination'].rsplit('/', 1)[0]
+        sky_name = Path(plan_skies(plan)[0]['destination']).stem
         sky_scene = setup_scene(sky_name, 'sky', sky_asset+'/'+sky_name+'.sidecar.xml', 'default', project.name)
         os.chdir(paths.reach)
         managed_blam.mb_init()
@@ -640,33 +696,56 @@ def main():
         scene = setup_scene(paths.asset, 'scenario', paths.scenario+'.sidecar.xml', 'proof_box_bsp', project.name)
         with profile.span('native Reach material and bitmap build'):
             mats = materials(plan, config, paths, report)
-        report['stage'] = 'sky export'
-        flush()
-        bpy.context.window.scene = sky_scene
-        with profile.span('H3 sky construction and normal Reach export'):
-            _, stats = mesh_object(plan['sky']['mesh'], [mats[k] for k in plan['sky']['materials']],
-                                   sky_scene, 'default', 'h3_sky')
-            report['geometry'].append(stats)
-            sky_lights(sky_scene, plan)
-            export(sky_scene, paths, sky_asset, sky_name)
-            configure_sky_model(plan)
-        report['stage'] = 'BSP and scenario export'
-        flush()
-        bpy.context.window.scene = scene
-        with profile.span('H3 BSP construction and normal Reach export'):
-            bsp_materials = [mats.get(m['source_shader']) for m in plan['bsp']['materials']]
-            # Auxiliary collision slot has no H3 shader. Its render is disabled;
-            # use an owned native shader solely as a surface material definition.
-            collision_material = mats[plan['materials'][0]['source_shader']]
-            bsp_materials = [m or collision_material for m in bsp_materials]
-            for i, material in enumerate(plan['bsp']['materials']):
-                if material.get('special') == 'sky':
-                    bsp_materials[i] = bpy.data.materials.new('+sky0')
-            for index, record in enumerate(plan['bsp']['meshes']):
-                _, stats = mesh_object(record, bsp_materials, scene, 'proof_box_bsp', 'h3_bsp_'+str(index), record['role'])
+        if plan['version'] >= 2:
+            from . import native_scene
+            for sky in plan_skies(plan):
+                report['stage'] = 'sky export'; flush()
+                sky_name=Path(sky['destination']).stem
+                sky_asset=sky['destination'].rsplit('/',1)[0]
+                sky_scene=setup_scene(sky_name,'sky',sky_asset+'/'+sky_name+'.sidecar.xml','default',project.name)
+                _,stats=mesh_object(sky['mesh'],[mats[k] for k in sky['materials']],sky_scene,'default',sky_name)
                 report['geometry'].append(stats)
-            configure_scenario(paths, plan)
-            export(scene, paths, paths.namespace, paths.asset)
+                sky_view=dict(plan,sky=sky,lighting=dict(plan['lighting'],sky=sky['lighting']))
+                sky_lights(sky_scene,sky_view)
+                export(sky_scene,paths,sky_asset,sky_name)
+                configure_sky_model(sky_view)
+            bpy.context.window.scene=scene
+            report['stage']='BSP construction'; flush()
+            with profile.span('native multi-BSP construction'):
+                native_scene.construct(scene,plan,config,mats,report,mesh_object)
+            report['stage']='BSP and scenario export'; flush()
+            configure_scenario(paths,plan)
+            export(scene,paths,paths.namespace,paths.asset)
+            configure_scenario(paths,plan)
+            native_scene.write_static_lights(plan,report)
+        else:
+            report['stage'] = 'sky export'
+            flush()
+            bpy.context.window.scene = sky_scene
+            with profile.span('H3 sky construction and normal Reach export'):
+                _, stats = mesh_object(plan['sky']['mesh'], [mats[k] for k in plan['sky']['materials']],
+                                       sky_scene, 'default', 'h3_sky')
+                report['geometry'].append(stats)
+                sky_lights(sky_scene, plan)
+                export(sky_scene, paths, sky_asset, sky_name)
+                configure_sky_model(plan)
+            report['stage'] = 'BSP and scenario export'
+            flush()
+            bpy.context.window.scene = scene
+            with profile.span('H3 BSP construction and normal Reach export'):
+                bsp_materials = [mats.get(m['source_shader']) for m in plan['bsp']['materials']]
+                # Auxiliary collision slot has no H3 shader. Its render is disabled;
+                # use an owned native shader solely as a surface material definition.
+                collision_material = mats[plan['materials'][0]['source_shader']]
+                bsp_materials = [m or collision_material for m in bsp_materials]
+                for i, material in enumerate(plan['bsp']['materials']):
+                    if material.get('special') == 'sky':
+                        bsp_materials[i] = bpy.data.materials.new('+sky0')
+                for index, record in enumerate(plan['bsp']['meshes']):
+                    _, stats = mesh_object(record, bsp_materials, scene, 'proof_box_bsp', 'h3_bsp_'+str(index), record['role'])
+                    report['geometry'].append(stats)
+                configure_scenario(paths, plan)
+                export(scene, paths, paths.namespace, paths.asset)
         journal.finish(wait=True)
         failed = [r for r in report['tool_invocations'] if r.get('exit_code')]
         if failed:
@@ -686,7 +765,7 @@ def main():
             from io_scene_foundry.tools.scenario.lightmap import run_lightmapper
             with profile.span('normal Foundry Reach Faux'):
                 lighting = run_lightmapper(False, paths.scenario.replace('/', '\\'), lightmap_quality=config['lighting'],
-                                           cpu_threads=1, structure_bsps=['proof_box_bsp'])
+                                           cpu_threads=1, structure_bsps=[b.get('region','proof_box_bsp') for b in plan_bsps(plan)])
                 if lighting.lightmap_failed:
                     raise RuntimeError(lighting.lightmap_message)
             journal.finish(wait=True)
