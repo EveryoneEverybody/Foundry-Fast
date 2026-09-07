@@ -13,6 +13,7 @@ from .material_builder import PreviewBuilder
 from .materials import bsp_material_issues
 from .scenario_content_builder import ContentBuilder
 from . import scenario_scene as source
+from .scenario_reporting import Profile, measured
 
 
 class ScenarioBuildSession(ContentBuilder):
@@ -27,6 +28,7 @@ class ScenarioBuildSession(ContentBuilder):
         self.scale = import_transform.scale_factor(context.scene.nwo)
         self.rotation = import_transform.rotation_matrix(context.scene.nwo)
         self.created = []
+        self.profile = Profile()
         self.warnings = []
         self.root = None
         self.shader_source = None
@@ -41,6 +43,7 @@ class ScenarioBuildSession(ContentBuilder):
         self.flip_normal_green = flip_normal_green
         self.content_groups = {}
         self.templates = {}
+        self.frame_resolver = None
         self.preview = PreviewBuilder(material_manifest, self.directory, self.remember, flip_normal_green) if material_manifest else None
         self.import_hints = import_hints
         self.import_points = import_points
@@ -77,6 +80,7 @@ class ScenarioBuildSession(ContentBuilder):
         value.use_fake_user = True
         return value
 
+    @measured('BSP Blender material creation')
     def material(self, record, bsp, slot, faces=0):
         material = self.remember(bpy.data.materials, bpy.data.materials.new(f'H3 {Path(record["name"]).name}'))
         material['h3_source_bsp'] = bsp['source_tag']
@@ -94,7 +98,7 @@ class ScenarioBuildSession(ContentBuilder):
                 result = self.preview.build(material)
                 if result['status'] != 'approximate_preview':
                     issues.append(('blender_preview', '; '.join(result['diagnostics'])))
-        report = dict(bsp=bsp['source_tag'], slot=slot, name=record['name'], source_shader=shader,
+        report = dict(bsp=bsp['source_tag'], bsp_index=bsp['bsp_index'], slot=slot, name=record['name'], source_shader=shader,
                       source_triangle_count=faces, preview=result, issues=[dict(stage=s, message=m) for s,m in issues])
         self.material_report.append(report)
         material['h3_bsp_material_diagnostics'] = json.dumps(report)
@@ -104,6 +108,7 @@ class ScenarioBuildSession(ContentBuilder):
             print(diagnostic, flush=True)
         return material
 
+    @measured('BSP Blender mesh construction')
     def mesh(self, record, materials, bsp, collection):
         vertices = record['vertices']
         if any(v['weights'] for v in vertices):
@@ -212,7 +217,8 @@ class ScenarioBuildSession(ContentBuilder):
 
     def hints(self):
         yield 'Planning authored hints and points'
-        plan = source.hint_plan(self.inventory)
+        with self.profile.span('reference-frame and authored hint planning'):
+            plan = source.hint_plan(self.inventory, self.frame_resolver)
         for kind in ('sectors', 'rails', 'firing_positions', 'script_points'):
             enabled = self.import_hints if kind in ('sectors', 'rails') else self.import_points
             if not enabled:
@@ -250,26 +256,7 @@ class ScenarioBuildSession(ContentBuilder):
         text = self.text('H3 authored hint report', plan)
         self.root['h3_hint_report'] = text.name
 
-    def steps(self):
-        self.root = self.collection('H3 ' + Path(self.scene['source_tag']).stem, self.context.scene.collection)
-        self.root['h3_source_tag'] = self.scene['source_tag']
-        self.root['h3_import_kind'] = 'scenario_reference'
-        self.root['h3_coordinate_scale'] = 100. * self.scale
-        self.root['h3_coordinate_encoding'] = 'source_world_units_unmodified'
-        self.root['h3_display_scale_mode'] = self.context.scene.nwo.scale
-        self.root['h3_display_forward'] = self.context.scene.nwo.forward_direction
-        if self.preview:
-            self.shader_source = self.text('H3 shader source - ' + self.root.name, self.preview.manifest)
-            self.root['h3_shader_manifest'] = self.shader_source.name
-        if self.import_objects or self.import_content:
-            yield from self.content_steps()
-        for entry in self.scene['bsp_entries']:
-            if entry['status'] == 'extracted':
-                yield from self.bsp_steps(entry)
-            elif entry['status'] == 'error':
-                self.warnings.extend(f"BSP {entry['index']}: {e}" for e in entry['diagnostics'])
-        if self.import_hints or self.import_points:
-            yield from self.hints()
+    def retain_inventory(self):
         self.root['h3_scenario_manifest'] = self.text('H3 scenario source - ' + self.root.name, self.inventory).name
         self.root['h3_scene_manifest'] = self.text('H3 scene source - ' + self.root.name, self.scene).name
         chunks = []
@@ -293,8 +280,41 @@ class ScenarioBuildSession(ContentBuilder):
                 packed = self.text(f"H3 source data {len(blobs):04d} - {self.root.name}", base64.encodebytes(content).decode('ascii'))
                 blobs.append({'address': row['address'], 'file': row['file'], 'bytes': len(content), 'encoding': 'base64', 'text': packed.name})
         self.root['h3_packed_data'] = self.text('H3 packed source data index - ' + self.root.name, blobs).name
+
+    def steps(self):
+        self.root = self.collection('H3 ' + Path(self.scene['source_tag']).stem, self.context.scene.collection)
+        self.root['h3_source_tag'] = self.scene['source_tag']
+        self.root['h3_import_kind'] = 'scenario_reference'
+        self.root['h3_coordinate_scale'] = 100. * self.scale
+        self.root['h3_coordinate_encoding'] = 'source_world_units_unmodified'
+        self.root['h3_display_scale_mode'] = self.context.scene.nwo.scale
+        self.root['h3_display_forward'] = self.context.scene.nwo.forward_direction
+        if self.preview:
+            self.shader_source = self.text('H3 shader source - ' + self.root.name, self.preview.manifest)
+            self.root['h3_shader_manifest'] = self.shader_source.name
+        if self.import_objects or self.import_content:
+            yield from self.profile.steps('scenario content construction', self.content_steps())
+        for entry in self.scene['bsp_entries']:
+            if entry['status'] == 'extracted':
+                yield from self.profile.steps('BSP Blender construction and retention', self.bsp_steps(entry))
+            elif entry['status'] == 'error':
+                self.warnings.extend(f"BSP {entry['index']}: {e}" for e in entry['diagnostics'])
+        if self.import_hints or self.import_points:
+            yield from self.profile.steps('authored AI overlay creation', self.hints())
+        yield from self.profile.steps('source inventory packing and retention', self.retain_inventory())
         self.root['h3_material_report'] = self.text('H3 BSP material report - ' + self.root.name, self.material_report).name
+        if self.frame_resolver:
+            self.root['h3_reference_frame_report'] = self.text('H3 reference frame report',
+                dict(resolved=self.frame_resolver.resolved, unresolved=self.frame_resolver.failures,
+                     source_frame_count=len(self.frame_resolver.frames))).name
+            self.counts['reference_frames_resolved'] = len(self.frame_resolver.resolved)
+            self.counts['reference_frames_unresolved'] = len(self.frame_resolver.failures)
         self.warnings.extend(self.scene.get('limitations', []))
+        self.profile.counts['materials'] = sum(store is bpy.data.materials for store, _ in self.created)
+        self.profile.counts['unique_images'] = sum(store is bpy.data.images for store, _ in self.created)
+        self.root['h3_performance_report'] = self.text('H3 scenario performance', dict(self.profile.report(), helper_timings={'inventory':self.inventory.get('timings'), 'bsps':[{k:r.get(k) for k in ('index','timings')} for r in self.scene['bsp_entries']], 'bsp_shaders':(self.material_manifest or {}).get('timings')})).name
+        for name, row in self.profile.rows.items():
+            print(f"H3 timing {name}: {row['inclusive_seconds']:.3f}s inclusive / {row['exclusive_seconds']:.3f}s exclusive", flush=True)
         self.root['h3_scenario_report'] = self.text('H3 scenario import report', {'counts': self.counts, 'diagnostics': self.warnings,
             'coordinates': {'source': 'world units (unmodified)', 'geometry': '100 per world unit',
                             'display_units_per_world_unit': 100. * self.scale,

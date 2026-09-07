@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
+mod source_values;
+mod semantic;
 
 const FORMAT: &str = "foundry.h3-object";
 const DECODER: &str = "5d0509fb75eadb96ac7774542ca0b2c10aed7b00";
@@ -62,6 +64,12 @@ fn variant_metadata(model: &TagFile) -> Vec<Value> {
         })).collect::<Vec<_>>(),
         "children":block(*v,"objects").iter().map(|o| json!({
             "object":tag_ref_path(o,"child object"),
+            "source_tag":o.field("child object").and_then(|f| f.value()).and_then(|v| {
+                if let TagFieldData::TagReference(r) = v {
+                    r.group_tag_and_name.and_then(|(group,name)| group_tag_to_extension(group).map(|ext| format!("{}.{ext}",name.replace('\\',"/"))))
+                } else { None }
+            }),
+            "variant":o.read_string_id("child variant name").unwrap_or_default(),
             "parent_marker":o.read_string_id("parent marker"),
             "child_marker":o.read_string_id("child marker"),
             "source_fields":o.fields().filter_map(|f| f.value().map(|value| json!({"name":f.name(),"decoder_value":format!("{value:?}")}))).collect::<Vec<_>>()
@@ -164,21 +172,30 @@ fn run() -> Result<()> {
     println!("Reading {}", input.display());
     let object = TagFile::read(&input).context("Read source tag")?;
     let group = object.header.group_tag.to_be_bytes();
+    let source_identity = input.strip_prefix(&root)?.to_string_lossy().replace('\\', "/");
+    if &group == b"ssce" || &group == b"ligh" {
+        return semantic::write(&object, &source_identity, &output, "Non-render scenario source; native units retained without a light-energy or sound-distance conversion");
+    }
     let model_path = if &group == b"hlmt" || &group == b"mode" {
         input.clone()
     } else {
         if ![b"bipd", b"bloc", b"scen", b"vehi", b"weap", b"mach", b"ctrl", b"eqip", b"gint", b"efsc", b"ssce", b"term"].contains(&&group) {
             bail!("Unsupported object group: {}", String::from_utf8_lossy(&group));
         }
-        let model_ref = reference(&object, &["object/model", "unit/object/model", "item/object/model",
-            "device/object/model", "model"]).context("Object has no supported model reference")?;
+        let Some(model_ref) = reference(&object, &["object/model", "unit/object/model", "item/object/model",
+            "device/object/model", "model"]) else {
+            return semantic::write(&object, &source_identity, &output, "Object has no model reference; semantic placement retained");
+        };
         resolve(&root, &model_ref, "model")?
     };
     let model = TagFile::read(&model_path).context("Read model")?;
     let direct_render = model.header.group_tag.to_be_bytes() == *b"mode";
     if !direct_render && model.header.group_tag.to_be_bytes() != *b"hlmt" { bail!("Expected model tag"); }
     let render_path = if direct_render { model_path.clone() } else {
-        resolve(&root, &reference(&model, &["render model"]).context("No render model reference")?, "render_model")?
+        let Some(render_ref) = reference(&model, &["render model"]) else {
+            return semantic::write(&object, &source_identity, &output, "Model has no render model reference; semantic placement retained");
+        };
+        resolve(&root, &render_ref, "render_model")?
     };
     println!("Decoding render model");
     let render_tag = TagFile::read(&render_path)?;

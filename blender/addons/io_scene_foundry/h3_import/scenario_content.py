@@ -16,7 +16,7 @@ CATEGORIES = {
 CONTENT_ROOTS = set(CATEGORIES) | {v + ' palette' for v in CATEGORIES.values()} | {
     'object names', 'editor folders', 'trigger volumes', 'player starting locations',
     'cutscene flags', 'cutscene camera points', 'squads', 'squad groups', 'zones',
-    'ai objectives', 'designer zones', 'scripting data', 'character palette',
+    'ai objectives', 'designer zones', 'scripting data', 'character palette', 'reference frames',
 }
 
 def numeric(value, size):
@@ -42,7 +42,7 @@ class ContentIndex(FieldIndex):
         value = self.value(parent, name)
         return numeric(value, 1)[0] if value is not None else default
 
-def plan(data):
+def plan(data, resolver=None):
     index = ContentIndex(data, CONTENT_ROOTS)
     result = {'placements': [], 'groups': [], 'overlays': [], 'diagnostics': []}
     def warn(address, message):
@@ -51,8 +51,14 @@ def plan(data):
         result['groups'].append(dict(key=key, name=name, parent=parent, address=address, metadata=index.metadata(address), **extra))
         return key
     def marker(kind, parent, address, name, position, **extra):
+        source_position = list(position)
+        frame = extra.pop('reference_frame', -1)
+        if frame != -1:
+            if resolver is None: raise ValueError(f'Reference frame {frame} unresolved: source models not available')
+            position = resolver.point(position, frame)
+            extra['frame_matrix'] = resolver.matrix(frame)
         result['overlays'].append(dict(kind=kind, parent=parent, address=address, name=name,
-            position=position, metadata=index.metadata(address), **extra))
+            position=position, source_position=source_position, reference_frame=frame, metadata=index.metadata(address), **extra))
     names = {i: index.value(p, 'name', '') for i, p in index.elements('', 'object names')}
     folders = dict(index.elements('', 'editor folders'))
     for i, p in folders.items():
@@ -76,7 +82,8 @@ def plan(data):
                 diagnostics.append(str(error))
             name = names.get(identity) or (PurePosixPath(source).stem if source else category.rstrip('s')) + f' [{i}]'
             metadata = {'placement': index.metadata(p), 'object': index.metadata(ob),
-                        'permutation': index.metadata(permutation), 'parent': index.metadata(parent)}
+                        'permutation': index.metadata(permutation), 'parent': index.metadata(parent),
+                        'object id': index.metadata(index.struct(ob, 'object id'))}
             for row in index.children[p]:
                 if row['kind'] == 'struct' and row['address'] not in {ob, permutation, parent}:
                     metadata[row['name']] = index.metadata(row['address'])
@@ -87,6 +94,7 @@ def plan(data):
                 parent_marker=index.value(parent, 'parent marker', ''), connection_marker=index.value(parent, 'connection marker', ''))
             try:
                 row['position'] = index.point(ob, 'position')
+                row['source_position'] = list(row['position'])
                 row['rotation'] = numeric(index.value(ob, 'rotation'), 3)
                 row['source_scale'] = index.scalar(ob, 'scale')
                 # Same zero-as-default placement convention as Reach ScenarioObject.
@@ -94,7 +102,10 @@ def plan(data):
             except (ValueError, KeyError, TypeError) as error:
                 diagnostics.append(str(error)); row['position'] = None
             if index.elements(ob, 'node orientations'):
-                diagnostics.append('Stored node pose retained at source address; visualization uses the model rest pose')
+                row['stored_pose'] = [dict(address=pose, node_count=index.value(pose, 'node count'),
+                    bit_vector=[index.value(b, 'data') for _, b in index.elements(pose, 'bit vector')],
+                    orientations=[index.value(q, 'number') for _, q in index.elements(pose, 'orientations')])
+                    for _, pose in index.elements(ob, 'node orientations')]
             if row['parent_name_index'] != -1:
                 diagnostics.append('Parent/marker attachment retained; unresolved attachment is not drawn at a guessed world position')
                 row['position'] = None
@@ -125,17 +136,15 @@ def plan(data):
             team_key = group(f'{key}/team:{team_i}', f'Fire team {team_i}', key, team)
             for start_i, start in index.elements(team, 'starting locations'):
                 try:
-                    if index.value(start,'reference frame') != -1: raise ValueError('Squad start reference frame unresolved')
                     rotation=numeric(index.value(start,'facing (yaw, pitch)'),2)+[index.scalar(start,'roll')]
-                    marker('squad starts',team_key,start,index.value(start,'name') or f'Start {start_i}',index.point(start,'position'),rotation=rotation)
+                    marker('squad starts',team_key,start,index.value(start,'name') or f'Start {start_i}',index.point(start,'position'),rotation=rotation,reference_frame=index.value(start,'reference frame'))
                 except (ValueError,KeyError,TypeError) as error: warn(start,error)
     for i,p in index.elements('', 'zones'):
         key=group(f'zone:{i}',index.value(p,'name') or f'Zone {i}','AI / Zones',p)
         for area_i,area in index.elements(p,'areas'):
             area_key=group(f'{key}/area:{area_i}',index.value(area,'name') or f'Area {area_i}',key,area)
             try:
-                if index.value(area,'runtime reference frame') != -1: raise ValueError('Area reference frame unresolved')
-                marker('area mean',area_key,area,'Source mean',index.point(area,'runtime relative mean point'))
+                marker('area mean',area_key,area,'Source mean',index.point(area,'runtime relative mean point'),reference_frame=index.value(area,'runtime reference frame'))
             except (ValueError,KeyError,TypeError) as error: warn(area,error)
     for i,p in index.elements('', 'scripting data'):
         for set_i,point_set in index.elements(p,'point sets'):
@@ -147,9 +156,12 @@ def plan(data):
                 area_references=[index.metadata(a) for _,a in index.elements(task,'areas')])
             for direction_i,direction in index.elements(task,'direction'):
                 try:
-                    if any(index.value(direction,f'reference frame{n}') != -1 for n in (0,1)):
-                        raise ValueError('Objective direction reference frame unresolved')
-                    marker('objective direction',task_key,direction,f'Direction {direction_i}',index.point(direction,'point0'),end=index.point(direction,'point1'))
+                    end = index.point(direction,'point1'); end_frame = index.value(direction,'reference frame1')
+                    if end_frame != -1:
+                        if resolver is None: raise ValueError(f'Reference frame {end_frame} unresolved: source models not available')
+                        end = resolver.point(end, end_frame)
+                    marker('objective direction',task_key,direction,f'Direction {direction_i}',index.point(direction,'point0'),end=end,
+                           source_end=index.point(direction,'point1'), end_reference_frame=end_frame,reference_frame=index.value(direction,'reference frame0'))
                 except (ValueError,KeyError,TypeError) as error: warn(direction,error)
     for i,p in index.elements('', 'designer zones'):
         references = {r['name']:[index.metadata(v) for _,v in index.elements(p,r['name'])] for r in index.children[p] if r['kind']=='block'}

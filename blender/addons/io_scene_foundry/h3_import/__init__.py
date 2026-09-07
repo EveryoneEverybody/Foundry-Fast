@@ -128,6 +128,9 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._shader_started = False
         self._source_root = None
         self._is_scenario = False
+        from .scenario_reporting import Profile
+        self._scenario_profile = Profile()
+        self._helper_started = None
         try:
             open_output(utils, bpy)
             self._progress = ImportProgress('asset', self._area)
@@ -167,6 +170,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                         command.append('--collision')
                     if self.import_physics:
                         command.append('--physics')
+                self._helper_started = time.monotonic()
                 self._process = subprocess.Popen(command, stdout=self._log, stderr=subprocess.STDOUT,
                     cwd=str(output), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             self._settings.export_in_progress = True
@@ -212,6 +216,10 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                     self._output.poll()
                     self._progress.update(self._phase)
                     return {'RUNNING_MODAL'}
+                if self._is_scenario and self._helper_started is not None:
+                    label = 'BSP shader helper elapsed' if self._shader_started else 'scenario inventory and BSP helper elapsed'
+                    self._scenario_profile.elapsed(label, time.monotonic()-self._helper_started)
+                    self._helper_started = None
                 self._log.close()
                 self._log = None
                 text = self._output.poll(final=True)
@@ -231,7 +239,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                     from .scenario_builder import ScenarioBuildSession
                     from .materials import load_manifest
                     self._progress.update('Validating scenario inventory', force=True)
-                    payload, inventory = load_scene(self._payload_path, self._source_tag, progress=self._progress.update)
+                    with self._scenario_profile.span('source inventory validation'):
+                        payload, inventory = load_scene(self._payload_path, self._source_tag, progress=self._progress.update)
                     from .scenario_scene import result_messages
                     for message in result_messages(payload):
                         print(message, flush=True)
@@ -246,6 +255,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                         import_objects=self.scenario_objects, import_content=self.scenario_content,
                         tags_root=self._source_root, object_helper=self._object_helper,
                         preview_materials=self.preview_materials)
+                    self._session.profile = self._scenario_profile
                     self._steps = iter(self._session.steps())
                 else:
                     self._progress.update('Validating object geometry', force=True)
@@ -296,6 +306,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         if reach.is_dir():
             command.extend(['--reach-tags-root', str(reach.resolve())])
         try:
+            self._helper_started = time.monotonic()
             self._process = subprocess.Popen(command, stdout=self._log, stderr=subprocess.STDOUT,
                 cwd=str(output), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         except OSError as exc:

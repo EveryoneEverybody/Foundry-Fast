@@ -149,6 +149,7 @@ pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
                 row["source_tag"] = json!(rel);
                 if !requested { return Ok(()); }
                 println!("Decoding BSP {index}: {rel}");
+                let started = std::time::Instant::now();
                 let tag = TagFile::read(source_file(root,&rel)?)?;
                 if tag.header.group_tag.to_be_bytes() != *b"sbsp" { bail!("Expected a structure BSP dependency"); }
                 let materials = tag.root().field("materials").and_then(|f|f.as_block()).context("Missing source material table")?;
@@ -157,11 +158,14 @@ pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
                     shaders.push(reference(material.field("render method").and_then(|f|f.value()))?);
                 }
                 let ass = AssFile::from_scenario_structure_bsp(&tag)?;
+                let decode_seconds = started.elapsed().as_secs_f64();
                 let payload = geometry(&ass,&shaders,&rel,index)?;
                 let path = format!("geometry/bsp_{index:04}.json");
                 write_json(&output.join(&path),&payload)?;
                 for shader in shaders.into_iter().flatten() { shader_paths.insert(shader); }
                 row["status"]=json!("extracted"); row["geometry"]=json!(path);
+                row["timings"]=json!({"geometry_decode_seconds":decode_seconds,"decode_and_serialization_inclusive_seconds":started.elapsed().as_secs_f64()});
+                println!("H3 timing BSP {index} geometry decode: {decode_seconds:.3}s (includes tag read and source material references)");
                 row["decoded_objects"]=json!(ass.objects.len()); row["decoded_instances"]=json!(ass.instances.len());
                 row["source_clusters"]=json!(tag.root().field("clusters").and_then(|f|f.as_block()).map(|b|b.len()));
                 row["source_instances"]=json!(tag.root().field("instanced geometry instances").and_then(|f|f.as_block()).map(|b|b.len()));

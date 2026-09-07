@@ -244,7 +244,7 @@ class FieldIndex:
         return numbers(row['value']['values'], 3)
 
 
-def hint_plan(data):
+def hint_plan(data, resolver=None):
     """Keep source point order and refuse unlocated object-relative hints."""
     index = FieldIndex(data)
     result = {'sectors': [], 'rails': [], 'firing_positions': [], 'script_points': [], 'diagnostics': []}
@@ -252,6 +252,8 @@ def hint_plan(data):
         result['diagnostics'].append({'address': address, 'reason': str(error), 'drawn': False})
     def point_frame(parent, name, frame_name):
         frame = index.value(parent, frame_name)
+        if resolver is not None:
+            return resolver.point(index.point(parent, name), frame)
         if type(frame) is not int or frame != -1:
             raise ValueError(f'{frame_name}={frame}: object-relative coordinate not resolved')
         return index.point(parent, name)
@@ -266,6 +268,8 @@ def hint_plan(data):
                         raise ValueError('Sector has fewer than three points')
                     result['sectors'].append({'address': parent, 'name': f'giant_sector_{hint_index}_{giant_index}_{sector_index}',
                                               'points': points, 'closed': True,
+                                              'source_points': [index.point(p, 'point') for _, p in point_rows],
+                                              'reference_frames': [index.value(p, 'reference frame') for _, p in point_rows],
                                               'bsp_indices': [index.value(p, 'structure bsp') for _, p in point_rows], 'source_indices': [hint_index, giant_index, sector_index]})
                 except (KeyError, TypeError, ValueError) as error:
                     warn(parent, error)
@@ -278,6 +282,8 @@ def hint_plan(data):
                     points = [point_frame(line, f'Point {i}', f'reference frame {i}') for i in range(2)]
                     result['rails'].append({'address': parent, 'name': f'giant_rail_{hint_index}_{giant_index}_{rail_index}',
                         'points': points, 'closed': False, 'geometry_index': geometry_index, 'geometry_address': line,
+                        'source_points': [index.point(line, f'Point {i}') for i in range(2)],
+                        'reference_frames': [index.value(line, f'reference frame {i}') for i in range(2)],
                         'flags': index.value(line, 'Flags'),
                         'bsp_indices': [index.value(line, f'structure bsp {i}') for i in range(2)],
                         'source_indices': [hint_index, giant_index, rail_index]})
@@ -293,6 +299,7 @@ def hint_plan(data):
                 area_name = index.value(areas[area], 'name', '') if type(area) is int and area in areas else ''
                 result['firing_positions'].append({'address': parent, 'name': f'{zone_name}/{area_name}/fp_{point_index}',
                     'points': [point], 'zone_index': zone_index, 'area_index': area,
+                    'source_points': [index.point(parent, 'position (local)')], 'reference_frames': [index.value(parent, 'reference frame')],
                     'zone_flags': index.value(zone, 'flags'), 'flags': index.value(parent, 'flags'),
                     'bsp_index': index.value(parent, 'bsp index'), 'source_facing': index.value(parent, 'normal')})
             except (KeyError, TypeError, ValueError) as error:
@@ -305,6 +312,7 @@ def hint_plan(data):
                     point = point_frame(parent, 'position', 'reference frame')
                     name = index.value(parent, 'name', f'point_{point_index}')
                     result['script_points'].append({'address': parent, 'name': f'{set_name}/{name}', 'points': [point],
+                        'source_points': [index.point(parent, 'position')], 'reference_frames': [index.value(parent, 'reference frame')],
                         'bsp_index': index.value(point_set, 'bsp index'), 'source_facing': index.value(parent, 'facing direction')})
                 except (KeyError, TypeError, ValueError) as error:
                     warn(parent, error)

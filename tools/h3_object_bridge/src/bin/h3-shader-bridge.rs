@@ -69,6 +69,7 @@ struct Reader {
     options: BTreeMap<PathBuf, OptionSource>,
     definitions: BTreeMap<PathBuf, RenderMethodDefinition>,
     bitmaps: BTreeMap<String, Value>,
+    bitmap_seconds: f64,
 }
 
 impl Reader {
@@ -92,6 +93,7 @@ impl Reader {
         let key = format!("{}#{index}", name.replace('\\', "/"));
         if self.bitmaps.contains_key(&key) { return key; }
         let number = self.bitmaps.len();
+        let started = std::time::Instant::now();
         let result = (|| -> Result<Value> {
             if index < 0 { bail!("Negative bitmap index"); }
             let path = resolve(&self.root, name, Some("bitmap"))?;
@@ -135,6 +137,7 @@ impl Reader {
         })();
         let value = result.unwrap_or_else(|e| json!({"path":name,"index":index,"status":"error","error":format!("{e:#}")}));
         self.bitmaps.insert(key.clone(), value);
+        self.bitmap_seconds += started.elapsed().as_secs_f64();
         key
     }
 
@@ -343,7 +346,8 @@ fn run() -> Result<()> {
     let geometry: Value = serde_json::from_slice(&fs::read(&asset)?)?;
     validate_asset(&geometry)?;
     fs::create_dir(output.join("textures"))?;
-    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new()};
+    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new(),bitmap_seconds:0.};
+    let started = std::time::Instant::now();
     let paths = geometry["shader_paths"].as_array().context("Missing shader paths")?;
     let mut shaders = BTreeMap::new();
     for (i, source) in paths.iter().enumerate() {
@@ -362,7 +366,10 @@ fn run() -> Result<()> {
         shaders.insert(source.to_string(),record);
         if i % 10 == 0 || i+1 == paths.len() { println!("H3 shader metadata: {} / {}",i+1,paths.len()); }
     }
+    let inclusive = started.elapsed().as_secs_f64();
+    println!("H3 timing shader metadata: {:.3}s exclusive; bitmap extraction: {:.3}s; combined: {:.3}s inclusive", inclusive-reader.bitmap_seconds,reader.bitmap_seconds,inclusive);
     let manifest = json!({"format":"foundry.h3-shaders","version":1,"source_tag":geometry["source_tag"],
+        "timings":{"shader_metadata_exclusive_seconds":inclusive-reader.bitmap_seconds,"bitmap_extraction_seconds":reader.bitmap_seconds,"combined_inclusive_seconds":inclusive},
         "source_game":"halo3_mcc","shaders":shaders,"bitmaps":reader.bitmaps,
         "notes":["Blender previews are approximations, not game shader conversions.",
             "Source function blobs, parameter values and sampler settings are retained.",

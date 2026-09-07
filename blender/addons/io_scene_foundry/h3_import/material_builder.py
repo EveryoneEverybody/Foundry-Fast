@@ -27,6 +27,7 @@ class PreviewBuilder:
                 nodes.build()
                 result['status'] = 'approximate_preview'
                 result['diagnostics'] = list(dict.fromkeys(nodes.diagnostics))
+                result['texture_roles'] = nodes.texture_roles()
                 if recipe['albedo'] == 'constant_color':
                     material.diffuse_color = recipe['parameters']['albedo_color']['value']
             except Exception as exc:
@@ -162,6 +163,15 @@ class MaterialNodes:
     def sample(self, name, role='color', fallback=(1, 1, 1)):
         tex = self.texture(name, role)
         return (tex.outputs['Color'], tex.outputs['Alpha']) if tex else (fallback, 1.0)
+
+    def texture_roles(self):
+        return {name: {'bitmap': parameter.get('bitmap'),
+                       'status': ('connected' if any(node.outputs['Color'].is_linked or node.outputs['Alpha'].is_linked
+                                   for (role_name, _), node in self.textures.items() if role_name == name)
+                                  else 'retained_unconnected' if any(role_name == name for role_name, _ in self.textures)
+                                  else 'unavailable'),
+                       'extern': parameter.get('extern')}
+                for name, parameter in self.p.items() if parameter['type'] == 'bitmap'}
 
     def build(self):
         output = self.node('ShaderNodeOutputMaterial', 'Blender preview only')
@@ -300,14 +310,27 @@ class TerrainNodes(MaterialNodes):
         active = [i for i in range(4) if self.c.get(f'material_{i}', 'off') not in {'off', 'none'}]
         if not active:
             raise ValueError('Terrain shader has no active material layers')
+        bases = {i: self.texture(f'base_map_m_{i}') for i in active}
+        usable = [i for i in active if bases[i] is not None]
+        if not usable:
+            raise ValueError('Terrain has no usable active base albedo bitmap')
         blend = self.texture('blend_map', 'data')
-        if blend is None:
-            raise ValueError('Terrain blend_map is unavailable; layer weights cannot be resolved')
+        mode = self.c.get('blending')
+        if blend is None or mode not in {'morph', 'dynamic_morph'} or usable != active:
+            # A source-ordered base preview is explicitly a fallback, not an
+            # invented blend equation or a substitute source material identity.
+            selected = usable[0]
+            reason = ('blend_map unavailable' if blend is None else
+                      f'unsupported blending {mode}' if mode not in {'morph', 'dynamic_morph'} else
+                      f'base layers unavailable: {sorted(set(active) - set(usable))}')
+            self.diagnostics.append(f'Terrain base fallback: base_map_m_{selected}; {reason}; source layer order retained')
+            self.surface(bases[selected].outputs['Color'])
+            self.retain_extra_textures()
+            return
         separate = self.node('ShaderNodeSeparateColor', 'Terrain blend weights (linear data)')
         separate.mode = 'RGB'
         self.feed(blend.outputs['Color'], separate.inputs['Color'])
         weights = [separate.outputs['Red'], separate.outputs['Green'], separate.outputs['Blue'], blend.outputs['Alpha']]
-        mode = self.c.get('blending')
         if mode == 'dynamic_morph':
             alpha = self.math('MULTIPLY', self.math('SUBTRACT', weights[3], self.scalar('transition_threshold', 1.), 'Transition threshold'), self.scalar('transition_sharpness', 1.), 'Transition sharpness')
             alpha = self.math('MINIMUM', self.math('MAXIMUM', alpha, 0., 'Clamp transition low'), 1., 'Clamp transition high')
@@ -323,8 +346,7 @@ class TerrainNodes(MaterialNodes):
         rgb = (0.,0.,0.)
         for i in active:
             name = f'base_map_m_{i}'
-            base = self.texture(name)
-            if base is None: raise ValueError(f'Terrain {name} is unavailable')
+            base = bases[i]
             detail, _ = self.sample(f'detail_map_m_{i}', fallback=(1 / DETAIL_MULTIPLIER,) * 3)
             layer = self.vector('MULTIPLY', base.outputs['Color'], detail, f'Terrain layer {i} base x detail')
             weight = self.math('DIVIDE', weights[i], denominator, f'Terrain layer {i} normalized weight')
@@ -332,14 +354,20 @@ class TerrainNodes(MaterialNodes):
             combine = self.node('ShaderNodeCombineXYZ', f'Terrain layer {i} weight')
             for socket in combine.inputs: self.feed(weight,socket)
             rgb = self.vector('ADD', rgb, self.vector('MULTIPLY',layer,combine.outputs[0],f'Weighted terrain layer {i}'), 'Terrain albedo sum')
+        self.surface(rgb)
+        self.diagnostics.append('Terrain layer albedo uses normalized blend-map channels; Halo lighting, puddle reflections, detailed normals and runtime environment maps are not reproduced')
+        self.retain_extra_textures()
+
+    def surface(self, rgb):
         surface = self.node('ShaderNodeBsdfPrincipled', 'H3 terrain layer albedo preview')
         surface.inputs['Roughness'].default_value = .65
         self.feed(rgb,surface.inputs['Base Color'])
         output = self.node('ShaderNodeOutputMaterial','Terrain preview only')
         self.tree.links.new(surface.outputs['BSDF'],output.inputs['Surface'])
-        self.diagnostics.append('Terrain layer albedo uses normalized blend-map channels; Halo lighting, puddle reflections, detailed normals and runtime environment maps are not reproduced')
+    def retain_extra_textures(self):
         for name,p in self.p.items():
             if p['type']=='bitmap' and name not in self.used:
                 tex=self.texture(name,'data' if 'bump' in name else 'color')
                 if tex: tex.label=name+' [unconnected source]'
+                self.diagnostics.append(f'{name}: source parameter retained; terrain operation is not connected to the preview surface')
         for i,node in enumerate(self.tree.nodes): node.location=((i%7)*230,-(i//7)*230)

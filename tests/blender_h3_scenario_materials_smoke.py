@@ -56,6 +56,24 @@ with tempfile.TemporaryDirectory() as d:
         rendered=bpy.data.images.load(settings.render.filepath,check_existing=False);actual=list(rendered.pixels[(8*16+8)*4:(8*16+8)*4+3]);bpy.data.images.remove(rendered)
         assert max(abs(a-b) for a,b in zip(actual,expected))<.015,(mode,actual,expected)
         assert mat.nwo.shader_path=='' and mat['h3_source_shader']==SHADER
+    # Additional unsupported layers and missing blend/base dependencies must not
+    # disable usable base color. Exercise the actual BSP face-slot assignment.
+    shader['parameters'].append(dict(name='environment_map',type='bitmap',bitmap='missing_cube',transform=[1,1,0,0]))
+    saved_bitmaps=copy.deepcopy(data['bitmaps'])
+    for missing,mode in [('textures/3#0','morph'),('textures/0#0','morph'),(None,'unknown_source_mode')]:
+        data['bitmaps']=copy.deepcopy(saved_bitmaps)
+        if missing:del data['bitmaps'][missing]
+        shader['categories'][0]['option']=mode
+        material=session.material(record,bsp(),0,1)
+        assert material['h3_material_preview']=='approximate_preview'
+        diagnostic=json.loads(material['h3_bsp_material_diagnostics'])
+        assert diagnostic['bsp_index']==0 and diagnostic['preview']['texture_roles']['base_map_m_0']['status']=='connected'
+        assert diagnostic['preview']['texture_roles']['environment_map']['status']=='unavailable'
+        assert any('Terrain base fallback' in d for d in diagnostic['preview']['diagnostics'])
+        geometry=bsp()['objects'][0];geometry['triangles'][0]['material']=0
+        mesh=session.mesh(geometry,[material],bsp(),session.root)
+        assert mesh.materials[mesh.polygons[0].material_index] is material
+        assert next(n for n in material.node_tree.nodes if n.type=='BSDF_PRINCIPLED').inputs['Base Color'].is_linked
     # Missing bitmap remains identifiable by BSP, shader, slot and affected triangles.
     data['bitmaps'].clear();bad=session.material(record,bsp(),3,23)
     report=json.loads(bad['h3_bsp_material_diagnostics'])
