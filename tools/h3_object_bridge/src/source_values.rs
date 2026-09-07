@@ -33,6 +33,8 @@ pub fn leaf(value: D) -> Value {
         D::RealVector3d(v) => floats(&[v.i, v.j, v.k]),
         D::RealEulerAngles2d(v) => floats(&[v.yaw, v.pitch]),
         D::RealEulerAngles3d(v) => floats(&[v.yaw, v.pitch, v.roll]),
+        D::RealRgbColor(v) => json!({"order":"rgb", "components":floats(&[v.red, v.green, v.blue])}),
+        D::RealArgbColor(v) => json!({"order":"argb", "components":floats(&[v.alpha, v.red, v.green, v.blue])}),
         D::RealQuaternion(v) => json!({"order":"wxyz", "components":floats(&[v.w, v.i, v.j, v.k])}),
         D::TagReference(v) => match v.group_tag_and_name {
             Some((group, name)) => json!({"group":group, "group_name":String::from_utf8_lossy(&group.to_be_bytes()),
@@ -40,6 +42,18 @@ pub fn leaf(value: D) -> Value {
             None => Value::Null,
         },
         other => json!({"representation":"decoder_debug", "value":format!("{other:?}")}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn semantic_color_preserves_source_order_and_float_bits() {
+        let value = leaf(D::RealArgbColor(blam_tags::math::RealArgbColor {alpha:0.5,red:0.25,green:0.125,blue:-0.0}));
+        assert_eq!(value["order"],json!("argb"));
+        assert_eq!(value["components"]["values"],json!([0.5,0.25,0.125,-0.0]));
+        assert_eq!(value["components"]["bits"][3],json!((-0.0_f32).to_bits()));
     }
 }
 

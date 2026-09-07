@@ -31,7 +31,7 @@ class ContentBuilder:
         try:
             if payload:
                 session = BuildSession(self.context, payload, asset['asset'], True,
-                    self.preview_materials, self.flip_normal_green, source_axes=True, variant=variant)
+                    self.preview_materials, self.flip_normal_green, source_axes=True, variant=variant, emit_warnings=False)
                 for phase in self.profile.steps('Blender object-template construction', session.build()):
                     yield f'Object template {source}: {phase}'
                 template = session.root
@@ -109,7 +109,7 @@ class ContentBuilder:
         assets = self.object_assets
         if assets is None and self.tags_root and self.object_helper and self.import_objects:
             extraction_started = time.perf_counter()
-            assets = yield from self.profile.steps('unique placed-object extraction wall time',
+            assets = yield from self.profile.steps('unique placed-object extraction orchestration',
                 scenario_objects.extract(content, self.tags_root, self.directory, self.object_helper, self.preview_materials))
             self.profile.elapsed('unique source extraction elapsed including helper and UI waits', time.perf_counter()-extraction_started)
         assets = assets or {}
@@ -119,6 +119,7 @@ class ContentBuilder:
         self.source_payloads = {}
         self.semantic_sources = {}
         for source, asset in assets.items():
+            yield f'Validating retained source description: {source}'
             if asset.get('status') == 'semantic':
                 semantic = scenario_objects.load_semantic(asset['semantic'], source)
                 self.semantic_sources[source] = self.text('H3 semantic source - ' + Path(source).stem, semantic).name

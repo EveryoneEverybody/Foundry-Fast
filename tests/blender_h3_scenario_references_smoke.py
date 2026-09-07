@@ -74,6 +74,15 @@ with tempfile.TemporaryDirectory() as directory:
     assert '0' in report['resolved']
     # Full rollback, including child templates and semantic Text records.
     session.rollback();assert base['count']()==before
+    # Cancellation while a nested child builder owns a partial armature must
+    # close that builder and roll back already completed parent resources.
+    session=Session(bpy.context,context,data,root,import_objects=True,import_content=True,object_assets=assets,preview_materials=False)
+    steps=session.steps();cancelled=False
+    for stage in steps:
+        if 'Object template objects/test/panel.weapon: Skeleton' in stage:
+            cancelled=True;break
+    assert cancelled
+    steps.close();session.rollback();assert base['count']()==before
     session=Session(bpy.context,context,data,root,import_objects=True,import_content=True,object_assets=assets,preview_materials=False)
     list(session.steps());name=session.root.name
     path=str(root/'references.blend');bpy.ops.wm.save_as_mainfile(filepath=path)

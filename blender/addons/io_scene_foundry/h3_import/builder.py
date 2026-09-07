@@ -12,7 +12,7 @@ from .volume_display import configure_material, configure_object
 
 
 class BuildSession:
-    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True, *, source_axes=False, variant=None):
+    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True, *, source_axes=False, variant=None, emit_warnings=True):
         self.context = context
         self.payload = payload
         self.source_path = str(source_path)
@@ -23,6 +23,7 @@ class BuildSession:
         if source_axes:
             self.rotation = Matrix.Identity(4)
         self.variant = variant
+        self.emit_warnings = emit_warnings
         self.variant_regions = None
         self.created = []
         self.warnings = list(payload.get("warnings", []))
@@ -287,8 +288,9 @@ class BuildSession:
         report.write("Halo 3 object import\n\nSource: " + self.payload["source_tag"] +
                      "\nExtraction: " + self.source_path + "\n\n" + "\n".join(self.warnings))
         root["h3_import_report"] = report.name
-        for warning in self.warnings:
-            utils.print_warning(warning)
+        if self.emit_warnings:
+            for warning in self.warnings:
+                utils.print_warning(warning)
         if self.armature is not None:
             for ob in self.context.selected_objects:
                 ob.select_set(False)
