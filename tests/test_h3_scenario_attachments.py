@@ -56,6 +56,10 @@ class AttachmentTests(unittest.TestCase):
                 assets=collect(o.extract(content,root,output,helper,True));again=collect(o.extract(content,root,output,helper,True))
             self.assertEqual(len(calls),1);self.assertEqual(assets,again)
             self.assertEqual(assets[source]['status'],'semantic');self.assertEqual(path.read_bytes(),b'source untouched')
+            self.assertEqual(assets.stats['processes'],1);self.assertEqual(assets.stats['geometry_processes'],1)
+            self.assertEqual(assets.stats['material_processes'],0);self.assertEqual(assets.stats['unique_sources'],1)
+            self.assertGreaterEqual(assets.stats['process_seconds'],0.)
+            self.assertEqual(again.stats['processes'],0);self.assertEqual(again.stats['unique_sources'],1)
 
 
 if __name__=='__main__':unittest.main()
