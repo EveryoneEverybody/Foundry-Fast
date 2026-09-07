@@ -13,6 +13,14 @@ from .import_output import HelperLogTail, HelperPending
 from .scenario_scene import checked_json
 
 
+class ExtractionAssets(dict):
+    """Asset map with transient helper profiling that does not alter source records."""
+    def __init__(self):
+        super().__init__()
+        self.stats = dict(processes=0, geometry_processes=0, material_processes=0,
+                          process_seconds=0., geometry_seconds=0., material_seconds=0., sources=[])
+
+
 def load_semantic(path, source):
     data = checked_json(path, limit=32*1024*1024)
     if (data.get('format') != 'foundry.h3-semantic' or type(data.get('version')) is not int or data['version'] != 1
@@ -46,7 +54,7 @@ def requests(content):
 
 def extract(content, tags_root, directory, helper, shaders=True):
     """Each unique source runs once. Closing the generator stops its active helper."""
-    assets = {}
+    assets = ExtractionAssets()
     root = Path(tags_root).resolve(strict=True)
     directory = Path(directory).resolve()
     if directory.is_relative_to(root):
@@ -71,6 +79,9 @@ def extract(content, tags_root, directory, helper, shaders=True):
             yield prefix
             output = directory / 'placed_sources' / hashlib.sha256(source.encode()).hexdigest()[:20]
             record = assets[source] = {'source_tag':source, 'status':'error', 'diagnostics':[]}
+            source_stats = dict(source_tag=source, processes=0, geometry_processes=0, material_processes=0,
+                                process_seconds=0., geometry_seconds=0., material_seconds=0.)
+            assets.stats['sources'].append(source_stats)
             try:
                 path = (root / relative_path(source)).resolve(strict=True)
                 if not path.is_relative_to(root) or not path.is_file():
@@ -92,13 +103,25 @@ def extract(content, tags_root, directory, helper, shaders=True):
                     log_path = output / f'{phase}.log'
                     log = log_path.open('w',encoding='utf-8')
                     tail = HelperLogTail();tail.follow(log_path)
+                    stage_started = time.perf_counter()
                     process = subprocess.Popen([str(executable), *arguments], stdout=log, stderr=subprocess.STDOUT,
                         cwd=str(output),creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                    process_key = 'geometry_processes' if phase == 'geometry' else 'material_processes'
+                    seconds_key = 'geometry_seconds' if phase == 'geometry' else 'material_seconds'
+                    assets.stats['processes'] += 1
+                    assets.stats[process_key] += 1
+                    source_stats['processes'] += 1
+                    source_stats[process_key] += 1
                     last_read = 0.
                     while process.poll() is None:
                         if time.monotonic()-last_read >= .1:
                             tail.poll();last_read=time.monotonic()
                         yield HelperPending(prefix + f' ({phase})')
+                    elapsed = time.perf_counter() - stage_started
+                    assets.stats['process_seconds'] += elapsed
+                    assets.stats[seconds_key] += elapsed
+                    source_stats['process_seconds'] += elapsed
+                    source_stats[seconds_key] += elapsed
                     code=process.returncode
                     process=None;log.close();log=None
                     details=tail.poll(final=True)
@@ -127,6 +150,7 @@ def extract(content, tags_root, directory, helper, shaders=True):
                 process = None
                 if log is not None:
                     log.close();log=None
+        assets.stats['unique_sources'] = len(assets)
         return assets
     finally:
         if process is not None and process.poll() is None:

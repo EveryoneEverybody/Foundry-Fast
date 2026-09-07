@@ -1,4 +1,4 @@
-# HaloScript portability review — prototype 1.9.46
+# HaloScript portability review — prototype 1.9.47
 
 This checkpoint analyzes H3 source. It emits reports and proposed AST mapping
 metadata, never converted HSC, compatibility wrappers, tags or Reach content.
@@ -14,7 +14,9 @@ That branch was merged, preserving its RNA sky callbacks, selection validation,
 sky/material acceptance checks and version-aware package verification.
 Checkpoint 1.9.44's unified scenario routing, material provenance, profiling,
 inspection and Reach staging remain unchanged. Normal release/feed workflows
-are not modified or invoked.
+are not modified or invoked. During validation the primary remote advanced to
+`03283e4cc0e5f7ec051f3d0a030f4e64a1895e00` (source-helper profiling, prototype
+1.9.46). That work was also merged and preserved, so this checkpoint is 1.9.47.
 
 ## Evidence and reviewed mappings
 

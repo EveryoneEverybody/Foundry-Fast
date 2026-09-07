@@ -73,6 +73,8 @@ def prepare(session, content):
     session.sky_entries = skies(session.inventory)
     session.sky_entry = selected_sky(session.sky_entries, options.sky)
     requested = list(content['placements'])
+    session.profile.counts['scenario_placement_source_requests'] = len({
+        row['source_tag'] for row in content['placements'] if row.get('source_tag') and row.get('position') is not None})
     session.frame_placements = content['placements']
     if (options.ai or options.hints) and not options.objects:
         session.frame_placements, dependencies = reference_dependencies(session.inventory, options)
@@ -80,6 +82,8 @@ def prepare(session, content):
         session.profile.counts['reference_model_requests'] = len({r['source_tag'] for r in dependencies if r['source_tag']})
     if session.sky_entry:
         requested.append(dict(source_tag=session.sky_entry['source_tag'], variant='', position=[0., 0., 0.]))
+    session.profile.counts['source_asset_requests'] = len({
+        row['source_tag'] for row in requested if row.get('source_tag') and row.get('position') is not None})
     assets = session.object_assets
     if assets is None and requested and session.tags_root and session.object_helper:
         started = time.perf_counter()
@@ -87,6 +91,16 @@ def prepare(session, content):
             session.directory, session.object_helper, shaders=False)
         session.profile.elapsed('unique source extraction elapsed', time.perf_counter() - started)
     assets = assets or {}
+    helper_stats = getattr(assets, 'stats', None)
+    if helper_stats:
+        session.profile.counts['object_helper_processes'] = helper_stats['processes']
+        session.profile.counts['object_helper_geometry_processes'] = helper_stats['geometry_processes']
+        session.profile.counts['object_helper_material_processes'] = helper_stats['material_processes']
+        session.profile.counts['object_helper_sources'] = helper_stats.get('unique_sources', len(assets))
+        session.profile.elapsed('source asset helper subprocess wall sum', helper_stats['process_seconds'])
+        print(f"H3 source asset helper profile: {helper_stats['processes']} processes, "
+              f"{helper_stats['process_seconds']:.3f}s cumulative subprocess wall; "
+              f"{helper_stats.get('unique_sources', len(assets))} unique sources", flush=True)
     session.object_assets = assets
     if not options.materials: return assets
     if session.material_manifest is None and session.tags_root and session.object_helper:

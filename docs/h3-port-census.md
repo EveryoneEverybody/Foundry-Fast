@@ -1,4 +1,4 @@
-# H3 portability census prototype 1.9.46, schema v1
+# H3 portability census prototype 1.9.47, schema v1
 
 `h3-scenario-inspect port-census` analyzes a loose H3 MCC editing-kit scenario
 and its reachable tags without Blender. It generates a proposed Reach build
@@ -11,7 +11,7 @@ Foundry's active Reach/Omaha project is not changed.
 
 ## Windows command
 
-Extract the standalone `H3-port-census-1.9.46-windows.zip` into, for example,
+Extract the standalone `H3-port-census-1.9.47-windows.zip` into, for example,
 `D:\HaloRE\PortCensus\helper`. In PowerShell:
 
 ```powershell
@@ -190,12 +190,12 @@ c20's GPL-3.0 facts-only catalogue generation is reproducible with
 
 ## HaloScript compatibility checkpoint
 
-Prototype 1.9.46 adds a deterministic reviewed mapping catalog, raw versus effective totals, exact source expressions, compiled scenario script declarations, overload resolution and content-pinned context reviews. The machine-readable transpiler table is a separate output and is also embedded in the report. Missing-reference severity is per relevance group. See [evidence and real 040_voi results](h3-hsc-compatibility.md).
+Prototype 1.9.47 adds a deterministic reviewed mapping catalog, raw versus effective totals, exact source expressions, compiled scenario script declarations, overload resolution and content-pinned context reviews. The machine-readable transpiler table is a separate output and is also embedded in the report. Missing-reference severity is per relevance group. See [evidence and real 040_voi results](h3-hsc-compatibility.md).
 
 ## Validation and delivery
 
 The standalone prototype workflow tests the helper on Windows and Linux and
-uploads `H3-port-census-1.9.46-windows.zip` with a SHA-256 file and build commit.
+uploads `H3-port-census-1.9.47-windows.zip` with a SHA-256 file and build commit.
 The existing scenario prototype workflow still provides Blender regression
 coverage. Neither workflow deploys the normal Foundry release/feed for this branch.
 No Foundry addon installation is required to use the census.

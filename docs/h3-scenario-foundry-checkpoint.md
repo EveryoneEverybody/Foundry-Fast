@@ -1,6 +1,6 @@
-# Foundry scenario source adapter — prototype 1.9.46
+# Foundry scenario source adapter — prototype 1.9.47
 
-## HaloScript census correction in 1.9.46
+## HaloScript census correction in 1.9.47
 
 The 1.9.45 sky/selection fixes below are preserved. This checkpoint merges the
 read-only census with that baseline and corrects script compatibility and
