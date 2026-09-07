@@ -47,7 +47,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     bl_description = "Read H3EK object or scenario dependencies into the current Reach project without changing source tags"
     bl_options = {'REGISTER', 'UNDO'}
     filename_ext = ""
-    filter_glob: StringProperty(default="*.scenario;*.model;*.render_model;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3asset.json", options={'HIDDEN'})
+    filter_glob: StringProperty(default="*.model;*.render_model;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3asset.json", options={'HIDDEN'})
     import_collision: BoolProperty(name="Collision Geometry", default=True)
     import_physics: BoolProperty(name="Physics Reference Shapes", default=True, description="Excluded reference shapes, not a conversion of rigid-body simulation settings")
     preview_materials: BoolProperty(name="Material Previews", default=True, description="Extract shader metadata and packed textures; no Reach tags are generated")
@@ -55,10 +55,10 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     reference_only: BoolProperty(name="Reference Only", default=True, description="Exclude the imported root collection from Foundry export until inspected")
 
     scenario_geometry: BoolProperty(name="BSP Geometry", default=True, description="Decode BSP geometry and placements as excluded references")
-    scenario_hints: BoolProperty(name="Giant Sector and Rail Hints", default=True)
+    scenario_hints: BoolProperty(name="Giant Sector and Rail Hints", default=False)
     scenario_objects: BoolProperty(name="Placed Game Objects", default=True, description="Reuse H3 object geometry by source tag and variant; excluded from export")
-    scenario_content: BoolProperty(name="Scenario Content and AI Organization", default=True, description="Show authored positions and preserve source folders, squads, zones and objectives")
-    scenario_points: BoolProperty(name="AI and Script Points", default=True, description="Show source-world firing positions and script points; unresolved reference frames remain in the report")
+    scenario_content: BoolProperty(name="Scenario Content and AI Organization", default=False, description="Show authored positions and preserve source folders, squads, zones and objectives")
+    scenario_points: BoolProperty(name="AI and Script Points", default=False, description="Show source-world firing positions and script points; unresolved reference frames remain in the report")
     scenario_bsp_indices: StringProperty(name="BSP Indices", default="", description="Comma-separated source BSP indices. Blank imports every BSP, not an inferred zone set")
 
     @classmethod
@@ -74,19 +74,6 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         layout.label(text="Paths: Foundry Preferences > Halo 3 Import")
         layout.label(text="H3 tags: " + ("Saved preference" if prefs.h3_tags_root.strip() else "Auto-detect"))
         layout.label(text="Helper: " + ("Preference override" if prefs.h3_extraction_helper.strip() else "Bundled"))
-        if Path(getattr(self, 'filepath', '')).suffix.lower() == '.scenario':
-            layout.prop(self, "scenario_geometry")
-            layout.prop(self, "scenario_bsp_indices")
-            layout.prop(self, "scenario_hints")
-            layout.prop(self, "scenario_objects")
-            layout.prop(self, "scenario_content")
-            layout.prop(self, "scenario_points")
-            layout.prop(self, "preview_materials")
-            row = layout.row()
-            row.enabled = self.preview_materials
-            row.prop(self, "flip_normal_green")
-            layout.label(text="Scenario reference only. No Reach tags are generated.")
-            return
         layout.prop(self, "import_collision")
         layout.prop(self, "import_physics")
         layout.prop(self, "reference_only")
@@ -107,6 +94,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         return ImportHelper.invoke(self, context, event)
 
     def execute(self, context):
+        if not hasattr(self, 'owner') and Path(self.filepath).suffix.lower() == '.scenario':
+            return bpy.ops.nwo.import_from_drop('INVOKE_DEFAULT', filepath=self.filepath)
         self._process = None
         self._output = HelperLogTail()
         self._progress = None
@@ -176,7 +165,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             self._settings.export_in_progress = True
             self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
             _active.append(self)
-            context.window_manager.modal_handler_add(self)
+            context.window_manager.modal_handler_add(getattr(self, 'owner', self))
             print("Halo 3 asset import started. Source tags are read-only.")
             return {'RUNNING_MODAL'}
         except KeyboardInterrupt:
@@ -229,7 +218,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                         utils.print_warning(f"H3 shader extraction failed ({code}); geometry retained. {text[-1200:]}")
                     else:
                         raise RuntimeError(f"H3 helper failed ({code}). {text[-1200:]}")
-            if self.preview_materials and not self._shader_started:
+            if self.preview_materials and not self._shader_started and not hasattr(self, 'options'):
                 self._shader_started = True
                 if self._start_shader_helper():
                     return {'RUNNING_MODAL'}
@@ -245,7 +234,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                     for message in result_messages(payload):
                         print(message, flush=True)
                     material_manifest = None
-                    if self.preview_materials:
+                    if self.preview_materials and not hasattr(self, 'options'):
                         try:
                             material_manifest = load_manifest(self._payload_path.parent / 'shader_manifest.json', payload['source_tag'])
                         except (OSError, ValueError, TypeError) as error:
@@ -254,7 +243,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                         material_manifest, self.scenario_hints, self.scenario_points, self.flip_normal_green,
                         import_objects=self.scenario_objects, import_content=self.scenario_content,
                         tags_root=self._source_root, object_helper=self._object_helper,
-                        preview_materials=self.preview_materials)
+                        preview_materials=self.preview_materials, options=getattr(self, 'options', None))
                     self._session.profile = self._scenario_profile
                     self._steps = iter(self._session.steps())
                 else:
@@ -355,6 +344,31 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             self._settings.export_in_progress = self._previous_busy
             if self in _active:
                 _active.remove(self)
+
+
+class ScenarioImportJob:
+    """Execution service owned by Foundry's normal import operator, no second dialog."""
+    execute = NWO_OT_ImportHalo3Object.execute
+    modal = NWO_OT_ImportHalo3Object.modal
+    _start_shader_helper = NWO_OT_ImportHalo3Object._start_shader_helper
+    _finish = NWO_OT_ImportHalo3Object._finish
+
+    def __init__(self, owner, options):
+        self.owner = owner
+        self.report = owner.report
+        self.filepath = owner.filepath
+        self.options = options
+        self.preview_materials = options.materials
+        self.scenario_geometry = options.geometry
+        self.scenario_objects = options.objects
+        self.scenario_content = options.content
+        self.scenario_hints = options.giant_hints
+        self.scenario_points = options.firing_positions or options.script_points
+        self.scenario_bsp_indices = ''
+        self.flip_normal_green = True
+        self.import_collision = False
+        self.import_physics = False
+        self.reference_only = True
 
 
 def menu_import(self, context):

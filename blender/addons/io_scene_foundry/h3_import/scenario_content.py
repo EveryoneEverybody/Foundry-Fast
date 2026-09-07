@@ -42,8 +42,16 @@ class ContentIndex(FieldIndex):
         value = self.value(parent, name)
         return numeric(value, 1)[0] if value is not None else default
 
-def plan(data, resolver=None):
-    index = ContentIndex(data, CONTENT_ROOTS)
+def plan(data, resolver=None, options=None):
+    roots = CONTENT_ROOTS
+    if options is not None:
+        categories = {c for c in CATEGORIES if options.placement_enabled(c)}
+        roots = categories | {CATEGORIES[c] + ' palette' for c in categories}
+        if categories: roots |= {'object names', 'editor folders', 'reference frames'}
+        if options.ai: roots |= {'squads', 'squad groups', 'zones', 'ai objectives', 'designer zones', 'character palette'}
+        if options.reference_debug: roots |= {'trigger volumes', 'player starting locations', 'cutscene flags', 'cutscene camera points', 'reference frames'}
+        if options.script_points: roots.add('scripting data')
+    index = ContentIndex(data, roots or {'__no_requested_content__'})
     result = {'placements': [], 'groups': [], 'overlays': [], 'diagnostics': []}
     def warn(address, message):
         result['diagnostics'].append({'address': address, 'reason': str(message)})

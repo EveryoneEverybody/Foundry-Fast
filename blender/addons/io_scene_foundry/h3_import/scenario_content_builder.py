@@ -31,7 +31,7 @@ class ContentBuilder:
         try:
             if payload:
                 session = BuildSession(self.context, payload, asset['asset'], True,
-                    self.preview_materials, self.flip_normal_green, source_axes=True, variant=variant, emit_warnings=False)
+                    self.preview_materials, self.flip_normal_green, source_axes=True, variant=variant, emit_warnings=False, shared_preview=self.preview if self.options else None)
                 for phase in self.profile.steps('Blender object-template construction', session.build()):
                     yield f'Object template {source}: {phase}'
                 template = session.root
@@ -39,13 +39,10 @@ class ContentBuilder:
                 for ob in template.all_objects:
                     ob.nwo.export_this = False
                     ob['h3_reference_only'] = True
-                def exclude(collection):
-                    collection.nwo.type = 'exclude'
-                    for child in collection.children: exclude(child)
-                exclude(template)
+                template.nwo.type = 'exclude'
                 self.created.extend(session.created); session.created.clear()
                 diagnostics.extend(session.warnings)
-                self.counts['object_templates'] += 1
+                self.counts['object_templates'] = self.counts.get('object_templates', 0) + 1
                 attachments, warnings = scenario_objects.children(payload, variant)
                 diagnostics.extend(warnings)
                 for child in attachments:
@@ -81,7 +78,15 @@ class ContentBuilder:
 
     def content_collection(self, key):
         if key not in self.content_groups:
-            self.content_groups[key] = self.collection(key, self.root)
+            if self.options:
+                if key == 'Objects':
+                    self.content_groups[key] = self.collection(Path(self.scene['source_tag']).stem + '_objects', self.root, 'exclude')
+                else:
+                    category = 'AI Organization' if key.startswith('AI / ') else ('Scripts' if key == 'Script Point Sets' else 'Trigger and Reference Debug Data')
+                    parent = self.inspection_collection(category)
+                    self.content_groups[key] = self.collection(key.split(' / ')[-1], parent)
+            else:
+                self.content_groups[key] = self.collection(key, self.root)
         return self.content_groups[key]
 
     def content_transform(self, position, rotation=(0., 0., 0.), scale=1.):
@@ -90,7 +95,7 @@ class ContentBuilder:
             Euler((roll, -pitch, yaw), 'ZYX').to_quaternion(), Vector((scale,) * 3))
 
     def hint_collection(self, row, kind, fallback):
-        if not self.import_content:
+        if self.options or not self.import_content:
             return fallback
         address = row['address']
         if kind == 'firing_positions':
@@ -105,9 +110,13 @@ class ContentBuilder:
 
     def content_steps(self):
         yield 'Planning scenario objects, folders and authored content'
-        content = scenario_content.plan(self.inventory)
-        assets = self.object_assets
-        if assets is None and self.tags_root and self.object_helper and self.import_objects:
+        content = scenario_content.plan(self.inventory, options=self.options)
+        if self.options:
+            from .scenario_assets import prepare
+            assets = yield from prepare(self, content)
+        else:
+            assets = self.object_assets
+        if not self.options and assets is None and self.tags_root and self.object_helper and self.import_objects:
             extraction_started = time.perf_counter()
             assets = yield from self.profile.steps('unique placed-object extraction orchestration',
                 scenario_objects.extract(content, self.tags_root, self.directory, self.object_helper, self.preview_materials))
@@ -130,7 +139,7 @@ class ContentBuilder:
                     self.source_payloads[source] = payload
                 except (OSError, ValueError, KeyError, TypeError) as error:
                     asset['diagnostics'] = list(asset.get('diagnostics', [])) + [str(error)]
-        self.frame_resolver = FrameResolver(scenario_content.ContentIndex(self.inventory, scenario_content.CONTENT_ROOTS),
+        self.frame_resolver = FrameResolver(scenario_content.ContentIndex(self.inventory, {'reference frames', 'object names'} if self.options else scenario_content.CONTENT_ROOTS),
                                             content['placements'], self.source_payloads)
         for frame in self.frame_resolver.frames:
             with self.profile.span('reference-frame table validation'):
@@ -142,7 +151,7 @@ class ContentBuilder:
                     pass
             yield f'Reference frames: {frame + 1}/{len(self.frame_resolver.frames)}'
         with self.profile.span('reference-frame resolution and content planning'):
-            content = scenario_content.plan(self.inventory, self.frame_resolver)
+            content = scenario_content.plan(self.inventory, self.frame_resolver, options=self.options)
         self.content_plan = content
         records = {r['key']: r for r in content['groups']}
         visiting = set()
@@ -180,7 +189,10 @@ class ContentBuilder:
                 folder = self.content_groups.get(f"folder:{row['folder']}")
                 category_key = f"objects:{row['folder']}:{row['category']}"
                 if category_key not in self.content_groups:
-                    self.content_groups[category_key] = self.collection(row['category'].title(), folder or self.content_collection('Objects'))
+                    self.content_groups[category_key] = self.collection(row['category'] if self.options else row['category'].title(),
+                        self.inspection_collection('Sound References') if self.options and row['category'] == 'sound scenery' else
+                        self.inspection_collection('Light References') if self.options and row['category'] == 'light volumes' else
+                        folder or self.content_collection('Objects'))
                 collection = self.content_groups[category_key]
                 key = (row['source_tag'], row['variant'])
                 asset = assets.get(row['source_tag'], {})

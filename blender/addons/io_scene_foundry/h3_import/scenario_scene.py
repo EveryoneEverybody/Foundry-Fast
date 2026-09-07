@@ -244,9 +244,13 @@ class FieldIndex:
         return numbers(row['value']['values'], 3)
 
 
-def hint_plan(data, resolver=None):
+def hint_plan(data, resolver=None, options=None):
     """Keep source point order and refuse unlocated object-relative hints."""
-    index = FieldIndex(data)
+    roots = {'ai user hint data', 'zones', 'scripting data'} if options is None else (
+        ({'ai user hint data'} if options.giant_hints else set()) |
+        ({'zones'} if options.firing_positions else set()) |
+        ({'scripting data'} if options.script_points else set()))
+    index = FieldIndex(data, roots or {'__no_requested_hints__'})
     result = {'sectors': [], 'rails': [], 'firing_positions': [], 'script_points': [], 'diagnostics': []}
     def warn(address, error):
         result['diagnostics'].append({'address': address, 'reason': str(error), 'drawn': False})

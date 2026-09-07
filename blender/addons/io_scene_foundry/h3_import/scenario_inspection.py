@@ -192,7 +192,7 @@ def dependency_requests(data, extension):
 def iter_records(data, roots=None):
     """Stream source records; restrict only the caller's query, not retained data."""
     if data['version'] == 1:
-        yield from data['records']
+        yield from (row for row in data['records'] if roots is None or row['address'].split('#', 1)[0] in roots)
     else:
         from .scenario_archive import Archive
         if not isinstance(data, Archive):

@@ -12,7 +12,8 @@ from .volume_display import configure_material, configure_object
 
 
 class BuildSession:
-    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True, *, source_axes=False, variant=None, emit_warnings=True):
+    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True, *, source_axes=False, variant=None, emit_warnings=True, shared_preview=None):
+        self.shared_preview = shared_preview
         self.context = context
         self.payload = payload
         self.source_path = str(source_path)
@@ -107,7 +108,18 @@ class BuildSession:
     def materials(self, mesh, role):
         materials = []
         for slot, source in enumerate(mesh["materials"]):
-            material = self.remember(bpy.data.materials, bpy.data.materials.new(f"H3 {source['name']}"))
+            shared_key = None
+            if role == 'render' and self.shared_preview:
+                candidates = shader_candidates(source['name'], self.payload.get('shader_paths', []))
+                shared_key = candidates[0] if len(candidates) == 1 else None
+                self.shared_preview.usage.append(dict(source_tag=self.payload['source_tag'], slot=slot, record=source, shader=shared_key))
+                if shared_key in self.shared_preview.materials:
+                    material = self.shared_preview.materials[shared_key]
+                    materials.append(material)
+                    self.render_materials.append(material)
+                    continue
+            remember = self.shared_preview.remember if shared_key else self.remember
+            material = remember(bpy.data.materials, bpy.data.materials.new(f"H3 {source['name']}"))
             material["h3_source_name"] = source["name"]
             material["h3_source_label"] = source["label"]
             material["h3_source_slot"] = slot
@@ -123,6 +135,7 @@ class BuildSession:
                 self.render_materials.append(material)
             if role == "collision":
                 configure_material(material, "collision")
+            if shared_key: self.shared_preview.materials[shared_key] = material
             materials.append(material)
         return materials
 
@@ -300,6 +313,14 @@ class BuildSession:
         yield "Complete"
 
     def build_material_previews(self, root):
+        if self.shared_preview is not None:
+            builder = self.shared_preview
+            root['h3_shader_manifest'] = builder.source_text
+            for material in self.render_materials:
+                material['h3_shader_manifest'] = builder.source_text
+                builder.build(material)
+                yield 'Shared source material preview'
+            return
         from .materials import load_manifest
         from .material_builder import PreviewBuilder
         path = Path(self.source_path).parent / 'shader_manifest.json'

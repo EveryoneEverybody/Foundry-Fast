@@ -12,14 +12,14 @@ root = Path(__file__).resolve().parents[1]
 addon = root / 'blender/addons/io_scene_foundry'
 path = Path(sys.argv[1])
 version = tomllib.loads((addon / 'blender_manifest.toml').read_text())['version']
-assert version == '1.9.43'
+assert version == '1.9.44'
 result = {'version': version, 'source_commit': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
           'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'source_files': {}, 'helpers': {}}
 with ZipFile(path) as archive:
     assert archive.testzip() is None
     assert not any(Path(n).suffix.lower() in ('.ttf','.otf','.woff','.woff2') for n in archive.namelist())
     assert tomllib.loads(archive.read('blender_manifest.toml').decode())['version'] == version
-    files = list((addon / 'h3_import').rglob('*.py')) + [addon / '__init__.py', addon / 'blender_manifest.toml']
+    files = list((addon / 'h3_import').rglob('*.py')) + [addon / '__init__.py', addon / 'blender_manifest.toml', addon / 'tools/importer.py']
     for file in files:
         name = file.relative_to(addon).as_posix()
         data = archive.read(name)

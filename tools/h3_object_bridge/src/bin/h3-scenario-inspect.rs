@@ -95,8 +95,10 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut options = BTreeMap::new();
     let mut include_geometry = false;
+    let mut selection_only = false;
     while let Some(key) = args.next() {
         if key == "--version" { println!("h3-scenario-inspect schema 2; scene schema 1; decoder {DECODER}"); return Ok(()); }
+        if key == "--selection-json" { selection_only = true; continue; }
         if key == "--geometry" {
             if include_geometry { bail!("Repeated geometry option"); }
             include_geometry = true; continue;
@@ -112,6 +114,22 @@ fn run() -> Result<()> {
     };
     let root = get("--tags-root")?;
     let input = get("--input")?;
+    if selection_only {
+        if !input.starts_with(&root) || !root.is_dir() || !input.is_file() { bail!("Invalid scenario source root"); }
+        let tag = TagFile::read(&input)?;
+        if tag.header.group_tag.to_be_bytes() != *b"scnr" { bail!("Expected a loose scenario tag"); }
+        let mut skies = Vec::new();
+        for field in tag.root().fields().filter(|f| f.clean_name() == "skies") {
+            if let Some(block) = field.as_block() {
+                for (index, entry) in block.iter().enumerate() {
+                    let fields: Vec<_> = entry.fields().map(|f| json!({"name":f.clean_name(), "value":f.value().map(leaf)})).collect();
+                    skies.push(json!({"index":index, "fields":fields}));
+                }
+            }
+        }
+        println!("{}", json!({"source_tag":input.strip_prefix(&root)?.to_string_lossy().replace('\\', "/"), "skies":skies}));
+        return Ok(());
+    }
     let output = get("--output")?;
     if !root.is_dir() || !output.is_dir() || !input.is_file() { bail!("Invalid input/output paths"); }
     if !input.starts_with(&root) || output.starts_with(&root) { bail!("Source and output directories must be separate"); }

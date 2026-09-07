@@ -1,0 +1,101 @@
+"""One import-scoped source/material cache shared by BSPs, selected sky and objects."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import time
+
+from . import scenario_objects
+from .core import load_payload
+from .scenario_content import ContentIndex, tag_reference
+from .materials import load_manifest
+from .material_builder import PreviewBuilder
+from .import_output import HelperLogTail
+
+
+def skies(inventory):
+    index = ContentIndex(inventory, {'skies'})
+    rows = []
+    for i, address in index.elements('', 'skies'):
+        metadata = index.metadata(address)
+        try: source = tag_reference(index.value(address, 'sky'))
+        except ValueError: source = ''
+        rows.append(dict(index=i, address=address, source_tag=source, metadata=metadata))
+    return rows
+
+
+def selected_sky(rows, value):
+    if not value or value == 'none': return None
+    matches = [r for r in rows if value in (f"h3:{r['index']}", r['source_tag'], r['source_tag'].replace('/', '\\'))]
+    if len(matches) != 1 or not matches[0]['source_tag']:
+        raise ValueError(f'Sky selection {value!r} does not identify exactly one source scenario sky')
+    return matches[0]
+
+
+def prepare(session, content):
+    """Prune source requests before extraction, then deduplicate all shader work."""
+    options = session.options
+    session.sky_entries = skies(session.inventory)
+    session.sky_entry = selected_sky(session.sky_entries, options.sky)
+    requested = list(content['placements'])
+    if session.sky_entry:
+        requested.append(dict(source_tag=session.sky_entry['source_tag'], variant='', position=[0., 0., 0.]))
+    assets = session.object_assets
+    if assets is None and requested and session.tags_root and session.object_helper:
+        started = time.perf_counter()
+        assets = yield from scenario_objects.extract(dict(placements=requested), session.tags_root,
+            session.directory, session.object_helper, shaders=False)
+        session.profile.elapsed('unique source extraction elapsed', time.perf_counter() - started)
+    assets = assets or {}
+    session.object_assets = assets
+    if not options.materials: return assets
+    if session.material_manifest is None and session.tags_root and session.object_helper:
+        shader_paths = set(session.scene.get('shader_paths', []) if options.geometry else [])
+        bindings = len(shader_paths)
+        for asset in assets.values():
+            if asset.get('status') != 'extracted': continue
+            try:
+                paths = load_payload(asset['asset']).get('shader_paths', [])
+                bindings += len(paths)
+                shader_paths.update(paths)
+            except (OSError, ValueError) as error:
+                session.warnings.append(str(error))
+        session.profile.counts['shader_cache_hits'] = bindings - len(shader_paths)
+        if shader_paths:
+            request = dict(format='foundry.h3-scene', version=1, game='halo3_mcc',
+                source_tag=session.scene['source_tag'], shader_paths=sorted(shader_paths))
+            request_path = session.directory / 'scenario-material-request.json'
+            request_path.write_text(json.dumps(request), encoding='utf-8')
+            helper = Path(session.object_helper).with_name('h3-shader-bridge.exe' if os.name == 'nt' else 'h3-shader-bridge')
+            started = time.perf_counter()
+            process = None
+            try:
+                log_path = session.directory / 'scenario-materials.log'
+                with log_path.open('w', encoding='utf-8') as log:
+                    process = subprocess.Popen([str(helper), '--tags-root', str(session.tags_root),
+                        '--asset', str(request_path), '--output', str(session.directory)],
+                        stdout=log, stderr=subprocess.STDOUT,
+                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                    tail = HelperLogTail(); tail.follow(log_path)
+                    last_read = 0.
+                    while process.poll() is None:
+                        if time.monotonic() - last_read >= .1:
+                            tail.poll(); last_read = time.monotonic()
+                        yield 'Shared BSP, sky and object material extraction'
+                    tail.poll(final=True)
+                    if process.returncode: raise ValueError(f'Scenario shader helper failed ({process.returncode}); see {log_path}')
+                session.material_manifest = load_manifest(session.directory / 'shader_manifest.json', session.scene['source_tag'])
+            except (OSError, ValueError) as error:
+                session.warnings.append(str(error))
+            finally:
+                if process and process.poll() is None: process.kill(); process.wait(timeout=3)
+                session.profile.elapsed('shared shader and bitmap extraction', time.perf_counter() - started)
+    if session.material_manifest:
+        session.preview = PreviewBuilder(session.material_manifest, session.directory, session.remember, session.flip_normal_green)
+        session.preview.reuse_materials = True
+        session.shader_source = session.text('H3 scenario shader source', session.material_manifest)
+        session.preview.source_text = session.shader_source.name
+        session.root['h3_shader_manifest'] = session.shader_source.name
+        session.profile.counts['unique_shaders'] = len(session.material_manifest['shaders'])
+        session.profile.counts['unique_bitmaps'] = len(session.material_manifest['bitmaps'])
+    return assets

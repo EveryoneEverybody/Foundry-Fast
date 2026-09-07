@@ -1,4 +1,5 @@
 """Reuse the H3 object helper and BuildSession for cached scenario references."""
+from collections import deque
 import hashlib
 import json
 import os
@@ -50,19 +51,20 @@ def extract(content, tags_root, directory, helper, shaders=True):
     directory = Path(directory).resolve()
     if directory.is_relative_to(root):
         raise ValueError('Object extraction output must be outside source tags')
-    sources = requests(content)
-    queue = [(row['source_tag'], row['variant']) for row in content['placements'] if row['source_tag'] in sources]
+    sources = set(requests(content))
+    queue = deque(dict.fromkeys((row['source_tag'], row['variant']) for row in content['placements'] if row['source_tag'] in sources))
+    payloads = {}
     visited = set()
     process = log = None
     try:
         while queue:
-            source, variant = queue.pop(0)
+            source, variant = queue.popleft()
             if (source, variant) in visited: continue
             visited.add((source, variant))
             if len(visited) > 4096: raise ValueError('Source attachment dependency budget exceeded')
             if source in assets:
                 if assets[source].get('status') == 'extracted':
-                    attachments, _ = children(load_payload(assets[source]['asset']), variant)
+                    attachments, _ = children(payloads[source], variant)
                     queue.extend((c['source_tag'], c.get('variant', '')) for c in attachments)
                 continue
             prefix = f'Unique placed/child source {len(assets) + 1}: {source}'
@@ -111,6 +113,7 @@ def extract(content, tags_root, directory, helper, shaders=True):
                     payload=load_payload(asset)
                     if payload['source_tag'] != source:
                         raise ValueError('Placed extraction source identity mismatch')
+                    payloads[source] = payload
                     record.update(status='extracted',asset=str(asset))
                     attachments, diagnostics = children(payload, variant)
                     record['diagnostics'].extend(diagnostics)

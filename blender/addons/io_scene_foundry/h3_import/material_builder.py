@@ -12,8 +12,16 @@ class PreviewBuilder:
         self.flip_normal_green = flip_normal_green
         self.images = {}
         self.results = []
+        self.materials = {}
+        self.usage = []
+        self.built = {}
+        self.reuse_materials = False
+        self.image_hits = 0
 
     def build(self, material):
+        identity = material.as_pointer()
+        if self.reuse_materials and identity in self.built:
+            return self.built[identity]
         source = material.get('h3_source_shader')
         record = self.manifest['shaders'].get(source)
         result = {'material': material.name, 'source': source, 'status': 'placeholder', 'diagnostics': []}
@@ -36,11 +44,13 @@ class PreviewBuilder:
                 material.use_nodes = False
         material['h3_material_preview'] = result['status']
         material['h3_material_diagnostics'] = json.dumps(result['diagnostics'])
+        self.built[identity] = result
         return result
         # Leave nwo.shader_path and uses_blender_nodes untouched.
 
     def image(self, bitmap, role):
         key = image_key(bitmap, role)
+        if key in self.images: self.image_hits += 1
         if key not in self.images:
             path = preview_path(self.directory, bitmap.get('preview'))
             image = self.remember(bpy.data.images, bpy.data.images.load(str(path), check_existing=False))

@@ -124,8 +124,8 @@ class ScenarioUITests(unittest.TestCase):
         ns = {'Path': Path, 'utils': SimpleNamespace(get_prefs=lambda: SimpleNamespace(h3_tags_root='', h3_extraction_helper=''))}
         load_functions(ns)
         ns['draw'](SimpleNamespace(layout=layout, filepath='040_voi.scenario', preview_materials=True), None)
-        self.assertEqual(layout.properties, ['scenario_geometry','scenario_bsp_indices','scenario_hints','scenario_objects','scenario_content','scenario_points','preview_materials','flip_normal_green'])
-        self.assertNotIn('reference_only',layout.properties)
+        self.assertEqual(layout.properties, ['import_collision','import_physics','reference_only','preview_materials','flip_normal_green'])
+        self.assertNotIn('scenario_geometry',layout.properties)
         self.assertNotIn('h3_tags_root',layout.properties)
 
     def test_log_does_not_break_empty_output_contract(self):
@@ -144,7 +144,7 @@ class ScenarioUITests(unittest.TestCase):
             settings=SimpleNamespace(export_in_progress=False)
             wm=SimpleNamespace(event_timer_add=Mock(),modal_handler_add=Mock())
             context=SimpleNamespace(scene=object(),view_layer=SimpleNamespace(objects=SimpleNamespace(active=None)),area=None,selected_objects=[],window_manager=wm,window=None)
-            operator=SimpleNamespace(filepath=str(tag),scenario_geometry=True,scenario_bsp_indices='',import_collision=True,import_physics=True,report=Mock(),_finish=Mock())
+            operator=SimpleNamespace(owner=object(),filepath=str(tag),scenario_geometry=True,scenario_bsp_indices='',import_collision=True,import_physics=True,report=Mock(),_finish=Mock())
             ns={'Path':Path,'os':SimpleNamespace(name='posix'),'time':SimpleNamespace(monotonic=lambda:0),
                 'bpy':SimpleNamespace(path=SimpleNamespace(abspath=lambda p:p)),
                 'utils':SimpleNamespace(get_scene_props=lambda:settings,show_output=Mock()),'HelperLogTail':log_output.HelperLogTail,
