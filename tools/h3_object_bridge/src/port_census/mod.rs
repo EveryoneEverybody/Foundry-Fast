@@ -564,5 +564,10 @@ mod tests {
     fn version_is_stable() {
         assert_eq!(FORMAT, "foundry.h3-reach-portability-census");
         assert_eq!(VERSION, 1);
+        let schema: Value =
+            serde_json::from_str(include_str!("../../data/port_census.schema.json")).unwrap();
+        assert_eq!(schema["properties"]["format"]["const"], FORMAT);
+        assert_eq!(schema["properties"]["version"]["const"], VERSION);
+        assert!(schema["$defs"]["tag"].is_object());
     }
 }

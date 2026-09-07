@@ -29,6 +29,14 @@ jobs:
         run: cargo test --locked --release --manifest-path tools/h3_object_bridge/Cargo.toml
       - name: Build census helper
         run: cargo build --locked --release --manifest-path tools/h3_object_bridge/Cargo.toml --bin h3-scenario-inspect
+      - name: Validate the published JSON Schema
+        shell: python
+        run: |
+          import json, subprocess, sys
+          from pathlib import Path
+          subprocess.run([sys.executable, '-m', 'pip', 'install', 'jsonschema'], check=True)
+          from jsonschema import Draft202012Validator
+          Draft202012Validator.check_schema(json.loads(Path('tools/h3_object_bridge/data/port_census.schema.json').read_bytes()))
       - name: Validate existing pure H3 import logic
         shell: python
         run: |

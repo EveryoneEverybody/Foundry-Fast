@@ -3,40 +3,312 @@
   "$id": "https://github.com/EveryoneEverybody/Foundry-Fast/blob/feature/h3-scenario-inspection/tools/h3_object_bridge/data/port_census.schema.json",
   "title": "Foundry H3 to Reach portability census v1",
   "type": "object",
-  "required": ["format", "version", "source", "safety", "summary", "tag_groups", "schema_compatibility_profiles", "serialized_layout_comparisons", "tags", "dependencies", "scenarios", "materials", "audio", "effects", "ai", "scripts", "path_collisions", "proposed_path_map", "minimum_boot_set", "minimum_combat_set", "blockers", "diagnostics", "evidence", "limitations"],
+  "required": [
+    "format",
+    "version",
+    "source",
+    "safety",
+    "summary",
+    "tag_groups",
+    "schema_compatibility_profiles",
+    "serialized_layout_comparisons",
+    "tags",
+    "dependencies",
+    "scenarios",
+    "materials",
+    "audio",
+    "effects",
+    "ai",
+    "scripts",
+    "path_collisions",
+    "proposed_path_map",
+    "minimum_boot_set",
+    "minimum_combat_set",
+    "blockers",
+    "diagnostics",
+    "evidence",
+    "limitations"
+  ],
   "properties": {
-    "format": {"const": "foundry.h3-reach-portability-census"},
-    "version": {"const": 1},
+    "format": {
+      "const": "foundry.h3-reach-portability-census"
+    },
+    "version": {
+      "const": 1
+    },
     "source": {
       "type": "object",
-      "required": ["scenario", "h3_tags_root", "reach_tags_root", "definitions_revision", "foundry_fast_revision", "decoder_revision", "baboon_reference_revision", "troop_reference_revision", "scenario_sha256"],
-      "properties": {"scenario_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+      "required": [
+        "scenario",
+        "h3_tags_root",
+        "reach_tags_root",
+        "definitions_revision",
+        "foundry_fast_revision",
+        "decoder_revision",
+        "baboon_reference_revision",
+        "troop_reference_revision",
+        "scenario_sha256"
+      ],
+      "properties": {
+        "scenario_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
     },
-    "safety": {"type": "object", "properties": {"game_content_written": {"const": false}, "tag_writer_invoked": {"const": false}, "official_tools_invoked": {"const": false}, "blender_required": {"const": false}}},
-    "tags": {"type": "array", "items": {"$ref": "#/$defs/tag"}},
-    "dependencies": {"type": "array", "items": {"type": "object", "required": ["source", "target", "evidence", "runtime_required"], "properties": {"source": {"type": "string"}, "target": {"type": "string"}, "evidence": {"type": "array", "items": {"type": "string"}}, "runtime_required": {"const": "UNKNOWN"}}}},
-    "scripts": {"type": "object", "required": ["files", "declarations", "engine_functions", "call_sites", "globals", "unresolved_symbols", "scenario_symbol_uses", "unsupported_call_sites", "catalogue_evidence", "summary"]},
-    "minimum_boot_set": {"type": "object", "required": ["status", "source_assets", "bsp_candidates", "required_target_systems", "derivation", "proven_target_status"], "properties": {"status": {"const": "PROVISIONAL"}, "proven_target_status": {"const": "NOT_TESTED"}, "source_assets": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}}},
-    "minimum_combat_set": {"type": "object", "required": ["status", "selected_encounter", "candidate_encounter_clusters", "derivation", "proven_target_status"]},
-    "blockers": {"type": "array", "items": {"type": "object", "required": ["id", "severity", "message", "evidence_level"], "properties": {"severity": {"enum": ["BOOT_BLOCKER", "MISSION_BLOCKER", "COMBAT_BLOCKER", "FIDELITY_BLOCKER", "OPTIONAL", "UNKNOWN"]}, "evidence_level": {"enum": ["VERIFIED", "INFERRED", "PROVISIONAL", "UNKNOWN"]}}}
+    "safety": {
+      "type": "object",
+      "properties": {
+        "game_content_written": {
+          "const": false
+        },
+        "tag_writer_invoked": {
+          "const": false
+        },
+        "official_tools_invoked": {
+          "const": false
+        },
+        "blender_required": {
+          "const": false
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tag"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "evidence",
+          "runtime_required"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "runtime_required": {
+            "const": "UNKNOWN"
+          }
+        }
+      }
+    },
+    "scripts": {
+      "type": "object",
+      "required": [
+        "files",
+        "declarations",
+        "engine_functions",
+        "call_sites",
+        "globals",
+        "unresolved_symbols",
+        "scenario_symbol_uses",
+        "unsupported_call_sites",
+        "catalogue_evidence",
+        "summary"
+      ]
+    },
+    "minimum_boot_set": {
+      "type": "object",
+      "required": [
+        "status",
+        "source_assets",
+        "bsp_candidates",
+        "required_target_systems",
+        "derivation",
+        "proven_target_status"
+      ],
+      "properties": {
+        "status": {
+          "const": "PROVISIONAL"
+        },
+        "proven_target_status": {
+          "const": "NOT_TESTED"
+        },
+        "source_assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "minimum_combat_set": {
+      "type": "object",
+      "required": [
+        "status",
+        "selected_encounter",
+        "candidate_encounter_clusters",
+        "derivation",
+        "proven_target_status"
+      ]
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "message",
+          "evidence_level"
+        ],
+        "properties": {
+          "severity": {
+            "enum": [
+              "BOOT_BLOCKER",
+              "MISSION_BLOCKER",
+              "COMBAT_BLOCKER",
+              "FIDELITY_BLOCKER",
+              "OPTIONAL",
+              "UNKNOWN"
+            ]
+          },
+          "evidence_level": {
+            "enum": [
+              "VERIFIED",
+              "INFERRED",
+              "PROVISIONAL",
+              "UNKNOWN"
+            ]
+          }
+        }
+      }
+    }
   },
   "$defs": {
-    "strategy": {"enum": ["TRANSLATE", "TRANSLATE_FIXUP", "REBUILD", "REPLACE", "STUB", "DROP", "MANUAL"]},
+    "strategy": {
+      "enum": [
+        "TRANSLATE",
+        "TRANSLATE_FIXUP",
+        "REBUILD",
+        "REPLACE",
+        "STUB",
+        "DROP",
+        "MANUAL"
+      ]
+    },
     "tag": {
       "type": "object",
-      "required": ["source_path", "source_group", "source_identity", "exists", "source_size", "references", "referenced_by", "dependency_depth", "first_reached_by", "direct_dependency", "only_transitive", "local_shared", "structural_compatibility", "conversion_losses", "reach_group_available", "proposed_strategy", "confidence", "foundry_rebuild_status", "proposed_destination", "destination_collision", "proven_target_status", "notes", "diagnostics"],
+      "required": [
+        "source_path",
+        "source_group",
+        "source_identity",
+        "exists",
+        "source_size",
+        "references",
+        "referenced_by",
+        "dependency_depth",
+        "first_reached_by",
+        "direct_dependency",
+        "only_transitive",
+        "local_shared",
+        "structural_compatibility",
+        "conversion_losses",
+        "reach_group_available",
+        "proposed_strategy",
+        "confidence",
+        "foundry_rebuild_status",
+        "proposed_destination",
+        "destination_collision",
+        "proven_target_status",
+        "notes",
+        "diagnostics"
+      ],
       "properties": {
-        "source_path": {"type": "string", "minLength": 1},
-        "exists": {"type": "boolean"},
-        "source_size": {"type": ["integer", "null"], "minimum": 0},
-        "dependency_depth": {"type": "integer", "minimum": 0},
-        "references": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-        "referenced_by": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-        "local_shared": {"enum": ["mission_local", "shared"]},
-        "proposed_strategy": {"$ref": "#/$defs/strategy"},
-        "confidence": {"enum": ["verified", "high", "provisional", "unknown"]},
-        "foundry_rebuild_status": {"enum": ["FOUNDRY_REBUILD_READY", "PARTIAL", "SOURCE_DECODE_ONLY", "BLOCKED", "NOT_APPLICABLE"]},
-        "source_identity": {"type": "object", "required": ["source_game", "canonical_source_root", "normalized_tag_path", "tag_group", "id"], "properties": {"source_game": {"const": "halo3_mcc"}, "id": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}
+        "source_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "source_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "dependency_depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "referenced_by": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "local_shared": {
+          "enum": [
+            "mission_local",
+            "shared"
+          ]
+        },
+        "proposed_strategy": {
+          "$ref": "#/$defs/strategy"
+        },
+        "confidence": {
+          "enum": [
+            "verified",
+            "high",
+            "provisional",
+            "unknown"
+          ]
+        },
+        "foundry_rebuild_status": {
+          "enum": [
+            "FOUNDRY_REBUILD_READY",
+            "PARTIAL",
+            "SOURCE_DECODE_ONLY",
+            "BLOCKED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "source_identity": {
+          "type": "object",
+          "required": [
+            "source_game",
+            "canonical_source_root",
+            "normalized_tag_path",
+            "tag_group",
+            "id"
+          ],
+          "properties": {
+            "source_game": {
+              "const": "halo3_mcc"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
       }
     }
   }
