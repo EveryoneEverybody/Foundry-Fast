@@ -33,6 +33,33 @@
       "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/BspCollisionGeometry/CollisionGeometry.cs",
       "claim": "Surface bits 0 two-sided, 1 invisible, 2 climbable, 3 breakable; material and breakable indices are independent fields."
     },
+    "H3_BREAKABLE_HSC": {
+      "kind": "documentation",
+      "url": "https://c20.reclaimers.net/h3/engine/scripting/",
+      "claim": "breakable_surfaces_enable(boolean) controls level surface breakability; breakable_surfaces_reset() restores the surfaces. Together with the H3 '-' material convention these support a BSP surface subsystem, not an inference of whole-instance damage states."
+    },
+    "H3_BREAKABLE_BSP_LINK": {
+      "kind": "reverse_engineered_source_and_inference",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/Utils/GeometryToObjectConverter.cs#L474",
+      "claim": "The BSP-to-object converter removes the breakable flag because loss of sbsp linkage causes crashes. This supports preserving BSP ownership; it does not establish a valid Reach shard/support reconstruction."
+    },
+    "REACH_BUMP_DETAIL": {
+      "kind": "supplied_target_tag_xml",
+      "archive": "ReachTreeBarkXML.zip",
+      "archive_sha256": "ebc156026a2ab0f40da13b77469f3a80e374bcba1e8fea67981d92d436de0bbf",
+      "member": "ReachTreeBarkXML/mp_treebark.shader.xml",
+      "member_sha256": "6e69e9f2497f7985fc985ed679c546de676e7e70c60343198f54dc73ea2ce5b2",
+      "target_tag_identity_from_user_inventory": "levels/shared/shaders/multi/mp_treebark.shader",
+      "xml_bitmap_display_names": {
+        "base_map": "treebark_cedar",
+        "bump_map": "treebark_cedar_bump",
+        "detail_map": "",
+        "bump_detail_map": "treebark_cedar_bump"
+      },
+      "claim": "Reach has a native bump_detail_map slot and may reuse a bitmap across bump slots. A distinct detail-bump asset is not required. These target references are structural evidence only; the XML exposes display names, not full reference paths.",
+      "authoring_policy": "Keep the verified H3 retail sampler identity and H3 UV transform, using decoded H3 source pixels. Never substitute Reach cedar/ceder assets. Bark opacity and foliage cutout are separate semantics.",
+      "foundry_writer_evidence": "h3_import/reach_materials.py parameter_bindings and image_usage; native shader bump_mapping detail option"
+    },
     "H3_NULL_MATERIAL": {
       "kind": "source_and_inference",
       "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/Utils/GeometryToObjectConverter.cs",
@@ -151,10 +178,12 @@
     },
     {
       "id": "collision.surface_flags",
-      "meaning": "Data-driven two-sided, climbable and invisible authoring; breakable must retain its geometry relationship",
+      "meaning": "Data-driven two-sided, climbable and invisible authoring; BSP breakable surfaces must retain ownership and shard/support relationships, without inferring whole-instance damage states",
       "evidence": [
         "H3_ART",
         "H3_COLLISION",
+        "H3_BREAKABLE_HSC",
+        "H3_BREAKABLE_BSP_LINK",
         "REACH_FACES",
         "SOURCE"
       ]

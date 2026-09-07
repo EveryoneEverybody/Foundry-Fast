@@ -353,6 +353,11 @@ def build(args):
                 atomic_json(run/'original-source-contracts.json', plan['source_contract_observations'])
                 atomic_json(run/'semantic-mapping-catalog.json', semantics.CATALOG)
                 (run/'source-semantic-resolution.md').write_text(semantics.markdown(resolution), encoding='utf-8')
+                from port_environment import breakables
+                breakable_report = breakables.report(resolution)
+                atomic_json(run/'breakable-collision-report.json', breakable_report)
+                (run/'breakable-collision-report.md').write_text(breakables.markdown(breakable_report), encoding='utf-8')
+                report['breakable_collision_report'] = str(run/'breakable-collision-report.json')
                 report['source_semantic_accounting'] = {k:v for k,v in resolution.items() if k != 'records'}
             plan_path = run/'environment.plan.json'
             atomic_json(plan_path, plan,compact=plan['version']>=2)

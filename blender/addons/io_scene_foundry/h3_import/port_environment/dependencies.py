@@ -281,11 +281,25 @@ def audit(manifest, bsps, skies, selection, inventory, cache_records=(), *, usag
                             authoring_bitmap_source_kind='loose_h3ek',
                             original_bitmap=source, original_bitmap_key=key, authoring_bitmap_key=replacement_key,
                             authoring_bitmap=bitmap_path(effective['bitmaps'][replacement_key]['path']),
+                            original_parameter=deepcopy(parameter),
                             source_shader_sha256=row['source_shader_sha256'],
                             authoring_bitmap_sha256=inventory.source_hash(effective['bitmaps'][replacement_key]['path']+'.bitmap'),
                             cache_evidence=[c for _, c in candidates],
                             strategy='Verified stock H3 runtime sampler -> existing exact H3 bitmap -> source pixels -> Reach import')
                         parameter['bitmap'] = replacement_key
+                        if (parameter['name'] == 'bump_detail_map' and shader.get('group') == 'rmsh'
+                            and any(c['category'] == 'bump_mapping' and c['option'] == 'detail'
+                                    for c in shader.get('categories', []))):
+                            override['target_authoring_plan'] = dict(
+                                target_tag_group='shader', target_node='foundry_reach.shader',
+                                target_option=dict(bump_mapping='detail'), target_parameter='bump_detail_map',
+                                parameter_binding=deepcopy(parameter), image_usage='Detail Normal Map',
+                                uv_convention='H3 scale XY / translation ZW through Foundry Texture Tiling',
+                                binding_evidence='Verified H3 retail sampler; pixels from exact loose H3 bitmap',
+                                target_evidence='REACH_BUMP_DETAIL',
+                                distinct_detail_bitmap_required=False,
+                                alpha_policy='Preserve source alpha_test and blend_mode independently',
+                                native_writes=False)
                         for description in shader.get('source_description', {}).get('parameters', []):
                             if description['name'] == parameter['name']:
                                 description['resolved']['bitmap'] = override['authoring_bitmap']

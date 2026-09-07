@@ -111,6 +111,29 @@ The missing loose tree-bark recipe retains its accepted
 reference, retail cache binding/hash evidence and loose H3 `default_vector`
 pixels remain separate provenance. No new retail-cache search was performed.
 
+The supplied `ReachTreeBarkXML.zip` now supplies target-side evidence for the
+native `bump_detail_map` slot. Its `mp_treebark.shader.xml` binds `base_map` to
+`treebark_cedar`, `bump_map` and `bump_detail_map` to `treebark_cedar_bump`, and
+leaves `detail_map` empty. The XML gives display names; the full Reach tag
+identities come from the supplied HREK inventory. Archive/member hashes and this
+evidence boundary are recorded as `REACH_BUMP_DETAIL` in the catalog.
+
+The H3 authoring decision remains
+`levels/solo/030_outskirts/shaders/outtree_bark.shader` / `bump_detail_map` →
+`shaders/default_bitmaps/bitmaps/default_vector.bitmap`, with source UV transform
+`[18, 18, 0, 0]`. The dependency plan explicitly targets the native Reach
+`bump_mapping=detail` / `bump_detail_map` binding and Detail Normal Map import
+usage. It retains the original parameter, decoded H3 pixels and retail binding
+provenance. An empty albedo detail slot does not require a distinct bump-detail
+asset. Source `alpha_test=none` and `blend_mode=opaque` remain unchanged; bark
+evidence does not establish foliage cutout behavior.
+
+The reported historical `treebark_ceder` names and installed Reach `treebark_cedar`
+names are distinct from the absent H3 identity. The community report is retained
+as user-supplied context, not independently verified source recovery evidence.
+Neither is a replacement candidate. Bitmap archaeology remains closed unless
+new exact-identity evidence appears.
+
 Static lighting retains BSP ownership: BSP000 has three definitions and 201
 instances; BSP010 has three definitions and 14 instances. The plan also retains
 200 sky-light samples and 14 emissive material rows. Scenario light volumes are
@@ -129,8 +152,9 @@ design fields still enter the same gate.
 
 ## Remaining blocking facts
 
-1. **Breakable glass:** BSP010 definition 76, 538 source collision surfaces,
-   instances 306–311. It requires verified shard/support and render-to-collision
+1. **BSP breakable glass surfaces:** BSP010 embedded definition 76, 538 source
+   collision surfaces, instances 306–311. The flag does not establish whole-instance
+   damage states or destructible scenario scenery. It requires verified shard/support and render-to-collision
    linkage. Foundry explicitly strips the breakable mode from a separate collision
    proxy because Tool otherwise crashes. Preserving the ring while stripping
    breakability would change traversal. Source support/correspondence data are
@@ -150,6 +174,46 @@ design fields still enter the same gate.
    adding BSP020 or inventing closure remains unverified. Foundry's seam import
    expects two BSP owners and skips unpaired source seams; that behavior is not
    accepted as a conversion rule.
+
+### Breakable placement audit
+
+The source-only runner emits `breakable-collision-report.json` and `.md`, with
+one row per original contract/placement. It preserves each source BSP and hash,
+zone membership, embedded definition identity, placement transform, authored
+object name, collision material and render material/shader, flags, surface IDs,
+breakable indices and support metadata. Stable original contract IDs link each
+row to the full rings, adjacency and render-correspondence evidence. Missing,
+duplicate or misowned placements fail the report's accounting check.
+
+The current six rows all belong to
+`levels/solo/040_voi/040_bsp_010.scenario_structure_bsp`, embedded definition 76,
+render mesh 76. Collision material **38** and render material **78**, part 0,
+both identify
+`levels/solo/040_voi/shaders/glass/glass_office_spacer_a.shader`.
+
+| Placement | Authored BSP instance name | Breakable collision surfaces |
+|---:|---|---:|
+| 306 | `?glass_office_spacer_a_12` | 538 |
+| 307 | `?glass_office_spacer_a_13` | 538 |
+| 308 | `?glass_office_spacer_a_14` | 538 |
+| 309 | `?glass_office_spacer_a_15` | 538 |
+| 310 | `?glass_office_spacer_a_16` | 538 |
+| 311 | `?glass_office_spacer_a_17` | 538 |
+
+That is **538 unique definition surfaces and 3,228 placed surfaces**, still one
+original blocking contract. The source flags are 9 (two-sided + breakable).
+No external scenery tag or nearby scenario-object association is inferred.
+
+[C20's H3 material convention](https://c20.reclaimers.net/h3/source-data/h3-materials/)
+uses `-` for two-sided breakable geometry. The
+[H3 scripting reference](https://c20.reclaimers.net/h3/engine/scripting/) describes
+`breakable_surfaces_enable(boolean)` as a level-wide breakability control and
+`breakable_surfaces_reset()` as restoring the surfaces. The pinned
+[TagTool BSP-to-object converter](https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/Utils/GeometryToObjectConverter.cs#L474)
+removes the flag when BSP linkage is lost to avoid crashes. Together these support
+the **BSP_BREAKABLE_SURFACES** classification. They do not establish Reach shard
+reconstruction. Matching shader identities resolve the material association,
+while the per-surface shard/support contract remains blocking. No HSC is generated.
 
 ## Reproduce the source gate
 
@@ -199,3 +263,28 @@ or change normal Foundry feeds.
 
 Proof_box retains Nate's runtime acceptance. Voi Reach data/tags, Tool import,
 Faux, scenario generation and Tag Test were not performed.
+
+## Bark/breakable follow-up validation
+
+The follow-up source gate ran as `20260907-120122-7780cebf` using the same
+plan-only command above. It completed in 101.1 seconds and correctly returned
+`BLOCKED_SOURCE_SEMANTICS`. All original 262 identities, the 14-rule count,
+resolution-class totals and the same three blocking identities are unchanged.
+It adds the six-placement breakable report and an explicit native bump-detail
+binding plan; it does not claim a new breakable conversion rule.
+
+The follow-up environment suite passes **75 tests**, including six additional
+report/binding regressions. Existing CI discovers these tests automatically.
+The Blender 5.2.1 proof environment construction/lightmap-command smoke test also
+passes with synthetic temporary roots; it does not compile Voi or invoke Faux.
+The checkpoint remains local and unpushed, so remote CI has not run for it.
+The previous Rust/scenario/import results above belong to the preceding semantic
+checkpoint; no Rust or native writer implementation changed in this follow-up.
+
+The verification receipt is
+`D:\HaloRE\PortCensus\voi_semantics_20260907\breakable-followup-verification.json`.
+It records report hashes, unchanged retail binding evidence and decoded bitmap
+metadata, exact original-record accounting, all 50 preserved proof_box hashes,
+and zero Voi Reach files. Native BSP/instance construction, GR2/sidecar, Reach
+Tool, Faux and native validation remain `NOT_RUN`. No further cache search or
+normal release/feed publication was performed.

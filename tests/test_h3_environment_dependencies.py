@@ -97,6 +97,32 @@ class EnvironmentDependencies(unittest.TestCase):
             self.assertEqual(effective['shaders'][SHADER]['parameters'], m['shaders'][SHADER]['parameters'])
             self.assertFalse(cache_request(m, inventory, usage=shader_usage([b], []))['shaders'])
 
+    def test_verified_bump_detail_targets_native_slot_without_changing_uv_or_opacity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            m, b, selection, inventory, record = fixture(directory)
+            m['shaders'][SHADER]['categories'] += [dict(category='alpha_test', source_index=0, option='none'),
+                                                 dict(category='blend_mode', source_index=0, option='opaque')]
+            record['shaders'][0]['categories'] += [dict(name='alpha_test', index=0, option='none'),
+                                                  dict(name='blend_mode', index=0, option='opaque')]
+            # Nonzero translations distinguish source UV preservation from a default.
+            uv = [18., 7., .25, -.5]
+            m['shaders'][SHADER]['parameters'][0]['transform'] = uv
+            record['shaders'][0]['properties'][0]['constants'][0] = uv
+            original = deepcopy(m)
+            effective, report = audit(m, [b], [], selection, inventory, [record])
+            self.assertFalse(report['unsupported'])
+            override = report['runtime_binding_overrides'][0]
+            target = override['target_authoring_plan']
+            self.assertEqual(target['target_parameter'], 'bump_detail_map')
+            self.assertEqual(target['parameter_binding']['bitmap'], RUNTIME+'#0')
+            self.assertEqual(target['parameter_binding']['transform'], uv)
+            self.assertFalse(target['distinct_detail_bitmap_required'])
+            self.assertEqual(target['image_usage'], 'Detail Normal Map')
+            self.assertEqual(target['target_tag_group'], 'shader')
+            self.assertEqual(override['original_parameter'], original['shaders'][SHADER]['parameters'][0])
+            self.assertEqual(effective['shaders'][SHADER]['categories'], original['shaders'][SHADER]['categories'])
+            self.assertEqual(m, original)
+
     def test_out_of_zone_cache_cannot_override_selected_mission(self):
         with tempfile.TemporaryDirectory() as directory:
             m, b, selection, inventory, record = fixture(directory)

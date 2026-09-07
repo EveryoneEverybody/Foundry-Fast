@@ -264,13 +264,28 @@ def collision_evidence(bsp, record):
         adjacent.append(dict(source_surface=surface['source_surface'],
             neighbors=[dict(source_surface=i,material=mesh['source_surfaces'][i]['material'],
                             flags=mesh['source_surfaces'][i]['flags']) for i in sorted(neighbors)]))
-    return dict(source_bsp=bsp['source_tag'], source_definition=di, source_mesh_index=d['mesh index'],
+    parts = a['render_meshes'][d['mesh index']]['parts']
+    render_materials = []
+    for part in parts:
+        slot = part['render method index']
+        valid = 0 <= slot < len(bsp['materials'])
+        render_materials.append(dict(source_part=part['source_index'], source_material_slot=slot,
+            source_shader=bsp['materials'][slot]['source_shader'] if valid else None,
+            material_name=bsp['materials'][slot]['name'] if valid else None,
+            source_material=a['materials'][slot] if valid and slot < len(a.get('materials', [])) else None,
+            relationship='Owning definition render part; not a per-surface shard linkage',
+            status='SOURCE_SLOT_RESOLVED' if valid else 'UNRESOLVED_SOURCE_INDEX'))
+    return dict(source_bsp=bsp['source_tag'], source_bsp_index=bsp['bsp_index'],
+        source_definition=di, source_mesh_index=d['mesh index'],
+        definition_identity=bsp['source_tag']+f'#instanced geometry definitions[{di}]',
+        definition_metadata={k:d.get(k) for k in ('checksum', 'bounding sphere center',
+            'bounding sphere radius', 'breakable surface sets')},
         collision_surfaces=surfaces,
         adjacent_surfaces=adjacent,
         rings=[dict(surface=s['source_surface'], source_ring=s.get('ring'),
             positions=[mesh['vertices'][i]['position'] for i in s.get('ring',{}).get('decoded_vertices',[])]) for s in surfaces],
         render_correspondence=[mappings[s['source_surface']] for s in surfaces] if isinstance(mappings,list) else None,
-        render_parts=a['render_meshes'][d['mesh index']]['parts'],
+        render_parts=parts, render_materials=render_materials,
         placements=[p for p in a['instances'] if p['source_index'] in record['affected_instances']],
         full_topology=dict(geometry_file=f"geometry/bsp_{bsp['bsp_index']:04}.json", definition=di,
             collision_mesh_sha256=sha(mesh), source_edge_count=len(mesh.get('edges_source',[])),
@@ -305,7 +320,7 @@ def collision_flags(evidence):
         # A separate breakable proxy is actively removed by Foundry to avoid a
         # Tool crash. Rebuilding shards/links is a structural requirement.
         return unknown('collision.surface_flags',
-            'Breakable instance needs verified shard/support and render-to-collision linkage. Foundry rejects breakable collision proxies; stripping breakability changes traversal.', evidence)
+            'BSP breakable surfaces need verified shard/support and render-to-collision linkage. The flag does not establish whole-instance damage-state behavior. Foundry removes breakable mode from separate collision proxies; stripping breakability changes traversal.', evidence)
     bits = sorted({bit for v in values for bit in COLLISION_FLAGS if v & bit})
     return decision('collision.surface_flags', 'NATIVE_TRANSFORM', dict(source=evidence,
         flags=[COLLISION_FLAGS[b] for b in bits], preserve_collision_material_identity=True,
