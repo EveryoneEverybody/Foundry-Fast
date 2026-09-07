@@ -175,6 +175,101 @@
         "HREK/tags/shaders/templated/terrain_new.hlsl_include"
       ],
       "claim": "Both alpha tests sample texture alpha and use cutoff 0.5. H3 default foliage static lighting uses SH/PRT diffuse; back_light is declared but unused there. Reach flat foliage is a diffuse approximation; Reach has foliage_translucency, not a back_light color socket. Wind coefficient zero alone does not remove phase displacement: freeze authored rest geometry by zero amplitude. Terrain morph/dynamic morph preserve the same active RGBA normalization; Reach D3D11 adds 1e-8 to source blend channels before division."
+    },
+    "REACH_GLOBAL_SEAM_OWNERSHIP": {
+      "kind": "installed_reach_stock_tags_and_existing_foundry_writers",
+      "claim": "A valid Reach seam is owned globally by the scenario and persists across zones that load both, one, or neither owner. Runtime connection activation requires both owner BSPs; authored scenario membership is distinct from the active zone mask.",
+      "stock_example": {
+        "scenario": "levels/solo/m20/m20.scenario",
+        "structure_seams": "levels/solo/m20/m20.structure_seams",
+        "global_seam_count": 20,
+        "seam_index": 13,
+        "owner_bsp_indices": [
+          4,
+          5
+        ],
+        "owner_bsps": [
+          "levels/solo/m20/m20_015.scenario_structure_bsp",
+          "levels/solo/m20/m20_020.scenario_structure_bsp"
+        ],
+        "identifier": [
+          572700572,
+          1290613524,
+          -233912671,
+          -1043446416
+        ],
+        "original_vertices": 191,
+        "triangles": 189,
+        "zone_examples": [
+          {
+            "source_index": 1,
+            "name": "zoneset_courtyard_valley",
+            "bsp_mask": 57,
+            "present_owners": [
+              4,
+              5
+            ],
+            "seam_active": true,
+            "global_seam_authored": true
+          },
+          {
+            "source_index": 2,
+            "name": "zoneset_exterior",
+            "bsp_mask": 225,
+            "present_owners": [
+              5
+            ],
+            "seam_active": false,
+            "global_seam_authored": true
+          },
+          {
+            "source_index": 5,
+            "name": "zoneset_end_cinematic",
+            "bsp_mask": 7,
+            "present_owners": [],
+            "seam_active": false,
+            "global_seam_authored": true
+          }
+        ],
+        "source_hashes": {
+          "levels/solo/m20/m20.scenario": "303f5b62f4e7b48dcaab1be3316895eef3b556a5ddf78060ee7fb15f983aa958",
+          "levels/solo/m20/m20.structure_seams": "cfbf4ec4e6a40f36e556c5ffe396bcaaaec2454f0fb27396f2a2293d0d8c76c4",
+          "levels/solo/m20/m20_015.scenario_structure_bsp": "6d8a608b012d3c160a1bf56adef7bef7e082d8d7fd1e5e09be2df7a7432fa81f",
+          "levels/solo/m20/m20_020.scenario_structure_bsp": "696c87d51ed3b02fc6ce48f77fb563c650f8eaf533bb0b32c9bfd5ebbf5b6209"
+        },
+        "correspondence": "Same global seam index, identifier and 191 valid edge mappings in each owner; two cluster centers match in opposite cluster ordering."
+      },
+      "foundry_paths": [
+        "blender/addons/io_scene_foundry/export/process.py",
+        "blender/addons/io_scene_foundry/export/build_sidecar.py",
+        "blender/addons/io_scene_foundry/managed_blam/connected_geometry.py",
+        "blender/addons/io_scene_foundry/managed_blam/structure_seams.py",
+        "blender/addons/io_scene_foundry/managed_blam/scenario.py",
+        "blender/addons/io_scene_foundry/tools/importer.py"
+      ],
+      "writer_contract": "Native paired seam uses associated-BSP regions and reversed back-facing topology; the authoring region set must contain both owners. The sidecar emits scenario-level structure_seams. Active zone membership is stored separately in scenario BSP masks.",
+      "import_limit": "Paired reconstruction helpers exist, but BSP seam discovery is commented out in the current main scenario import path. This evidence does not claim working end-to-end seam import.",
+      "bounded_build": "Keep the global source relationship and geometry in the plan even when an owner is outside the build. Do not fabricate an unbuilt target reference or add BSP020 to intro_faa. A fully authored target scenario retains its native seam while an owner is inactive.",
+      "verification": "Read-only stock tag XML exports and source hashes, combined with the separately verified Reach runtime owner predicate. No Reach tags or Voi assets were written."
+    },
+    "H3_BARK_SOURCE_HISTORY": {
+      "kind": "user_relayed_community_confirmation_and_local_artifact",
+      "source_bitmap": "levels/solo/010_jungle/bitmaps/tree_barkc_detail_bump.bitmap",
+      "historical_source_name": "tree_barkc_detail_bump.tiff",
+      "classification": "HISTORICAL_H3_AUTHORING_ASSET",
+      "claim": "Modders with access to cut H3/Digsite content confirm the historical TIFF exists and its texture content matches the supplied Deadlock copy; the Deadlock name adds only the deadlock_ prefix.",
+      "verification_limit": "The unprefixed historical TIFF was not supplied locally for an independent byte/pixel comparison; no exact loose EK bitmap identity is asserted.",
+      "supplied_artifact": {
+        "name": "deadlock_tree_barkc_detail_bump.tiff",
+        "sha256": "3ab5044e3400d10fe53f0471e9863b17c86717340c6b328563ffde694ee65368",
+        "bytes": 1048830,
+        "size": [
+          256,
+          1024
+        ]
+      },
+      "runtime_decision": "Verified retail 040_voi outtree_bark.bump_detail_map remains shaders/default_bitmaps/bitmaps/default_vector.bitmap with its source UV transform.",
+      "policy": "Historical existence does not imply active retail use. Source-history evidence cannot authorize bitmap replacement or provide pixels to the native material manifest."
     }
   },
   "rules": [
@@ -307,11 +402,12 @@
     },
     {
       "id": "seam.inactive_neighbor",
-      "meaning": "An inactive source seam has no connected neighbor; preserve its exact extant collision face and retain the paired seam relationship for future zone sets",
+      "meaning": "Retain scenario-global seam ownership and source geometry; native activation follows zone membership, while the bounded build preserves existing extant source collision",
       "evidence": [
         "H3_ART",
         "H3_REACH_SEAM_ACTIVATION",
-        "SOURCE"
+        "SOURCE",
+        "REACH_GLOBAL_SEAM_OWNERSHIP"
       ]
     },
     {

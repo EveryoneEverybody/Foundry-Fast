@@ -1,9 +1,15 @@
 # Voi Factory A source semantic checkpoint
 
-The current source gate is **262 original records, zero blocking records**, using
+The preserved original source gate is **262 original records, zero blocking records**, using
 the same 14 reusable rules. See [the three-rule closure report](h3-voi-remaining-three-rules.md)
 for the verified glass correspondence, explicit emissive approximation, source/target
 seam runtime evidence, final command and validation. No Reach Voi content was written.
+The [historical bark and global seam follow-up](h3-voi-history-and-global-seams.md)
+adds community-confirmed authoring provenance and stock Reach zone-set evidence;
+the retail default-vector binding and clean source gate remain preserved.
+That follow-up also records a changed installed bark shader and its separately
+blocked fresh run. Nate selected original-snapshot verification while retaining
+the installed edits; do not present the snapshot replay as a fresh-source pass.
 
 ## Earlier checkpoint history
 

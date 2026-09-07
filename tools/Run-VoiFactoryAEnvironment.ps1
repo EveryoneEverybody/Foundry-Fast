@@ -11,6 +11,7 @@ param(
     [string]$AddonPath,
     [string]$Helpers,
     [string]$SourceCacheEvidence,
+    [string]$SourceHistoryEvidence,
     [string]$SemanticBaseline,
     [string]$SourceCacheReader,
     [string]$ReclaimerRoot = 'D:\HaloRE\PortCensus\references\Reclaimer',
@@ -42,6 +43,7 @@ $compilerArgs = @($compiler, '--h3-root', $H3Root, '--reach-root', $ReachRoot, '
     '--templates', $Templates)
 if ($Helpers) { $compilerArgs += @('--helpers', $Helpers) }
 if ($SourceCacheEvidence) { $compilerArgs += @('--source-cache-evidence', $SourceCacheEvidence) }
+if ($SourceHistoryEvidence) { $compilerArgs += @('--source-history-evidence', $SourceHistoryEvidence) }
 if ($SemanticBaseline) { $compilerArgs += @('--semantic-baseline', $SemanticBaseline) }
 if (-not $SourceCacheEvidence -and -not $SourceCacheReader -and (Test-Path -LiteralPath $SourceCache)) {
     $readerProject = Join-Path $PSScriptRoot 'h3_cache_evidence\H3CacheEvidence.csproj'

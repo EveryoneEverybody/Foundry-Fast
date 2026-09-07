@@ -5,6 +5,9 @@ exit 0: **262 original records, 262 resolved, zero new or blocking records**.
 The compiler still uses **14 unique semantic rules**. This checkpoint changes
 only the three remaining source rules, their evidence, tests and reporting.
 It does not build native Voi assets or claim runtime acceptance.
+The [historical bark and global seam follow-up](h3-voi-history-and-global-seams.md)
+clarifies scenario-global ownership versus active zone membership and updates
+source-history provenance while preserving the retail authoring decision.
 
 Branch: `feature/h3-scenario-inspection`. The published, runtime-proven proof_box
 baseline remains `4d35ae05821575f612a99d7e659cfe43d05551bd` (1.9.48).
@@ -152,7 +155,8 @@ The selected build remains BSP000+010; no BSP020 render, collision or material
 content is added. The [H3 seam workflow](https://learn.microsoft.com/en-us/halo-master-chief-collection/h3/bsp/bsphome)
 and [C20 zone-set example](https://c20.reclaimers.net/h3/guides/map-making/level-creation/blender-level-modeling/blender-level-creation-additional-info/#zone-sets)
 provide authored context. Native paired seams remain the next writer's path when
-both owners are selected; no compiled PVS or adjacency is copied.
+both owners exist in the target scenario, independently of whether both are active
+in every zone set; no compiled PVS or adjacency is copied.
 
 ## Balanced accounting and preserved scope
 

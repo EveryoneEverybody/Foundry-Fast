@@ -565,8 +565,10 @@ def resolve(plan, bsps, shaders, baseline=None):
             # Do not put the complete decision inside the seam: its source_seam
             # reference is intentionally retained by that decision.
             seam['selected_state']='INACTIVE_NEIGHBOR_ABSENT'
+            seam['global_owners']=r['target_authoring_plan']['global_owners']
+            seam['scenario_global_authoring']=r['target_authoring_plan']['scenario_global_authoring']
             seam['target_authoring']=r['target_authoring_plan']['target']
-            seam['strategy']='Inactive seam connection; preserve exact source collision boundary for this selected slice'
+            seam['strategy']='Scenario-global seam retained; connection inactive with one owner absent; preserve exact extant source collision in this bounded build'
     plan['mappings_used'] += resolution['semantic_rules']
     return resolution
 

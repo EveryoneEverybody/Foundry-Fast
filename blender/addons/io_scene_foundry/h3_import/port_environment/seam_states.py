@@ -1,7 +1,10 @@
-"""Zone membership and the extant collision of an inactive source seam.
+"""Scenario-global seam ownership, zone activation and extant source collision.
 
 H3 and Reach runtime evidence establish that a seam requires two connected BSP
 owners. H3 keeps its seam collision material extant while the neighbor is absent.
+Stock Reach m20 confirms that a global paired seam remains in structure_seams
+across zone sets with both, one or neither owner loaded. Scenario ownership is
+not the same as the selected build's subset of decoded BSPs.
 The static slice therefore retains the exact source collision face. It must not
 emit a Reach IsSeam material with no mapping: Reach treats that case differently.
 """
@@ -54,6 +57,21 @@ def discover_neighbors(scenario_xml, bsps, seams_xml, export_metadata):
                 geometry_scope='Neighbor seam metadata only; no neighbor render/collision/material build'))
             del pending[si]
     result['unresolved_neighbors'] = sorted(pending)
+    relationships = []
+    for seam in seams:
+        owners = [dict(source_bsp_index=o['source_bsp_index'], source_bsp=o['source_bsp']) for o in seam['owners']]
+        for evidence in result['neighbor_evidence']:
+            if evidence['source_seam_index'] == seam['source_index']:
+                neighbor = evidence['inactive_neighbor']
+                owners.append(dict(source_bsp_index=neighbor['source_bsp_index'], source_bsp=neighbor['source_bsp']))
+        if len(owners) != 2:
+            continue  # The original source contract remains blocking.
+        owner_mask = sum(1 << o['source_bsp_index'] for o in owners)
+        relationships.append(dict(source_seam_index=seam['source_index'], identifier=seam['identifier'],
+            ownership_scope='SCENARIO_GLOBAL', owners=owners, global_geometry_retained=True,
+            source_zone_states=[dict(z, seam_active=(z['bsp_mask'] & owner_mask) == owner_mask) for z in zones],
+            selected_owner_indices=sorted(o['source_bsp_index'] for o in owners if o['source_bsp_index'] in selected)))
+    result['scenario_global_relationships'] = relationships
     return result
 
 
@@ -113,7 +131,20 @@ def plan(record, environment, bsps):
     states=[dict(z, seam_active=(z['bsp_mask'] & pair_mask)==pair_mask,
         selected_owner_present=bool(z['bsp_mask'] & (1<<owner['source_bsp_index']))) for z in context['source_zone_sets']]
     collision=collision_boundary(seam,next(b for b in bsps if b['bsp_index']==owner['source_bsp_index']))
+    global_owners = [deepcopy(owner), deepcopy(neighbor['inactive_neighbor'])]
+    global_authoring = dict(semantic_class='NATIVE_DIRECT', ownership_scope='SCENARIO_GLOBAL',
+        owners=global_owners, preserve_global_seam=True, source_zone_states=states,
+        reach_construct='Scenario structure_seams plus per-BSP seam identifier/cluster/edge ownership, rebuilt by Tool',
+        activation='Both globally registered owner BSPs loaded; absence from a zone set disables the connection, not the authored seam',
+        foundry_construct='Paired seam mesh regions with bungie_mesh_seam_associated_bsp and reversed back-facing topology',
+        writer_precondition='Both owner BSPs must exist in the target scenario/authoring regions; they need not be simultaneously loaded in every zone set',
+        imported_helper_limit='Foundry contains a paired seam reconstruction helper, but current scenario importer seam discovery is commented out; this is not an end-to-end importer acceptance claim',
+        selected_build_bsp_indices=sorted(selected), owner_bsps_outside_selected_build=[other],
+        outside_build_policy='Retain full global ownership and source geometry in this plan; do not add an unbuilt target BSP reference or select/build its resources',
+        native_global_emission='Use the native paired seam when both owners are built into a target scenario; retain it globally across zone switches',
+        target_evidence='REACH_GLOBAL_SEAM_OWNERSHIP')
     return dict(source_seam=deepcopy(seam), source_neighbor_evidence=neighbor, source_zone_states=states,
+        global_owners=global_owners, scenario_global_authoring=global_authoring,
         selected_state='INACTIVE_NEIGHBOR_ABSENT', selected_seam_active=False,
         source_collision_extant=True, collision_correspondence=collision,
         activation_predicate='Both BSP owners connected; one absent owner disables the seam connection',
@@ -121,7 +152,8 @@ def plan(record, environment, bsps):
             face_mode='collision_only', face_type='normal', seam_connector=False, added_geometry=False,
             collision_source='Exact source collision object/triangles in collision_correspondence; not a generated closure',
             visibility='No connected neighbor cluster; retained collision faces do not render',
-            future_zone_sets='Retain original seam geometry/identity; when both BSPs are selected, replace this static boundary state with the native paired seam authoring path',
+            future_zone_sets='Retain original global seam geometry/ownership; when both owners exist in the target scenario, author a paired seam globally and let zone membership control activation',
+            global_relationship='scenario_global_authoring retains the native relationship independently of this bounded build projection',
             reach_unmapped_seam_caveat='Do not emit IsSeam with mapping -1: Reach excludes that material from extant collision, unlike this H3 inactive mapped seam',
             native_validation_required='Verify retained source boundary collision and absence of an active neighbor connection; paired seams still require native Tool validation'),
         native_writes=False)

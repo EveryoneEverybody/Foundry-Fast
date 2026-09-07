@@ -173,10 +173,15 @@ class InactiveSeam(unittest.TestCase):
             self.assertEqual(calls,[(2,'synthetic/2.scenario_structure_bsp')])
             self.assertEqual(result['neighbor_evidence'][0]['inactive_neighbor']['source_bsp_index'],2)
             self.assertEqual(result['selected_indices'],[0,1])
+            relationship=result['scenario_global_relationships'][0]
+            self.assertEqual([o['source_bsp_index'] for o in relationship['owners']],[1,2])
+            self.assertEqual([s['seam_active'] for s in relationship['source_zone_states']],[False,True,False])
+            self.assertEqual(relationship['selected_owner_indices'],[1])
             calls.clear();center='50,50,0'
             result=seam_states.discover_neighbors(scenario,bsps,None,metadata)
             self.assertEqual(result['neighbor_evidence'],[])
             self.assertEqual(result['unresolved_neighbors'],[0])
+            self.assertEqual(result['scenario_global_relationships'],[])
 
     def test_owner_pair_activation_preserves_existing_collision_without_added_bsp(self):
         r,e,b=seam_fixture();before=deepcopy((r,e,b));p=seam_states.plan(r,e,b)
@@ -203,6 +208,23 @@ class InactiveSeam(unittest.TestCase):
         p=seam_states.plan(*seam_fixture())
         self.assertEqual(p['target']['face_type'],'normal')
         self.assertIn('IsSeam',p['target']['reach_unmapped_seam_caveat'])
+
+    def test_global_ownership_survives_zone_sets_with_both_one_or_neither_owner(self):
+        r,e,b=seam_fixture()
+        e['seam_source_context']['source_zone_sets'].append(dict(name='neither_owner',bsp_mask=1))
+        before=deepcopy((r,e,b));p=seam_states.plan(r,e,b);global_plan=p['scenario_global_authoring']
+        self.assertEqual((r,e,b),before)
+        self.assertEqual(global_plan['ownership_scope'],'SCENARIO_GLOBAL')
+        self.assertEqual(global_plan['semantic_class'],'NATIVE_DIRECT')
+        self.assertTrue(global_plan['preserve_global_seam'])
+        self.assertEqual([o['source_bsp_index'] for o in global_plan['owners']],[1,2])
+        self.assertEqual([s['seam_active'] for s in global_plan['source_zone_states']],[False,True,False,False])
+        self.assertEqual(global_plan['selected_build_bsp_indices'],[0,1])
+        self.assertEqual(global_plan['owner_bsps_outside_selected_build'],[2])
+        self.assertIn('target scenario',global_plan['writer_precondition'])
+        self.assertIn('commented out',global_plan['imported_helper_limit'])
+        self.assertFalse(p['target']['added_geometry'])
+        self.assertEqual(semantics.resolve_record(r,e,b,{})['resolution_class'],'NATIVE_TRANSFORM')
 
 
 if __name__=='__main__':unittest.main()

@@ -335,6 +335,13 @@ def build(args):
                         report['source_cache_reader_failure'] = str(exc)
                         cache_records = []
                 shaders, dependency_report = dependencies.audit(shaders, bsps, skies, selection, inventory, cache_records, usage=usage)
+                history_path = getattr(args, 'source_history_evidence', None)
+                if history_path:
+                    from port_environment import source_history
+                    history = json.loads(Path(history_path).read_text(encoding='utf-8-sig'))
+                    source_history.annotate(dependency_report, history)
+                    report['source_history_evidence'] = dict(file=str(Path(history_path).resolve()), sha256=digest(history_path))
+                    atomic_json(run/'source-history-evidence.json', dependency_report['source_history'])
                 authoring_manifest = 'authoring-shader-manifest.json'
                 atomic_json(run/'materials'/authoring_manifest, shaders)
                 atomic_json(run/'source-dependencies.json', dependency_report)
@@ -484,6 +491,7 @@ def main():
     parser.add_argument('--reach-xml-evidence',help='Optional user-supplied ReachTagXML.zip authoring oracle')
     parser.add_argument('--templates',help='Optional HREK templates.zip authoring oracle')
     parser.add_argument('--source-cache-evidence', help='Read-only H3 stock cache sampler evidence JSON; cache hashes are rechecked')
+    parser.add_argument('--source-history-evidence', help='Historical authoring provenance JSON; artifact hashes rechecked, never used to override runtime bindings')
     parser.add_argument('--source-cache-reader', help='Optional H3CacheEvidence executable; emits metadata only')
     parser.add_argument('--source-cache', action='append', help='Stock H3 .map file for dependency classification; repeatable')
     parser.add_argument('--work-dir', required=True, help='New empty directory outside both kits, or the same owned build directory')
