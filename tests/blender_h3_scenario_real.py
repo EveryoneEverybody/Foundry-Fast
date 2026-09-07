@@ -45,6 +45,7 @@ settings.scale = 'blender'; settings.forward_direction = 'x'
 project_before = (settings.scene_project, utils.get_tags_path())
 source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
 memory_before = memory_metrics()
+source_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
 started = time.perf_counter()
 result = bpy.ops.nwo.foundry_import(filepath=str(source), tag_bsp_import_geometry=not opts.no_geometry,
     tag_sky='' if opts.no_sky else 'h3:0', tag_scenario_import_objects=not opts.no_objects,
@@ -75,7 +76,7 @@ report = dict(seconds=elapsed, baseline_seconds=1469.4,
     project=project_before, source_sha256=source_hash,
     sky=session.sky_entry, warnings=session.warnings,
     helper_output=str(session.directory), source_read_only=True,
-    source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
+    source_commit=source_commit, invocation=vars(opts),
     helper_sha256={p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in Path(opts.helper).parent.glob('*.exe')},
     comparison='Fresh extraction and construction with a 100 ms modal cadence; OS file cache is uncontrolled; baseline supplied by user')
 (output/'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

@@ -29,7 +29,9 @@ This visibility state is distinct from Foundry export exclusion and survives
 save/reopen. Object visibility is not individually scattered across thousands
 of records.
 
-Firing positions use one vertex mesh by default. Vertex attributes retain record,
+Firing positions use one vertex mesh by default, with a Mesh to Points modifier
+for visibility in Object Mode. Edit Mode and the Spreadsheet expose the original
+vertices and their attributes. Vertex attributes retain record,
 zone, area and frame indices; `h3_point_records` names the packed JSON lookup with
 every source address and resolved/source point. The full source inventory remains
 queryable. Individual Empty objects require the explicit detailed option.
@@ -103,6 +105,18 @@ Use a fresh extraction directory for the requested 1,469.4-second comparison;
 operating-system file-cache state is uncontrolled. A prior complete-import memory
 measurement is unavailable, so report current memory rather than asserting an
 unmeasured percentage reduction.
+
+The fresh 040_voi default acceptance run at `a98f8d1b27c6a2aca9f3ff035dd31cb2e32f2633`
+completed in **447.877 seconds (7 minutes 28 seconds)**, **69.520% faster** than
+the supplied 1,469.4-second baseline. This includes fresh extraction, BSPs,
+objects, selected sky, material previews and packed source reports; saving the
+`.blend` is outside the import timer. It produced 1,305 BSP mesh definitions,
+6,432 BSP placements, 1,527 scenario placements, 156 templates, 549 shared
+materials, 912 packed images and zero optional inspection objects. Reference
+frames remained 77 resolved and 2 unresolved. Parent Blender peak working set
+was 5.26 GiB, with 4.36 GiB after cleanup. OS cache and background system load
+were not controlled. The subsequent point-display modifier only affects an
+explicit firing-position import and was disabled in this default run.
 
 Remaining source-only features include BSP light conversion, structure design,
 decals, decorators, BSP collision/portal conversion and structure merging.

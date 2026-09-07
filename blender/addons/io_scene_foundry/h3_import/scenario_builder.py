@@ -102,6 +102,20 @@ class ScenarioBuildSession(ContentBuilder):
             attribute = mesh.attributes.new(name, 'INT', 'POINT')
             attribute.data.foreach_set('value', list(values))
         ob = self.object('Firing Positions', mesh, collection, 'firing_positions', '')
+        # A vertex-only mesh is editable but invisible in Object Mode. Display
+        # its vertices as points without allocating one Object per source record.
+        group = self.remember(bpy.data.node_groups, bpy.data.node_groups.new('Inspection Points', 'GeometryNodeTree'))
+        group.interface.new_socket(name='Geometry', in_out='INPUT', socket_type='NodeSocketGeometry')
+        group.interface.new_socket(name='Geometry', in_out='OUTPUT', socket_type='NodeSocketGeometry')
+        inputs = group.nodes.new('NodeGroupInput')
+        output = group.nodes.new('NodeGroupOutput')
+        points = group.nodes.new('GeometryNodeMeshToPoints')
+        points.mode = 'VERTICES'
+        points.inputs['Radius'].default_value = 2.5 * self.scale
+        group.links.new(inputs.outputs['Geometry'], points.inputs['Mesh'])
+        group.links.new(points.outputs['Points'], output.inputs['Geometry'])
+        modifier = ob.modifiers.new('Inspection Points', 'NODES')
+        modifier.node_group = group
         ob['h3_point_records'] = self.text('H3 firing position lookup', rows).name
         ob['h3_inspection_help'] = 'Vertex h3_record_index addresses the retained JSON lookup; complete source fields remain in the inventory'
         ob.show_in_front = True

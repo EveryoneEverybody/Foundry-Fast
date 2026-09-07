@@ -20,7 +20,7 @@ Options = importlib.import_module(package + '.scenario_options').ScenarioOptions
 assets_module = importlib.import_module(package + '.scenario_assets')
 object_module = importlib.import_module(package + '.scenario_objects')
 Session = base['mod'].ScenarioBuildSession
-count = base['count']
+def count(): return (*base['count'](), len(bpy.data.node_groups))
 
 # Supply the additional collection fields used by the source adapter.
 class CollectionProps(bpy.types.PropertyGroup):
@@ -96,6 +96,7 @@ with tempfile.TemporaryDirectory() as d:
     points = [o for o in session.root.all_objects if o.get('h3_source_role') == 'firing_positions']
     assert len(points) == 1 and points[0].type == 'MESH'
     assert len(points[0].data.vertices) == 1
+    assert points[0].modifiers[0].node_group.nodes.get('Mesh to Points') is not None
     assert json.loads(bpy.data.texts[points[0]['h3_point_records']].as_string())[0]['address']
     sky = next(o for o in session.root.all_objects if o.get('h3_source_role') == 'scenario_sky')
     assert sky['h3_source_sky_index'] == 1 and not sky.hide_render and not sky.nwo.export_this
