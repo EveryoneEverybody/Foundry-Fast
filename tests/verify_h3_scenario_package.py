@@ -19,7 +19,7 @@ with ZipFile(path) as archive:
     assert archive.testzip() is None
     assert not any(Path(n).suffix.lower() in ('.ttf','.otf','.woff','.woff2') for n in archive.namelist())
     assert tomllib.loads(archive.read('blender_manifest.toml').decode())['version'] == version
-    files = list((addon / 'h3_import').rglob('*.py')) + [addon / '__init__.py', addon / 'blender_manifest.toml', addon / 'tools/importer.py']
+    files = list((addon / 'h3_import').rglob('*.py')) + [addon / '__init__.py', addon / 'blender_manifest.toml', addon / 'tools/importer.py', addon / 'tools/scenario/lightmap.py', addon / 'h3_import/port_environment/mappings.json']
     for file in files:
         name = file.relative_to(addon).as_posix()
         data = archive.read(name)

@@ -130,7 +130,7 @@ fn geometry(ass: &AssFile, shaders: &[Option<String>], source: &str, index: usiz
 }
 
 pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
-               include_geometry: bool, selected: Option<&BTreeSet<usize>>) -> Result<()> {
+               include_geometry: bool, selected: Option<&BTreeSet<usize>>, environment_semantics: bool) -> Result<()> {
     let mut entries = Vec::new();
     let mut shader_paths = BTreeSet::new();
     let block = scenario.root().field("structure bsps").and_then(|f| f.as_block());
@@ -159,7 +159,8 @@ pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
                 }
                 let ass = AssFile::from_scenario_structure_bsp(&tag)?;
                 let decode_seconds = started.elapsed().as_secs_f64();
-                let payload = geometry(&ass,&shaders,&rel,index)?;
+                let mut payload = geometry(&ass,&shaders,&rel,index)?;
+                if environment_semantics { payload["environment_semantics"] = collision_semantics(&tag, &ass)?; }
                 let path = format!("geometry/bsp_{index:04}.json");
                 write_json(&output.join(&path),&payload)?;
                 for shader in shaders.into_iter().flatten() { shader_paths.insert(shader); }
@@ -189,6 +190,71 @@ pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
             "Scenario object placements, lighting dependencies and external scenario resources are inventoried, not imported.",
             "Generated navigation resources are not decoded. Authored hints do not simulate Halo AI."]
     }))
+}
+
+/// Optional source metadata for the compiler. Inspection geometry is unchanged.
+/// Match every source surface ring against the existing ASS decoder's fan before
+/// attaching material/flag provenance; no target resources are constructed here.
+fn collision_semantics(tag: &TagFile, ass: &AssFile) -> Result<Value> {
+    let root = tag.root();
+    let blocks = root.field_path("resource interface/raw_resources[0]/raw_items/collision bsp")
+        .and_then(|f| f.as_block()).context("Missing H3 collision surfaces")?;
+    if blocks.len() != 1 { bail!("Environment proof requires one collision BSP"); }
+    let bsp = blocks.element(0).unwrap();
+    let surfaces = bsp.field("surfaces").and_then(|f| f.as_block()).context("Missing surfaces")?;
+    let edges = bsp.field("edges").and_then(|f| f.as_block()).context("Missing edges")?;
+    let points = bsp.field("vertices").and_then(|f| f.as_block()).context("Missing vertices")?;
+    let instances: Vec<_> = ass.instances.iter().filter(|i| i.name == "@CollideOnly").collect();
+    if instances.len() != 1 { bail!("Ambiguous ASS collision instance"); }
+    let object = instances[0].object_index as usize;
+    let AssObjectPayload::Mesh {vertices, triangles} = &ass.objects[object].payload else { bail!("Not a collision mesh"); };
+    let mut rows = Vec::new();
+    let (mut vertex_start, mut triangle_start) = (0usize, 0usize);
+    for (si, s) in surfaces.iter().enumerate() {
+        let first = s.read_int_any("first edge").context("Missing first edge")?;
+        let mut edge_index = first;
+        let mut ring = Vec::new();
+        let mut seen = BTreeSet::new();
+        loop {
+            if edge_index < 0 || !seen.insert(edge_index) { bail!("Malformed source surface ring {si}"); }
+            let edge = edges.element(edge_index as usize).context("Invalid collision edge")?;
+            let (v, next) = if edge.read_int_any("left surface") == Some(si as i128) {
+                (edge.read_int_any("start vertex"), edge.read_int_any("forward edge"))
+            } else if edge.read_int_any("right surface") == Some(si as i128) {
+                (edge.read_int_any("end vertex"), edge.read_int_any("reverse edge"))
+            } else { bail!("Collision edge does not own surface {si}"); };
+            let v = v.context("Missing collision vertex")?;
+            if v < 0 { bail!("Negative collision vertex"); }
+            ring.push(point(points.element(v as usize).context("Invalid collision point")?.read_point3d("point") * 100.0));
+            edge_index = next.context("Missing next collision edge")?;
+            if edge_index == first { break; }
+        }
+        if ring.len() < 3 { bail!("Degenerate collision surface {si}"); }
+        for (i, p) in ring.iter().enumerate() {
+            let v = vertices.get(vertex_start+i).context("ASS collision ring coverage mismatch")?;
+            if point(v.position) != *p { bail!("ASS collision surface {si} vertex mismatch"); }
+        }
+        let count = ring.len()-2;
+        for k in 0..count {
+            let t = triangles.get(triangle_start+k).context("ASS collision triangle coverage mismatch")?;
+            if t.v != [vertex_start as u32, (vertex_start+k+1) as u32, (vertex_start+k+2) as u32] {
+                bail!("ASS collision surface {si} topology mismatch");
+            }
+        }
+        rows.push(json!({"source_surface":si, "material":s.read_int_any("material").context("Missing collision material")?,
+            "flags":s.read_int_any("flags").context("Missing collision flags")?,
+            "triangle_start":triangle_start, "triangle_count":count}));
+        vertex_start += ring.len(); triangle_start += count;
+    }
+    if vertex_start != vertices.len() || triangle_start != triangles.len() { bail!("Incomplete collision surface coverage"); }
+    let materials = root.field("collision materials").and_then(|f| f.as_block()).context("Missing collision materials")?;
+    let shaders = materials.iter().map(|m| reference(m.field("render method").and_then(|f| f.value())))
+        .collect::<Result<Vec<_>>>()?;
+    let clusters = root.field("clusters").and_then(|f| f.as_block()).context("Missing clusters")?;
+    Ok(json!({"version":1, "collision_object":object, "collision_surfaces":rows,
+        "collision_materials":shaders,
+        "cluster_sky_indices":clusters.iter().map(|c| c.read_int_any("scenario sky index")).collect::<Vec<_>>(),
+        "verification":"Every source surface vertex and fan triangle matches the existing ASS decoder output"}))
 }
 
 #[cfg(test)]

@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- Representative zero-emission row from the seven H3 fixture rows. -->
+<tag group="scenario_structure_lighting_info" id="levels\test\box\box">
+  <block name="generic light definitions" value="definitions,0"/>
+  <block name="generic light instances" value="instances,0"/>
+  <block name="material info" value="material_info,1">
+    <element index="0">
+      <field name="emissive power" value="0" type="real"/>
+      <field name="emissive color" value="0,0,0" type="real rgb color"/>
+      <field name="attenuation falloff" value="0" type="real"/>
+      <field name="attenuation cutoff" value="0" type="real"/>
+    </element>
+  </block>
+</tag>

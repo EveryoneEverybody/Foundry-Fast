@@ -71,6 +71,11 @@ struct Reader {
     bitmaps: BTreeMap<String, Value>,
     bitmap_seconds: f64,
     bitmap_hits: usize,
+    single_image_pixels: bool,
+}
+
+fn preview_shape(is_2d: bool, depth: u32, images: usize, has_sequences: bool, single_image_pixels: bool) -> bool {
+    is_2d && depth == 1 && images == 1 && (!has_sequences || single_image_pixels)
 }
 
 impl Reader {
@@ -114,8 +119,12 @@ impl Reader {
             }
             let format = image.format_name().unwrap_or_default().to_lowercase();
             let large = u64::from(image.width()) * u64::from(image.height()) > 67_108_864;
-            if !image.type_name().is_some_and(|t| t.eq_ignore_ascii_case("2d texture"))
-                || image.depth() != 1 || bitmap.len() != 1 || !bitmap.sequences().is_empty() {
+            // The explicit compiler path samples the entire sole indexed 2D
+            // texture, not a sprite/sequence frame. Ordinary inspection keeps
+            // its conservative preview policy. Real box textures have one
+            // sequence naming the single image (including BC5 normal maps).
+            if !preview_shape(image.type_name().is_some_and(|t| t.eq_ignore_ascii_case("2d texture")),
+                image.depth().into(), bitmap.len(), !bitmap.sequences().is_empty(), self.single_image_pixels) {
                 result["preview_error"] = json!("Cube, volume, array, multi-image or sprite bitmap needs a dedicated preview");
             } else if large || image.width() == 0 || image.height() == 0 {
                 result["preview_error"] = json!("Invalid or oversized preview dimensions");
@@ -324,12 +333,14 @@ fn validate_asset(geometry: &Value) -> Result<()> {
 fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut values = BTreeMap::new();
+    let mut single_image_pixels = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--tags-root" | "--asset" | "--output" | "--reach-tags-root" => {
                 values.insert(arg,args.next().context("Missing argument value")?);
             }
-            "--version" => { println!("h3-shader-bridge 0.2.0; material schema 1; source description schema 1"); return Ok(()); }
+            "--single-image-pixels" => { single_image_pixels = true; }
+            "--version" => { println!("h3-shader-bridge 0.2.1; material schema 1; source description schema 1; single-image-pixels"); return Ok(()); }
             _ => bail!("Unknown argument: {arg}"),
         }
     }
@@ -347,7 +358,7 @@ fn run() -> Result<()> {
     let geometry: Value = serde_json::from_slice(&fs::read(&asset)?)?;
     validate_asset(&geometry)?;
     fs::create_dir(output.join("textures"))?;
-    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new(),bitmap_seconds:0.,bitmap_hits:0};
+    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new(),bitmap_seconds:0.,bitmap_hits:0,single_image_pixels};
     let started = std::time::Instant::now();
     let paths = geometry["shader_paths"].as_array().context("Missing shader paths")?;
     let mut shaders = BTreeMap::new();
@@ -372,6 +383,7 @@ fn run() -> Result<()> {
     let manifest = json!({"format":"foundry.h3-shaders","version":1,"source_tag":geometry["source_tag"],
         "timings":{"shader_metadata_exclusive_seconds":inclusive-reader.bitmap_seconds,"bitmap_extraction_seconds":reader.bitmap_seconds,"combined_inclusive_seconds":inclusive},
         "source_game":"halo3_mcc","shaders":shaders,"bitmaps":reader.bitmaps,
+        "pixel_policy":if single_image_pixels {"entire_single_indexed_2d_image"} else {"inspection_preview"},
         "cache":{"unique_bitmaps":reader.bitmaps.len(),"bitmap_cache_hits":reader.bitmap_hits},
         "notes":["Blender previews are approximations, not game shader conversions.",
             "Source function blobs, parameter values and sampler settings are retained.",
@@ -386,6 +398,14 @@ fn main() { if let Err(e) = run() { eprintln!("{e:#}"); std::process::exit(1); }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn compiler_pixels_are_opt_in_and_still_single_2d() {
+        assert!(!preview_shape(true, 1, 1, true, false));
+        assert!(preview_shape(true, 1, 1, true, true));
+        assert!(preview_shape(true, 1, 1, false, false));
+        for (is_2d, depth, count) in [(false, 1, 1), (true, 2, 1), (true, 1, 2), (true, 1, 0)] {
+            assert!(!preview_shape(is_2d, depth, count, true, true));
+        }
+    }
     #[test] fn accepts_object_and_scene_material_requests() {
         for format in ["foundry.h3-object", "foundry.h3-scene"] {
             assert!(validate_asset(&json!({"format":format,"game":"halo3_mcc","version":1})).is_ok());

@@ -78,9 +78,14 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut options = BTreeMap::new();
     let mut include_geometry = false;
+    let mut environment_semantics = false;
     let mut selection_only = false;
     while let Some(key) = args.next() {
-        if key == "--version" { println!("h3-scenario-inspect schema 2; scene schema 1; decoder {DECODER}"); return Ok(()); }
+        if key == "--version" { println!("h3-scenario-inspect schema 2; scene schema 1; environment semantics 1; decoder {DECODER}"); return Ok(()); }
+        if key == "--environment-semantics" {
+            if environment_semantics { bail!("Repeated environment semantics option"); }
+            environment_semantics = true; continue;
+        }
         if key == "--selection-json" { selection_only = true; continue; }
         if key == "--geometry" {
             if include_geometry { bail!("Repeated geometry option"); }
@@ -92,6 +97,7 @@ fn run() -> Result<()> {
     }
     let selected = scenario_geometry::indices(options.get("--bsp-indices").map(String::as_str).unwrap_or(""))?;
     if selected.is_some() && !include_geometry { bail!("BSP selection requires --geometry"); }
+    if environment_semantics && !include_geometry { bail!("Environment semantics requires --geometry"); }
     let get = |key: &str| -> Result<PathBuf> {
         PathBuf::from(options.get(key).with_context(|| format!("Required: {key}"))?).canonicalize().map_err(Into::into)
     };
@@ -143,7 +149,7 @@ fn run() -> Result<()> {
     println!("Inspection complete: {} fields, {} references, {} data blobs", inventory.records.count, inventory.records.references, inventory.blob_count);
     drop(writer);
     // BSP reconstruction has a separate manifest and does not change the inventory's scope.
-    scenario_geometry::extract(&tag, &root, &output, &relative, include_geometry, selected.as_ref())?;
+    scenario_geometry::extract(&tag, &root, &output, &relative, include_geometry, selected.as_ref(), environment_semantics)?;
     Ok(())
 }
 
