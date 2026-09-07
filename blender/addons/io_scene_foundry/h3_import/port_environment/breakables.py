@@ -1,7 +1,7 @@
 """Placement inventory for BSP-owned breakable surfaces, not scenario objects.
 
-Material identity joins are separate from the still-unresolved shard/support
-relationship. Original rings and mapping tables stay in the semantic evidence.
+Material identity joins are separate from geometric correspondence. Original
+rings and mapping tables stay in the semantic evidence after resolution.
 """
 from collections import defaultdict
 from copy import deepcopy
@@ -66,6 +66,8 @@ def report(resolution):
                 render_material_relationship='Owning definition parts; material identity does not establish per-surface shard/support linkage',
                 semantic='BSP_BREAKABLE_SURFACES', whole_instance_damage_state='NOT_ESTABLISHED',
                 semantic_rule_id=record['semantic_rule_id'], resolution_class=record['resolution_class'],
+                unified_geometry_status=target.get('unified_geometry',{}).get('status'),
+                unified_triangle_count=target.get('unified_geometry',{}).get('unified_triangle_count'),
                 still_blocking=record['still_blocking'], missing_fact=target.get('missing_fact'),
                 evidence=record['evidence'], full_topology=evidence['full_topology'],
                 source_record_reference=f'source-semantic-resolution.json#/records/{index}/target_authoring_plan/'+
@@ -98,8 +100,9 @@ def markdown(result):
     lines += ['', 'The JSON preserves source tag hashes, zone membership, placement transforms, collision flags, '
         'source surface IDs, breakable indices, material records and definition support metadata. '
         'Each row links to the original semantic record for rings, adjacent surfaces and render correspondence.', '',
-        'A matching collision/render shader proves material identity, not the shard/support relationship. '
-        'The conversion gate remains blocking until that relationship has a verified Reach authoring reconstruction.', '',
+        'A matching collision/render shader establishes material identity. Resolved rows additionally require complete '
+        'local geometric correspondence, matching boundary coverage and compatible corner attributes. '
+        'Their unified native breakable mesh generates both render and collision; no separate breakable proxy is allowed.', '',
         'Evidence:', '',
         '- [C20 H3 materials](https://c20.reclaimers.net/h3/source-data/h3-materials/): `-` authors two-sided breakable geometry.',
         '- [C20 H3 scripting](https://c20.reclaimers.net/h3/engine/scripting/): `breakable_surfaces_enable` controls '

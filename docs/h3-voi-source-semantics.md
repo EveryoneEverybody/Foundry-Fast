@@ -1,5 +1,15 @@
 # Voi Factory A source semantic checkpoint
 
+The current source gate is **262 original records, zero blocking records**, using
+the same 14 reusable rules. See [the three-rule closure report](h3-voi-remaining-three-rules.md)
+for the verified glass correspondence, explicit emissive approximation, source/target
+seam runtime evidence, final command and validation. No Reach Voi content was written.
+
+## Earlier checkpoint history
+
+The following records the preceding 259/262 checkpoint and its bark/placement
+follow-up. Its three blocking findings are superseded by the closure report above.
+
 This checkpoint resolves 259 of the original 262 source-contract records with
 14 reusable semantic rules. Three records remain blocking. It is a source plan,
 not a native environment build or runtime acceptance result.

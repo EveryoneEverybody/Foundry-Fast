@@ -261,10 +261,10 @@ def sky_lighting(root):
 
 
 def construct(paths, scene, bsp, sky, shaders, scenario_xml, lighting_xml, sky_xml, sky_render_xml, lighting_quality='direct_only',
-              *, selection=None, designs=None, seams_xml=None, light_xmls=None):
+              *, selection=None, designs=None, seams_xml=None, light_xmls=None, seam_source_context=None):
     if selection is not None and selection['classification'] != 'TARGET_DEFAULT':
         return construct_selected(paths, scene, bsp, sky, shaders, scenario_xml, lighting_xml, sky_xml, sky_render_xml,
-                                  selection, designs or {}, seams_xml, lighting_quality, light_xmls or {})
+                                  selection, designs or {}, seams_xml, lighting_quality, light_xmls or {}, seam_source_context)
     if lighting_quality not in {'none', 'direct_only', 'draft'}:
         raise ValueError('Unsupported proof lighting quality')
     if (scene.get('source_tag') != SOURCE_SCENARIO or scene.get('game') != 'halo3_mcc'
@@ -410,7 +410,7 @@ def plan_skies(plan):
 
 
 def construct_selected(paths, scene, bsps, skies, shaders, scenario_xml, lighting_xmls, sky_xmls, sky_render_xmls,
-                       selection, designs, seams_xml, lighting_quality, light_xmls):
+                       selection, designs, seams_xml, lighting_quality, light_xmls, seam_source_context=None):
     from . import authoring
     if scene['source_tag'] != selection['source_scenario'] or scene['game'] != 'halo3_mcc':
         raise ValueError('Decoded scene differs from selected source scenario')
@@ -545,7 +545,7 @@ def construct_selected(paths, scene, bsps, skies, shaders, scenario_xml, lightin
                     project_fingerprint=paths.fingerprint(),units='ass_100_per_world_unit',scene_scale='max',forward_direction='x'),
         selection=selection,bsps=bsp_plans,skies=sky_plans,structure_designs=design_plans,seams=seams,
         materials=materials,bitmaps=bitmaps,lighting_by_bsp=light_plans,scenario_lights=scenario_lights,unsupported=problems,
-        source_dependencies=dependency_audit,
+        source_dependencies=dependency_audit, seam_source_context=seam_source_context or {},
         scenario=dict(source_semantics=fixtures.scenario_semantics(scenario_xml),spawn=selection['spawn'] or spawn_above_collision([m for b in bsp_plans for m in b['meshes']]),
                       type='solo',zone_set=selection['source_zone_set'],active_bsp_mask=selection['target_bsp_mask'],
                       structure_designs=[d['destination'] for d in design_plans],defaults=dict(custom_gravity_scale=1.0)),
@@ -554,6 +554,7 @@ def construct_selected(paths, scene, bsps, skies, shaders, scenario_xml, lightin
         excluded=['normal scenario objects','AI','HSC','audio','effects','cinematics','source runtime resources'],
         unknowns=['Nate must confirm runtime acceptance after a successful native build.'])
     result['lighting']=dict(source_tag=light_plans[0]['source_tag'],sky=sky_plans[0]['lighting'],quality=lighting_quality)
+    result['source']['evidence_only_dependencies']=(seam_source_context or {}).get('inspected_source_bsps',[])
     from .semantics import resolve
     resolve(result, bsps, shaders)
     result['plan_sha256']=stable_hash(result)

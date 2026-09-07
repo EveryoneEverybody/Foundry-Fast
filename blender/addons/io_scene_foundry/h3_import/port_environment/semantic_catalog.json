@@ -95,6 +95,66 @@
       "path": "blender/addons/io_scene_foundry/managed_blam/scenario_structure_lighting_info.py",
       "claim": "Native static light definitions and instances; emissive material focus and attenuation. H3 frustum blend/angles do not have direct fields."
     },
+    "BREAKABLE_GEOMETRY_PROOF": {
+      "kind": "verified_source_geometry_and_authoring_rebuild",
+      "path": "blender/addons/io_scene_foundry/h3_import/port_environment/breakable_geometry.py",
+      "claim": "Every collision ring must match render positions, source planes, boundary edges, area and shader identity. Opposite render copies must have equal UV/color/weights and opposite normals. Complete coverage permits unified two-sided Reach breakable scenario geometry; separate proxies are prohibited. Tool rebuilds target breakable support/IDs from this geometry.",
+      "limitations": "Limited to completely two-sided breakable definitions with triangle/convex-quad collision rings. Mixed definitions, ambiguous vertices, incompatible corner attributes or unmatched faces remain blocking. No compiled shard payload is copied."
+    },
+    "REACH_EMISSIVE_SPREAD": {
+      "kind": "authoring_writer_and_explicit_approximation",
+      "paths": [
+        "blender/addons/io_scene_foundry/export/process.py",
+        "blender/addons/io_scene_foundry/export/virtual_geometry.py",
+        "blender/addons/io_scene_foundry/managed_blam/connected_geometry.py",
+        "blender/addons/io_scene_foundry/utils.py",
+        "blender/addons/io_scene_foundry/h3_import/port_environment/emissive.py"
+      ],
+      "verified_contract": "Foundry exports native focus = 1 - degrees(emissive_focus_property)/180; its importer applies the inverse. Area-light conversion sets this property from light.spread. Distances have independent falloff/cutoff properties and unit conversion.",
+      "inference": "solid_angle_equivalent_cone_v1 treats source frustum angles as half-angles, uses a linear-in-cosine taper and blends angular integrals with the basic focus cone. It is an explicitly chosen MVP approximation, not a claim that either engine uses this photometric law.",
+      "preserved": "Source bake power, color, quality and distance attenuation; emission remains on the original material faces.",
+      "known_documentation_conflict": "The mesh-property focus tooltip reverses the spread convention relative to executable export/import and area-light conversion. The plan follows the executable roundtrip without modifying the proven writer."
+    },
+    "H3_REACH_SEAM_ACTIVATION": {
+      "kind": "installed_runtime_raw_x64_and_authoring_evidence",
+      "h3_executable": {
+        "identity": "H3EK/halo3_tag_test.exe",
+        "sha256": "59a78f2c96034d7ceb5d710505b2b36813aa141fc81a083e3f952973dbce4602",
+        "image_base": "0x140000000",
+        "active_seams_calculator_rva": "0x4b2230",
+        "owner_presence_checks_rva": [
+          "0x4b2296",
+          "0x4b22a0"
+        ],
+        "collision_material_extant_initializer_rva": "0x4b1f10",
+        "active_seam_clears_collision_material_bit_rva": "0x4b2014",
+        "inactive_seam_sets_collision_material_bit_rva": "0x4b2038",
+        "disconnect_clears_owner_rva": "0x4b35d5",
+        "disconnect_recalculates_mask_rva": "0x4b38c5"
+      },
+      "reach_executable": {
+        "identity": "HREK/reach_tag_test.exe",
+        "sha256": "cbdd8448a87a433b0dffc0de47d06db7a18b4bf868b96b057135daa86790aba8",
+        "image_base": "0x140000000",
+        "active_seams_calculator_rva": "0x12c800",
+        "owner_presence_checks_rva": [
+          "0x12c8df",
+          "0x12c8e6"
+        ],
+        "collision_material_extant_initializer_rva": "0x12b9b0",
+        "active_seam_clears_collision_material_bit_rva": "0x12baed",
+        "inactive_mapped_seam_sets_collision_material_bit_rva": "0x12bb0f",
+        "unmapped_IsSeam_skips_collision_bit_rva": "0x12babe"
+      },
+      "claim": "Both runtimes set a seam active only when its two connected-owner bytes are not -1. H3 retains a mapped seam collision material when inactive and suppresses it when active. Reach matches this for mapped seams, but skips an unmapped (-1) IsSeam material. The static slice therefore retains the exact H3 collision face as ordinary native collision-only geometry and retains seam identity for future paired-zone authoring.",
+      "method": "Read-only PE disassembly, assertion-string cross-references and branch inspection. Neither executable was run or patched. No executable/resource bytes are included in this catalog.",
+      "authoring_documentation": [
+        "https://learn.microsoft.com/en-us/halo-master-chief-collection/h3/bsp/bsphome",
+        "https://c20.reclaimers.net/h3/guides/map-making/level-creation/blender-level-modeling/blender-level-creation-additional-info/#seams",
+        "https://learn.microsoft.com/en-us/halo-master-chief-collection/hr/art/fbxtogr2#appendix-b-json-parameters"
+      ],
+      "boundary": "This establishes source/target state semantics, not native Tool compilation or runtime acceptance of generated Voi. Repeated identifiers alone never establish neighbors."
+    },
     "PAIRED_TERRAIN": {
       "kind": "supplied_tag_evidence",
       "path": "H3TagXML.zip and ReachTagXML.zip: levels/reference/lighting_reference/shaders/terrain_grass.shader_terrain.xml",
@@ -178,14 +238,15 @@
     },
     {
       "id": "collision.surface_flags",
-      "meaning": "Data-driven two-sided, climbable and invisible authoring; BSP breakable surfaces must retain ownership and shard/support relationships, without inferring whole-instance damage states",
+      "meaning": "Map verified collision flags; unified breakable authoring requires complete local render/collision correspondence",
       "evidence": [
         "H3_ART",
         "H3_COLLISION",
         "H3_BREAKABLE_HSC",
         "H3_BREAKABLE_BSP_LINK",
         "REACH_FACES",
-        "SOURCE"
+        "SOURCE",
+        "BREAKABLE_GEOMETRY_PROOF"
       ]
     },
     {
@@ -237,17 +298,19 @@
     },
     {
       "id": "lighting.emissive_frustum",
-      "meaning": "Preserve directional emissive inputs; require a proven angular distribution adapter before nonzero frustum emission is accepted",
+      "meaning": "Preserve nonzero source power/color/distances; approximate the frustum with a documented solid-angle cone through native Reach focus",
       "evidence": [
         "REACH_LIGHTING",
+        "REACH_EMISSIVE_SPREAD",
         "SOURCE"
       ]
     },
     {
       "id": "seam.inactive_neighbor",
-      "meaning": "Source inactive neighbor is evidence, not permission to invent closure or add a BSP",
+      "meaning": "An inactive source seam has no connected neighbor; preserve its exact extant collision face and retain the paired seam relationship for future zone sets",
       "evidence": [
         "H3_ART",
+        "H3_REACH_SEAM_ACTIVATION",
         "SOURCE"
       ]
     },

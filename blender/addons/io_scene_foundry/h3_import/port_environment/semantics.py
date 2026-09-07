@@ -312,11 +312,16 @@ COLLISION_FLAGS = {1: dict(source='two sided', target='face_sides=two_sided'),
                    8: dict(source='breakable', target='face_mode=breakable on linked render/collision geometry')}
 
 
-def collision_flags(evidence):
+def collision_flags(evidence, unified=None):
     values = {number(s['flags']) for s in evidence['collision_surfaces']}
     if any(v & ~15 for v in values):
         return unknown('collision.surface_flags', 'Unknown collision behavior bit; cannot discard it', evidence)
     if any(v & 8 for v in values):
+        if unified is not None:
+            return decision('collision.surface_flags', 'NATIVE_REBUILD', dict(source=evidence,
+                semantic='BSP_BREAKABLE_SURFACES', unified_geometry=unified,
+                construct=unified['target']['construct'], face_mode='breakable', collision_proxy=False),
+                loss=['Reach Tool rebuilds breakable support and surface IDs from the equivalent unified geometry; compiled H3 shard/support IDs are retained as provenance, not copied'])
         # A separate breakable proxy is actively removed by Foundry to avoid a
         # Tool crash. Rebuilding shards/links is a structural requirement.
         return unknown('collision.surface_flags',
@@ -404,7 +409,16 @@ def resolve_record(record, plan, bsps, shaders):
     if field.endswith('collision info.surfaces[].material'):
         return untextured_collision(collision_evidence(by_bsp[source], record))
     if field.endswith('collision info.surfaces[].flags'):
-        return collision_flags(collision_evidence(by_bsp[source], record))
+        bsp = by_bsp[source]; evidence = collision_evidence(bsp, record)
+        if any(number(s['flags']) & 8 for s in evidence['collision_surfaces']):
+            from . import breakable_geometry
+            try:
+                selected = next(b for b in plan['bsps'] if b['source_tag'] == source)
+                unified = breakable_geometry.plan(bsp, selected['instance_plan'], record)
+            except (KeyError, ValueError, TypeError, IndexError, StopIteration) as exc:
+                return unknown('collision.surface_flags', 'Unified breakable geometry precondition: '+str(exc), evidence)
+            return collision_flags(evidence, unified)
+        return collision_flags(evidence)
     if field == 'shader group/status':
         shader = shaders['shaders'][source]
         if shader.get('status') == 'resolved_snapshot':
@@ -420,11 +434,28 @@ def resolve_record(record, plan, bsps, shaders):
     if field == 'light volumes':
         return scenario_lights(plan)
     if field == 'material info':
-        return unknown('lighting.emissive_frustum',
-            'Need H3 frustum angular weighting/blend and area-power normalization to reproduce it with Reach focus or surface-derived analytical emitters; numeric angle substitution is not evidence.', record)
+        from . import emissive
+        try:
+            result = emissive.plan(record['source_value'])
+            light = next(l for l in plan['lighting_by_bsp'] if l['source_tag'] == source)
+            selected = next(b for b in plan['bsps'] if b['source_index'] == light['source_bsp_index'])
+            bindings = [dict(source_bsp=selected['source_tag'], source_bsp_index=selected['source_index'],
+                source_material_slot=i, source_shader=m['source_shader'], source_lighting_index=m['source_lighting_index'])
+                for i,m in enumerate(selected['materials']) if m.get('source_lighting_index') in record['affected']]
+            if not bindings or any(selected['materials'][b['source_material_slot']]['lighting'] != record['source_value'] for b in bindings):
+                raise ValueError('Directional emission lacks a verified source material/lighting-row identity')
+            result['material_bindings'] = bindings
+        except (KeyError, ValueError, TypeError, IndexError, StopIteration) as exc:
+            return unknown('lighting.emissive_frustum', 'Emissive approximation precondition: '+str(exc), record)
+        return decision('lighting.emissive_frustum', 'NATIVE_TRANSFORM', result,
+                        loss=result['fidelity_loss'], confidence='MEDIUM')
     if field == 'seams[].selected BSP owners':
-        return unknown('seam.inactive_neighbor',
-            'Need a Reach authoring construct preserving the H3 inactive-neighbor seam boundary collision/visibility without a second active BSP or fabricated closure.', record)
+        from . import seam_states
+        try:
+            result=seam_states.plan(record,plan,bsps)
+        except (KeyError, ValueError, TypeError, IndexError, StopIteration) as exc:
+            return unknown('seam.inactive_neighbor', 'Inactive seam state precondition: '+str(exc), record)
+        return decision('seam.inactive_neighbor','NATIVE_TRANSFORM',result)
     return unknown('source.unknown', 'No reusable rule matches this source contract', record)
 
 
@@ -519,6 +550,23 @@ def resolve(plan, bsps, shaders, baseline=None):
                 m = by_material[source]; m['destination'] = m['destination'].rsplit('.',1)[0]+'.'+extension
         if r['semantic_rule_id'] == 'bitmap.single_cube':
             plan['bitmaps'][original['affected'][0]] = r['target_authoring_plan']
+        unified = r['target_authoring_plan'].get('unified_geometry')
+        if unified:
+            bsp = next(b for b in plan['bsps'] if b['source_tag'] == source)
+            bsp['instance_plan'].setdefault('unified_breakable_definitions', []).append(unified)
+            for placement in unified['placements']:
+                placement['strategy']='Unified two-sided breakable render/collision mesh; separate definition collision proxy suppressed by geometric equivalence proof'
+        if r['semantic_rule_id'] == 'lighting.emissive_frustum':
+            for binding in r['target_authoring_plan']['material_bindings']:
+                bsp = next(b for b in plan['bsps'] if b['source_index'] == binding['source_bsp_index'])
+                bsp['materials'][binding['source_material_slot']]['emissive_authoring'] = r['target_authoring_plan']
+        if r['semantic_rule_id'] == 'seam.inactive_neighbor':
+            seam=next(s for s in plan['seams'] if s['source_index']==original['affected'][0])
+            # Do not put the complete decision inside the seam: its source_seam
+            # reference is intentionally retained by that decision.
+            seam['selected_state']='INACTIVE_NEIGHBOR_ABSENT'
+            seam['target_authoring']=r['target_authoring_plan']['target']
+            seam['strategy']='Inactive seam connection; preserve exact source collision boundary for this selected slice'
     plan['mappings_used'] += resolution['semantic_rules']
     return resolution
 
@@ -577,5 +625,5 @@ def markdown(resolution):
     lines += ['', 'Fidelity losses retained in the plan:', '']
     lines += ['- '+loss for loss in sorted({loss for row in resolution['records'] for loss in row['fidelity_loss']})]
     lines += ['', 'Each record in source-semantic-resolution.json includes the original diagnostic, rule, source evidence, confidence and target authoring plan.',
-              'Evidence labeled inference is not documentation or runtime validation. Breakable proxies, unknown directional emissive weighting and inactive-neighbor closure remain explicit gates.', '']
+              'Evidence labeled inference or approximation is not documentation or runtime validation. Unproven correspondence, unsupported angular inputs and unresolved seam behavior remain gates.', '']
     return '\n'.join(lines)

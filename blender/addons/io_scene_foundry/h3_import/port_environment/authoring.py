@@ -315,7 +315,7 @@ def seam_plan(root, bsps):
             triangles.append([point_map[k] for k in ids])
         if len(owners)!=2:
             problems.append(issue(root.get('id')+'.structure_seams','seams[].selected BSP owners',[i],
-                                  'A seam has no selected partner; an explicit native boundary closure is required',source_owners=owners))
+                                  'A seam has no selected partner; source activation and collision state require resolution',source_owners=owners))
         result.append(dict(source_index=i,identifier=identity,owners=owners,vertices_world=vertices,triangles=triangles,
                            strategy='Paired original source seam geometry -> Reach connected-geometry seam authoring'))
     return result,problems

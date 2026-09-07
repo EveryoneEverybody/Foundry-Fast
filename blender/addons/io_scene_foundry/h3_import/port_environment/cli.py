@@ -279,6 +279,17 @@ def build(args):
                 if row['structure_design'] and row['structure_design'] not in designs:
                     designs[row['structure_design']]=xml('design-'+str(row['source_index']),row['structure_design'])
             seams_xml=xml('seams',selection['structure_seams']) if selection['structure_seams'] else None
+            seam_source_context = None
+            if seams_xml is not None and selection['classification'] != 'TARGET_DEFAULT':
+                from port_environment import seam_states
+                def seam_metadata(source_index, tag):
+                    target = run/f'seam-neighbor-{source_index}.xml'
+                    commands.run('h3-xml-seam-neighbor-'+str(source_index),
+                        [paths.h3/'tool.exe','export-tag-to-xml',paths.source(tag),target],paths.h3)
+                    return fixtures.read_authoring(target, {'seam identifiers'}), dict(
+                        source_sha256=digest(paths.source(tag)), xml=target.name, xml_sha256=digest(target))
+                seam_source_context = seam_states.discover_neighbors(scenario_xml,bsps,seams_xml,seam_metadata)
+                atomic_json(run/'source-seam-context.json',seam_source_context)
             for row in selection['light_palette']:
                 source=row['source_tag']
                 if source and source not in light_xmls:
@@ -336,7 +347,8 @@ def build(args):
                                sky_xmls[ss],sky_render_xmls[ss],lighting_quality=args.lighting)
             else:
                 plan=construct(paths,scene,bsps,skies,shaders,scenario_xml,lighting_xmls,sky_xmls,sky_render_xmls,
-                               lighting_quality=args.lighting,selection=selection,designs=designs,seams_xml=seams_xml,light_xmls=light_xmls)
+                               lighting_quality=args.lighting,selection=selection,designs=designs,seams_xml=seams_xml,
+                               light_xmls=light_xmls,seam_source_context=seam_source_context)
             report['semantic_planning_seconds']=time.perf_counter()-plan_started
             if plan.get('source_semantic_resolution') is not None:
                 from port_environment import semantics
