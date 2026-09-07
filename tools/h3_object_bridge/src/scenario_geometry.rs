@@ -160,7 +160,10 @@ pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
                 let ass = AssFile::from_scenario_structure_bsp(&tag)?;
                 let decode_seconds = started.elapsed().as_secs_f64();
                 let mut payload = geometry(&ass,&shaders,&rel,index)?;
-                if environment_semantics { payload["environment_semantics"] = collision_semantics(&tag, &ass)?; }
+                if environment_semantics {
+                    payload["environment_semantics"] = collision_semantics(&tag, &ass)?;
+                    payload["environment_semantics"]["authoring"] = crate::environment_metadata::extract(&tag)?;
+                }
                 let path = format!("geometry/bsp_{index:04}.json");
                 write_json(&output.join(&path),&payload)?;
                 for shader in shaders.into_iter().flatten() { shader_paths.insert(shader); }
@@ -183,7 +186,7 @@ pub fn extract(scenario: &TagFile, root: &Path, output: &Path, source: &str,
     }
     write_json(&output.join("scene.h3scene.json"),&json!({
         "format":FORMAT,"version":1,"game":"halo3_mcc","source_tag":source,
-        "units":"ass_100_per_world_unit","inventory":"scenario.h3inspect.json",
+        "units":"ass_100_per_world_unit","inventory":if output.join("scenario.h3inspect.json").is_file() {Some("scenario.h3inspect.json")} else {None},
         "destination_tags_written":false,"geometry_requested":include_geometry,
         "bsp_entries":entries,"shader_paths":shader_paths,
         "limitations":["Read-only Blender reference. Reach BSP and scenario tags are not generated.",

@@ -26,3 +26,19 @@ def lighting_evidence(logs):
     if not energies or any(not math.isfinite(v) for v in energies) or max(energies) <= 0:
         errors.append('Faux did not report finite, nonzero VMF lighting energy')
     return dict(errors=errors, vmf_energy_statistics=energies)
+
+
+def lighting_count_errors(source, native):
+    """Reject missing authored lights before Faux; this is not visual parity."""
+    errors = []
+    for key in ('sky_samples', 'light_definitions', 'light_instances'):
+        if native[key] != source[key]:
+            errors.append(f"Native {key} count {native[key]} differs from source {source[key]}")
+    # Tool may split/merge material rows; their indices/counts are not portable.
+    # A later surface mapping validates row contents. A zero result here must
+    # never be allowed to hide meaningful source emission.
+    if source['emissive_rows'] and not native['emissive_rows']:
+        errors.append('Source emission exists but native lighting info has no emissive rows')
+    if source['sky_samples'] and (not math.isfinite(native['sky_energy']) or native['sky_energy'] <= 0):
+        errors.append('Native sky samples contain no finite positive lighting energy')
+    return errors

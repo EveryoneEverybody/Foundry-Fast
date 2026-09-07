@@ -10,6 +10,8 @@ use std::path::{Component, Path, PathBuf};
 
 #[path = "../scenario_geometry.rs"]
 mod scenario_geometry;
+#[path = "../environment_metadata.rs"]
+mod environment_metadata;
 #[path = "../scenario_record_stream.rs"]
 mod scenario_record_stream;
 use scenario_record_stream::RecordStream;
@@ -79,12 +81,17 @@ fn run() -> Result<()> {
     let mut options = BTreeMap::new();
     let mut include_geometry = false;
     let mut environment_semantics = false;
+    let mut environment_only = false;
     let mut selection_only = false;
     while let Some(key) = args.next() {
         if key == "--version" { println!("h3-scenario-inspect schema 2; scene schema 1; environment semantics 1; decoder {DECODER}"); return Ok(()); }
         if key == "--environment-semantics" {
             if environment_semantics { bail!("Repeated environment semantics option"); }
             environment_semantics = true; continue;
+        }
+        if key == "--environment-only" {
+            if environment_only { bail!("Repeated environment-only option"); }
+            environment_only = true; continue;
         }
         if key == "--selection-json" { selection_only = true; continue; }
         if key == "--geometry" {
@@ -98,6 +105,9 @@ fn run() -> Result<()> {
     let selected = scenario_geometry::indices(options.get("--bsp-indices").map(String::as_str).unwrap_or(""))?;
     if selected.is_some() && !include_geometry { bail!("BSP selection requires --geometry"); }
     if environment_semantics && !include_geometry { bail!("Environment semantics requires --geometry"); }
+    if environment_only && (!environment_semantics || selected.is_none()) {
+        bail!("Environment-only requires explicit BSP selection and environment semantics");
+    }
     let get = |key: &str| -> Result<PathBuf> {
         PathBuf::from(options.get(key).with_context(|| format!("Required: {key}"))?).canonicalize().map_err(Into::into)
     };
@@ -129,6 +139,9 @@ fn run() -> Result<()> {
     let inventory_started = std::time::Instant::now();
     let tag = TagFile::read(&input)?;
     if tag.header.group_tag.to_be_bytes() != *b"scnr" { bail!("Expected a loose scenario tag, not a model or cache map"); }
+    if environment_only {
+        return scenario_geometry::extract(&tag, &root, &output, &relative, include_geometry, selected.as_ref(), true);
+    }
     fs::create_dir(output.join("blobs"))?;
     let mut inventory = Inventory { output:&output, records:RecordStream::new(&output)?, blob_count:0, blob_bytes:0 };
     inventory.walk(tag.root(), "", 0)?;

@@ -17,9 +17,9 @@ if __package__ in (None, ''):
 
 from . import BUILDER_VERSION
 from . import fixtures
-from .model import stable_hash
+from .model import stable_hash, plan_bsps, plan_skies
 from .paths import OutputPaths, atomic_json, digest, relative
-from .validation import NATIVE_TAG_EXTENSIONS, geometry_errors, lighting_evidence
+from .validation import NATIVE_TAG_EXTENSIONS, geometry_errors, lighting_evidence, lighting_count_errors
 
 
 def dependencies(addon, run):
@@ -236,7 +236,10 @@ def materials(plan, config, paths, report):
     from io_scene_foundry.tools.export_bitmaps import export_bitmap
     from io_scene_foundry.tools.shader_builder import build_shader
     source_dir = Path(config['source_directory'])
-    manifest = json.loads((source_dir/'shader_manifest.json').read_text(encoding='utf-8'))
+    manifest_path = (source_dir/relative(config.get('shader_manifest', 'shader_manifest.json'))).resolve(strict=True)
+    if not manifest_path.is_relative_to(source_dir.resolve()):
+        raise ValueError('Authoring shader manifest escapes extraction directory')
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     adapted = deepcopy(manifest)
     source_images = {}
     for key, bitmap in manifest['bitmaps'].items():
@@ -396,6 +399,66 @@ def configure_sky_model(plan):
         tag.tag.Save()
 
 
+def validate_lighting_inputs(plan, report):
+    """Read native authoring tags before Faux, without creating or editing tags."""
+    from io_scene_foundry.managed_blam import Tag
+    source = dict(sky_samples=0, light_definitions=0, light_instances=0, emissive_rows=0)
+    native = dict(source, sky_energy=0.0)
+    rows, errors = [], []
+    for sky in plan_skies(plan):
+        spec = sky.get('lighting', plan['lighting']['sky'])
+        source['sky_samples'] += len(spec['source_samples'])
+        path = sky['destination'].rsplit('.', 1)[0]+'.render_model'
+        with Tag(path=path, tag_must_exist=True) as tag:
+            samples = tag.tag.SelectField('Block:sky lights')
+            count, energy = samples.Elements.Count, 0.0
+            for sample in samples.Elements:
+                color = list(sample.SelectField('intensity').Data)
+                angle = sample.SelectField('solid angle').Data
+                if not all(math.isfinite(v) and v >= 0 for v in [*color, angle]):
+                    raise ValueError('Nonfinite/negative native sky lighting input: '+path)
+                energy += sum(color)*angle
+            native['sky_samples'] += count
+            native['sky_energy'] += energy
+            expected = dict(sky_samples=len(spec['source_samples']), light_definitions=0, light_instances=0, emissive_rows=0)
+            written = dict(expected, sky_samples=count, sky_energy=energy)
+            errors.extend(path+': '+error for error in lighting_count_errors(expected, written))
+            rows.append(dict(path=path, sky_samples=count, sky_energy=energy))
+    lights = plan.get('lighting_by_bsp', [plan['lighting']])
+    if len(lights) != len(plan_bsps(plan)):
+        raise ValueError('Lighting source/BSP relationship is incomplete')
+    for bsp, light in zip(plan_bsps(plan), lights):
+        semantics = light['source_semantics']
+        source['light_definitions'] += len(semantics['light_definitions'])
+        source['light_instances'] += len(semantics['light_instances'])
+        source['emissive_rows'] += sum(float(m['emissive power']) != 0 for m in semantics['materials'])
+        path = bsp['destination'].rsplit('.', 1)[0]+'.scenario_structure_lighting_info'
+        with Tag(path=path, tag_must_exist=True) as tag:
+            definitions = tag.tag.SelectField('Block:generic light definitions').Elements.Count
+            instances = tag.tag.SelectField('Block:generic light instances').Elements.Count
+            materials = tag.tag.SelectField('Block:material info').Elements
+            powers = [m.SelectField('emissive power').Data for m in materials]
+            if any(not math.isfinite(v) or v < 0 for v in powers):
+                raise ValueError('Nonfinite/negative native material emission: '+path)
+            emissive = sum(v > 0 for v in powers)
+            native['light_definitions'] += definitions
+            native['light_instances'] += instances
+            native['emissive_rows'] += emissive
+            expected = dict(sky_samples=0, light_definitions=len(semantics['light_definitions']),
+                            light_instances=len(semantics['light_instances']),
+                            emissive_rows=sum(float(m['emissive power']) != 0 for m in semantics['materials']))
+            written = dict(sky_samples=0, sky_energy=0, light_definitions=definitions, light_instances=instances,
+                           emissive_rows=emissive)
+            errors.extend(path+': '+error for error in lighting_count_errors(expected, written))
+            rows.append(dict(path=path, light_definitions=definitions, light_instances=instances,
+                             emissive_rows=emissive))
+    report['lighting_input_readback'] = dict(source=source, native=native, tags=rows, errors=errors,
+        status='REJECTED' if errors else 'NATIVE_COUNTS_VERIFIED_BEFORE_FAUX',
+        limitation='Counts and nonzero sky energy; not a claim of photometric or surface-mapping parity')
+    if errors:
+        raise ValueError('Lighting inputs rejected before Faux: '+errors[0])
+
+
 def validate_native(paths, plan, run, report):
     from io_scene_foundry.managed_blam import Tag
     from io_scene_foundry import utils
@@ -502,8 +565,15 @@ def main():
     config_path = Path(sys.argv[sys.argv.index('--')+1]).resolve(strict=True)
     config = json.loads(config_path.read_text(encoding='utf-8'))
     run = Path(config['run_directory']).resolve(strict=True)
-    paths = OutputPaths(config['h3_root'], config['reach_root'], config['namespace'])
     plan = json.loads(Path(config['plan']).read_text(encoding='utf-8'))
+    # Campaign plans currently stop at unresolved source contracts. Never let a
+    # schema-2 multi-BSP plan fall through the regression writer's single-BSP
+    # assumptions or create partial target assets before that boundary is explicit.
+    if plan.get('unsupported'):
+        raise ValueError('Native authoring refused: unresolved source semantics in environment plan')
+    if plan.get('version') != 1:
+        raise ValueError('Native authoring for campaign plan schema 2 is not yet implemented; no target writes were attempted')
+    paths = OutputPaths(config['h3_root'], config['reach_root'], config['namespace'])
     expected_hash = plan.pop('plan_sha256')
     if stable_hash(plan) != expected_hash or expected_hash != config['plan_sha256']:
         raise ValueError('Worker plan integrity mismatch')
@@ -606,6 +676,10 @@ def main():
         report['geometry_tool_errors'] = errors
         if errors:
             raise RuntimeError(f'Reach Tool reported {len(errors)} geometry errors despite its exit code: {errors[0]}')
+        report['stage'] = 'lighting input validation'
+        flush()
+        with profile.span('native lighting input validation before Faux'):
+            validate_lighting_inputs(plan, report)
         report['stage'] = 'lighting'
         flush()
         if config['lighting'] != 'none':

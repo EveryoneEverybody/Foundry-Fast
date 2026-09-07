@@ -5,11 +5,52 @@ is executed or copied into a target tag.
 """
 import hashlib
 import json
+import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from zipfile import ZipFile
 
 from .paths import relative
+
+
+def read_authoring(path, names):
+    """Select direct children from H3 Tool's line-oriented XML export.
+
+    Campaign exports contain hundreds of MB of compiled data and invalid XML
+    display labels (e.g. name=" <unknown>"). Only element display labels are
+    removed; field values, indices and block counts remain authoritative. The
+    selected subdocument still goes through the strict XML parser. Never use
+    this reader for arbitrary XML or to infer omitted source semantics.
+    """
+    selected, active, header, closed = [], False, False, False
+    size = 0
+    with Path(path).open('rb') as stream:
+        for line in stream:
+            if b'<!DOCTYPE' in line.upper() or b'<!ENTITY' in line.upper():
+                raise ValueError('Unsupported XML entity declarations')
+            if line.startswith(b'<tag '):
+                if header:
+                    raise ValueError('Repeated Tool XML root')
+                header = True
+                selected.append(line)
+            elif line.startswith(b'</tag>'):
+                selected.append(line)
+                active, closed = False, True
+            else:
+                match = re.match(rb'    <(?:block|field|struct|array) name="([^"]*)"', line)
+                if match:
+                    active = match[1].decode('utf-8') in names
+                if active:
+                    # Tool-generated element labels repeat fields in the row.
+                    # They are not identities, references, or authored names.
+                    line = re.sub(rb'(<element index="\d+") name="[^\r\n]*">', rb'\1>', line)
+                    size += len(line)
+                    if size > 32 * 1024 * 1024:
+                        raise ValueError('Selected authoring XML exceeds the bounded parser budget')
+                    selected.append(line)
+    if not header or not closed:
+        raise ValueError('Incomplete H3 Tool XML export')
+    return parse(b''.join(selected))
 
 
 def parse(content):

@@ -25,12 +25,12 @@ def relative(value):
     return PurePosixPath(value)
 
 
-def atomic_json(path, value):
+def atomic_json(path, value, *, compact=False):
     path = Path(path)
     # The caller must already own and have validated this directory.
     temp = path.with_name(path.name + '.tmp-' + str(os.getpid()))
     with temp.open('x', encoding='utf-8', newline='\n') as stream:
-        json.dump(value, stream, indent=2, sort_keys=True, allow_nan=False)
+        json.dump(value, stream, indent=None if compact else 2, sort_keys=True, allow_nan=False)
         stream.write('\n')
         stream.flush()
         os.fsync(stream.fileno())
@@ -38,15 +38,18 @@ def atomic_json(path, value):
 
 
 class OutputPaths:
-    def __init__(self, h3_root, reach_root, namespace=DEFAULT_NAMESPACE):
+    def __init__(self, h3_root, reach_root, namespace=DEFAULT_NAMESPACE, *, allow_nested=False):
         self.h3 = Path(h3_root).resolve(strict=True)
         self.reach = Path(reach_root).resolve(strict=True)
         if self.h3 == self.reach or self.h3.is_relative_to(self.reach) or self.reach.is_relative_to(self.h3):
             raise ValueError('H3 and Reach roots must be separate')
         self.namespace = relative(namespace).as_posix().lower()
-        if (not self.namespace.startswith('levels/h3_port/') or len(self.namespace.split('/')) != 3
+        if (not self.namespace.startswith('levels/h3_port/') or len(self.namespace.split('/')) < 3
+                or (not allow_nested and len(self.namespace.split('/')) != 3)
                 or self.namespace.split('/')[-1] in {'test', 'box'}):
-            raise ValueError('Output must be one dedicated levels/h3_port/<proof> namespace')
+            raise ValueError('Output must be a dedicated levels/h3_port/<asset> namespace')
+        if self.namespace.startswith(DEFAULT_NAMESPACE + '/'):
+            raise ValueError('The proof_box regression namespace cannot contain other generated environments')
         self.roots = {}
         for name in ('data', 'tags'):
             root = (self.reach / name).resolve(strict=True)
@@ -117,7 +120,7 @@ class Ownership:
         self.directory = Path(report_dir).resolve()
         if self.directory.is_relative_to(paths.h3) or self.directory.is_relative_to(paths.reach):
             raise ValueError('Build reports and working data must be outside both editing kits')
-        self.manifest = self.directory / 'proof_box_build_manifest.json'
+        self.manifest = self.directory / ('proof_box_build_manifest.json' if paths.namespace == DEFAULT_NAMESPACE else 'environment_build_manifest.json')
 
     def preflight(self):
         actual = self.paths.snapshot()

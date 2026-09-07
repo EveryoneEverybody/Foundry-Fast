@@ -28,7 +28,8 @@ jobs:
           root = Path.cwd()
           paths = []
           for folder in ('tests', 'blender/addons/io_scene_foundry', 'tools', 'docs', '.github/workflows'):
-              paths += [p for p in (root / folder).rglob('*') if p.is_file() and p.suffix in ('.py', '.rs', '.toml', '.lock', '.yml', '.json', '.xml', '.ps1', '.md') and 'target' not in p.parts]
+              paths += [p for p in (root / folder).rglob('*') if p.is_file() and p.suffix in ('.py', '.rs', '.cs', '.csproj', '.toml', '.lock', '.yml', '.json', '.xml', '.ps1', '.md') and 'target' not in p.parts
+                        and not any(p.is_relative_to(root/'tools/h3_cache_evidence'/name) for name in ('bin','obj'))]
           paths += [root / '.cache/reference-definitions/halo3_mcc/scenario.json']
           hashes = {}
           with ZipFile('h3-scenario-source.zip', 'w', ZIP_DEFLATED) as archive:
@@ -46,7 +47,7 @@ jobs:
       - name: Validate scenario manifests and existing H3 import logic
         shell: pwsh
         run: |
-          python -m unittest discover -s tests -p 'test_h3_environment.py' -v
+          python -m unittest discover -s tests -p 'test_h3_environment*.py' -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s tests -p 'test_h3_scenario*.py' -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -91,25 +91,42 @@ def validate_mesh(mesh, material_count):
             raise ValueError('Out-of-range source triangle')
 
 
-def map_collision(bsp):
-    result = deepcopy(bsp)
+def map_collision(bsp, *, sky_index=None):
+    if sky_index is None:
+        result = deepcopy(bsp)
+    else:
+        result = deepcopy({k:v for k,v in bsp.items() if k!='environment_semantics'})
+        result['environment_semantics']={k:v for k,v in bsp['environment_semantics'].items() if k!='authoring'}
     semantics = result.get('environment_semantics', {})
-    if semantics.get('version') != 1 or semantics.get('cluster_sky_indices') != [0]:
+    if semantics.get('version') != 1 or (sky_index is None and semantics.get('cluster_sky_indices') != [0]):
         raise ValueError('Proof requires verified source collision semantics and one sky-visible cluster')
     obj = result['objects'][semantics['collision_object']]
     sky_slot = len(result['materials'])
-    result['materials'].append(dict(slot=sky_slot, name='+sky0', source_shader=None, special='sky'))
+    result['materials'].append(dict(slot=sky_slot, name='+sky'+str(sky_index or 0), source_shader=None, special='sky'))
     cursor = 0
     for s in semantics['collision_surfaces']:
         count = s['triangle_count']
-        if s['flags'] != 0 or s['triangle_start'] != cursor or count < 1:
+        if s['flags'] & ~(1 if sky_index is not None else 0) or s['triangle_start'] != cursor or count < 1:
             raise ValueError('Unsupported collision flags or incomplete source surface coverage')
         material = s['material']
         if material == -1:
             slot, kind = sky_slot, 'sky'
         elif 0 <= material < len(semantics['collision_materials']):
             source = semantics['collision_materials'][material]
+            seam = (bsp.get('environment_semantics',{}).get('authoring',{}).get('collision_materials',[])[material]
+                    if sky_index is not None and bsp['environment_semantics'].get('authoring') else {})
+            if not source and seam.get('seam mapping index',-1)>=0:
+                slot,kind=len(result['materials']),'seam'
+                result['materials'].append(dict(slot=slot,name='+seam',source_shader=None,special='seam',
+                    source_seam_mapping=seam['seam mapping index']))
+                for t in obj['triangles'][cursor:cursor+count]:
+                    t.update(material=slot,source_surface=s['source_surface'],source_collision_material=material,surface_type=kind)
+                cursor+=count
+                continue
             matches = [i for i, m in enumerate(result['materials']) if source and m.get('source_shader') == source]
+            if source and (not matches or (sky_index is not None and len(matches)>1)):
+                matches = [len(result['materials'])]
+                result['materials'].append(dict(source_shader=source, name=source.rsplit('/',1)[-1],source_collision_material=material))
             if len(matches) != 1:
                 raise ValueError('Ambiguous collision material source')
             slot, kind = matches[0], 'solid'
@@ -117,6 +134,8 @@ def map_collision(bsp):
             raise ValueError('Unknown source collision material/sky encoding')
         for t in obj['triangles'][cursor:cursor+count]:
             t.update(material=slot, source_surface=s['source_surface'], source_collision_material=material, surface_type=kind)
+            if s['flags']:
+                t['two_sided'] = bool(s['flags'] & 1)
         cursor += count
     if cursor != len(obj['triangles']):
         raise ValueError('Incomplete collision surface coverage')
@@ -241,7 +260,11 @@ def sky_lighting(root):
                 defaults=dict(sun_bounce_scale=1.0, skylight_bounce_scale=1.0))
 
 
-def construct(paths, scene, bsp, sky, shaders, scenario_xml, lighting_xml, sky_xml, sky_render_xml, lighting_quality='direct_only'):
+def construct(paths, scene, bsp, sky, shaders, scenario_xml, lighting_xml, sky_xml, sky_render_xml, lighting_quality='direct_only',
+              *, selection=None, designs=None, seams_xml=None, light_xmls=None):
+    if selection is not None and selection['classification'] != 'TARGET_DEFAULT':
+        return construct_selected(paths, scene, bsp, sky, shaders, scenario_xml, lighting_xml, sky_xml, sky_render_xml,
+                                  selection, designs or {}, seams_xml, lighting_quality, light_xmls or {})
     if lighting_quality not in {'none', 'direct_only', 'draft'}:
         raise ValueError('Unsupported proof lighting quality')
     if (scene.get('source_tag') != SOURCE_SCENARIO or scene.get('game') != 'halo3_mcc'
@@ -351,4 +374,183 @@ def construct(paths, scene, bsp, sky, shaders, scenario_xml, lighting_xml, sky_x
                   'Sky analytic sun uses radiance times solid angle; exact H3/Reach lighting parity is unverified.',
                   'Matching shader option names does not establish rendering parity.'])
     result['plan_sha256'] = stable_hash(result)
+    return result
+
+
+def used_shaders(bsps, skies):
+    """Canonical source identity shared by all triangles, definitions, and BSPs."""
+    sources = set()
+    for bsp in bsps:
+        used_objects={row['object'] for row in bsp['instances'] if row['object']>=0}
+        for obj in (bsp['objects'][i] for i in sorted(used_objects)):
+            for t in obj.get('triangles', []):
+                if 0 <= t['material'] < len(bsp['materials']):
+                    source = bsp['materials'][t['material']].get('source_shader')
+                    if source: sources.add(relative(source).as_posix())
+        semantics=bsp['environment_semantics']
+        used_collision={s['material'] for s in semantics['collision_surfaces'] if s['material']>=0}
+        a=semantics.get('authoring',{})
+        for row in a.get('instances',[]):
+            flags=row['flags']['value']
+            if flags & 8 and not flags & 2:
+                definition=a['definitions'][row['instance definition']]
+                used_collision.update(t['material'] for t in definition.get('collision_mesh',{}).get('triangles',[]) if t['material']>=0)
+        sources.update(semantics['collision_materials'][i] for i in used_collision if semantics['collision_materials'][i])
+    for sky in skies:
+        sources.update(relative(s).as_posix() for s in sky['shader_paths'])
+    return sorted(sources)
+
+
+def plan_bsps(plan):
+    return plan['bsps'] if 'bsps' in plan else [plan['bsp']]
+
+
+def plan_skies(plan):
+    return plan['skies'] if 'skies' in plan else [plan['sky']]
+
+
+def construct_selected(paths, scene, bsps, skies, shaders, scenario_xml, lighting_xmls, sky_xmls, sky_render_xmls,
+                       selection, designs, seams_xml, lighting_quality, light_xmls):
+    from . import authoring
+    if scene['source_tag'] != selection['source_scenario'] or scene['game'] != 'halo3_mcc':
+        raise ValueError('Decoded scene differs from selected source scenario')
+    if lighting_quality not in {'none','direct_only','draft'}:
+        raise ValueError('Unsupported environment lighting quality')
+    if not isinstance(bsps,list) or len(bsps)!=len(selection['bsps']):
+        raise ValueError('Every selected BSP must have exactly one decoded payload')
+    problems, bsp_plans, sky_plans, light_plans, design_plans = [], [], [], [], []
+    sources = {selection['source_scenario']}
+    for chosen,bsp in zip(selection['bsps'],bsps):
+        if bsp['source_tag']!=chosen['source_tag'] or bsp['bsp_index']!=chosen['source_index']:
+            raise ValueError('Decoded BSP identity differs from selected zone-set relationship')
+        sources.add(bsp['source_tag'])
+        problems.extend(authoring.audit_bsp(bsp))
+        a=bsp['environment_semantics'].get('authoring')
+        if not a:
+            continue
+        instances, errors = authoring.instance_plan(bsp); problems.extend(errors)
+        portals, errors = authoring.portal_plan(bsp); problems.extend(errors)
+        source_lighting=chosen['lighting_info']
+        lights,errors=authoring.static_lighting(lighting_xmls[source_lighting],source_lighting)
+        problems.extend(errors);light_plans.append(lights);sources.add(source_lighting)
+        region=f'{paths.asset}_bsp_{chosen["source_index"]:04}'
+        design=None
+        if chosen['structure_design']:
+            source=chosen['structure_design'];sources.add(source)
+            design,errors=authoring.design_plan(designs[source],source,scenario_xml);problems.extend(errors)
+            design.update(destination=f'{paths.namespace}/{region}.structure_design',region=region,
+                          source_bsp_index=chosen['source_index'],target_bsp_index=chosen['target_index'])
+            design_plans.append(design)
+        # The structure collision sky encoding is only unique with one source sky.
+        visible=sorted({i for i in bsp['environment_semantics']['cluster_sky_indices'] if i>=0})
+        if len(visible)>1:
+            problems.append(authoring.issue(bsp['source_tag'],'cluster sky/surface association',visible,
+                                            'Multiple source skies require per-surface cluster resolution'))
+        mapped=map_collision(bsp,sky_index=max(chosen['target_sky_index'],0))
+        base=dict(mapped)
+        # Source placements are retained separately, with shared local definitions.
+        base['instances']=[r for r in mapped['instances'] if r['object']==-1 or
+                           r['name'].startswith('cluster_') or r['name']=='@CollideOnly']
+        meshes,omitted=bsp_meshes(base)
+        materials=mapped['materials']
+        for i, material in enumerate(materials):
+            if i<len(a['materials']):
+                imported=a['materials'][i]['imported material index']
+                if not 0<=imported<len(lights['source_semantics']['materials']):
+                    problems.append(authoring.issue(bsp['source_tag'],'materials[].imported material index',[i],
+                                                   'Invalid source lighting material relationship',source_value=imported))
+                else:
+                    material['source_lighting_index']=imported
+                    material['lighting']=lights['source_semantics']['materials'][imported]
+        bsp_plans.append(dict(source_tag=bsp['source_tag'],source_index=chosen['source_index'],region=region,
+            target_index=chosen['target_index'],destination=f'{paths.namespace}/{region}.scenario_structure_bsp',
+            default_sky=chosen['target_sky_index'],materials=materials,meshes=meshes,omitted=omitted,
+            instance_plan=instances,geometry_source=dict(file=f'geometry/bsp_{chosen["source_index"]:04}.json',
+                canonical_sha256=stable_hash(bsp),object_count=len(bsp['objects']),
+                definitions=[dict(source_index=d['source_index'],mesh_index=d['mesh index'],
+                    collision_vertices=len(d.get('collision_mesh',{}).get('vertices',[])),
+                    collision_triangles=len(d.get('collision_mesh',{}).get('triangles',[]))) for d in a['definitions']]),
+            authoring={k:v for k,v in a.items() if k!='definitions'},portals=portals,structure_design=design,
+            collision_semantics={k:v for k,v in bsp['environment_semantics'].items() if k!='authoring'},source_render=geometry_stats([m for m in meshes if m['role']=='render']),
+            source_collision=geometry_stats([m for m in meshes if m['role']=='collision'])))
+    for chosen,sky in zip(selection['skies'],skies):
+        source=chosen['source_tag']
+        if sky.get('source_tag')!=source:
+            raise ValueError('Decoded sky differs from source palette identity')
+        sources.update([source,*sky['dependencies'].values()])
+        mesh=deepcopy(sky['render']);validate_mesh(mesh,len(mesh['materials']))
+        nodes=mesh['nodes']
+        if len(nodes)!=1 or nodes[0]['parent']!=-1 or any(nodes[0]['position']) or any(abs(x)>1e-6 for x in nodes[0]['rotation'][1:]):
+            problems.append(authoring.issue(source,'render model nodes',list(range(len(nodes))),'Unmapped sky skeleton transform'))
+        materials=[]
+        for m in mesh['materials']:
+            matches=[p for p in sky['shader_paths'] if p.rsplit('/',1)[1].rsplit('.',1)[0]==m['name']]
+            if len(matches)!=1: raise ValueError('Ambiguous source sky shader identity')
+            materials.append(matches[0])
+        name=f'{paths.asset}_sky_{chosen["source_index"]:02}'
+        sky_plans.append(dict(source_scenery=source,source_model=sky['dependencies']['model'],
+            source_render_model=sky['dependencies']['render_model'],source_index=chosen['source_index'],
+            target_index=chosen['target_index'],active_bsp_mask=chosen['active_bsp_mask'],
+            source_object_fields=fixtures.fields(sky_xmls[source]),mesh=mesh,materials=materials,
+            source_geometry=geometry_stats([mesh]),lighting=sky_lighting(sky_render_xmls[source]),
+            destination=f'{paths.namespace}/sky/{name}/{name}.scenery',
+            target_defaults=dict(imposter_policy='never',imposter_model='Unused Tool-authored placeholder')))
+    seams=[]
+    if selection['structure_seams']:
+        sources.add(selection['structure_seams'])
+        seams,errors=authoring.seam_plan(seams_xml,bsps);problems.extend(errors)
+    materials=[];bitmaps={}
+    dependency_audit = shaders.get('environment_dependencies', {})
+    problems.extend(dependency_audit.get('unsupported', []))
+    unresolved_bitmaps = {r['source_bitmap'] for r in dependency_audit.get('missing_references', [])
+                          if r['classification'] == 'ACTIVE_REFERENCE_UNRESOLVED'}
+    for source,shader in sorted(shaders['shaders'].items()):
+        sources.add(source)
+        if shader.get('status')!='resolved_snapshot' or shader.get('group')!='rmsh':
+            problems.append(authoring.issue(source,'shader group/status',[source],
+                'Native ReachStager currently supports rmsh; retain terrain recipes without substituting grey',
+                source_value=dict(group=shader.get('group'),status=shader.get('status'))))
+        runtime=[p['name'] for p in shader.get('parameters',[]) if p.get('has_functions') or p.get('extern')]
+        if runtime: problems.append(authoring.issue(source,'parameters[].functions/extern',runtime,
+            'Source material functions/externs require static-versus-runtime classification'))
+        stem=source.rsplit('/',1)[1].rsplit('.',1)[0]
+        materials.append(dict(source_shader=source,source_parameters=shader.get('parameters',[]),
+            source_categories=shader.get('categories',[]),destination=paths.namespace+'/shaders/'+stem+'_'+stable_hash(source)[:8]+'.shader',
+            strategy='Canonical source shader -> ReachStager -> native Foundry material and shader',classification='GENERATED'))
+    for key,bitmap in sorted(shaders['bitmaps'].items()):
+        source=relative(bitmap['path']).as_posix()+'.bitmap';sources.add(source)
+        if source in unresolved_bitmaps:
+            continue  # The usage/cache audit owns this error; absence is not an image-form error.
+        try:bitmaps[key]=dict(bitmap_strategy(bitmap),source_bitmap=bitmap['path'],index=bitmap['index'])
+        except ValueError as exc: problems.append(authoring.issue(source,'bitmap image form',[key],str(exc),
+            source_value={k:bitmap.get(k) for k in ('type','depth','image_count','index','format')}))
+    # Scenario light volumes remain distinct from BSP generic static lights.
+    scenario_lights,errors=authoring.scenario_light_plan(scenario_xml,selection,light_xmls)
+    problems.extend(errors)
+    sources.update(p['source_tag'] for p in scenario_lights['palette'] if p['source_tag'])
+    mapping_file=__import__('pathlib').Path(__file__).with_name('mappings.json')
+    catalog=json.loads(mapping_file.read_text(encoding='utf-8'))
+    source_hashes={}
+    for source in sorted(s for s in sources if s):
+        try:source_hashes[source]=digest(paths.source(source))
+        except FileNotFoundError:
+            if source not in unresolved_bitmaps:
+                problems.append(authoring.issue(source,'source file/SHA-256',[source],
+                    'Source identity has no loose hash; dependency usage and recovery classification remain required'))
+    result=dict(format=FORMAT,version=2,builder_version=BUILDER_VERSION,
+        source=dict(game='halo3_mcc',scenario=selection['source_scenario'],hashes=source_hashes),
+        target=dict(game='haloreach_mcc',namespace=paths.namespace,scenario=paths.scenario+'.scenario',
+                    project_fingerprint=paths.fingerprint(),units='ass_100_per_world_unit',scene_scale='max',forward_direction='x'),
+        selection=selection,bsps=bsp_plans,skies=sky_plans,structure_designs=design_plans,seams=seams,
+        materials=materials,bitmaps=bitmaps,lighting_by_bsp=light_plans,scenario_lights=scenario_lights,unsupported=problems,
+        source_dependencies=dependency_audit,
+        scenario=dict(source_semantics=fixtures.scenario_semantics(scenario_xml),spawn=selection['spawn'] or spawn_above_collision([m for b in bsp_plans for m in b['meshes']]),
+                      type='solo',zone_set=selection['source_zone_set'],active_bsp_mask=selection['target_bsp_mask'],
+                      structure_designs=[d['destination'] for d in design_plans],defaults=dict(custom_gravity_scale=1.0)),
+        mappings_used=[*catalog['campaign_shared_rule_ids'],*(r['id'] for r in catalog['campaign_rules'])],
+        mapping_catalog_sha256=digest(mapping_file),
+        excluded=['normal scenario objects','AI','HSC','audio','effects','cinematics','source runtime resources'],
+        unknowns=['Nate must confirm runtime acceptance after a successful native build.'])
+    result['lighting']=dict(source_tag=light_plans[0]['source_tag'],sky=sky_plans[0]['lighting'],quality=lighting_quality)
+    result['plan_sha256']=stable_hash(result)
     return result
