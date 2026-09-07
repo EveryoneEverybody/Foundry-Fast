@@ -16,9 +16,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       FOUNDRY_FAST_REVISION: ${{ github.sha }}
-      CARGO_TARGET_DIR: ${{ runner.temp }}/h3-port-census-build
     steps:
       - uses: actions/checkout@v4
+      - name: Select isolated build directory
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('CARGO_TARGET_DIR=' + str(Path(os.environ['RUNNER_TEMP']) / 'h3-port-census-build') + '\n')
       - name: Test parser, graph, read-only CLI, schema and existing helper code
         run: cargo test --locked --release --manifest-path tools/h3_object_bridge/Cargo.toml
       - name: Build census helper
