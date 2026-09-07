@@ -66,7 +66,10 @@ session = job._session
 if not opts.no_materials:
     material_report = json.loads(bpy.data.texts[session.root['h3_material_report']].as_string())
     assert session.profile.counts['unique_images'] > 0, 'Material extraction produced no packed images'
-    assert any(r.get('preview', {}).get('status') == 'approximate_preview' for r in material_report if r.get('preview'))
+    if not opts.no_geometry:
+        assert any(r.get('preview', {}).get('status') == 'approximate_preview' for r in material_report if r.get('preview'))
+    assert any(m.get('h3_material_preview') == 'approximate_preview' for m in bpy.data.materials
+               if m.get('h3_source_shader'))
     sky_shaders = [m for m in bpy.data.materials if '/040_voi/sky/' in m.get('h3_source_shader', '')]
     if not opts.no_sky:
         assert sky_shaders and any(m.get('h3_material_preview') == 'approximate_preview' for m in sky_shaders)
