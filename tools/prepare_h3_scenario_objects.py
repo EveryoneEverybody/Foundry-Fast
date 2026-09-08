@@ -117,6 +117,9 @@ def prepare(args):
             if physics and any(physics.get(k,0) for k in ('capsules_in_source','ragdolls_in_source','hinges_in_source')):
                 problems.append('Physics includes capsule/constraint authoring outside the current bounded rigid-shape adapter')
             if physics and physics['shape_space']!='node_local':problems.append('Physics shape space is unverified')
+            constraints=[r['name'] for r in ir.get('physics_authoring',[]) if r.get('count',0) and
+                any(n in r['name'] for n in ('constraint','motor','powered chains'))]
+            if constraints:problems.append('Physics constraint/motor authoring is deferred: '+', '.join(constraints))
             stem=Path(source['source_tag']).stem+'_'+model.stable_hash(source['source_tag'])[:12]
             target=env['target']['namespace']+'/objects/'+stem+'/'+stem
             row.update(target_base=target,target_tag=target+'.'+source['source_group'])

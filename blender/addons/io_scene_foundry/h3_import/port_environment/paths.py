@@ -16,11 +16,12 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def relative(value):
+def relative(value, *, allow_spaces=False):
     value = str(value).replace('\\', '/')
     parts = value.split('/')
-    if (not value or any(not re.fullmatch(r'[A-Za-z0-9_.-]+', p) or p in {'.', '..'}
-                         or p.endswith('.') or p.split('.')[0].upper() in
+    pattern=r'[A-Za-z0-9_. -]+' if allow_spaces else r'[A-Za-z0-9_.-]+'
+    if (not value or any(not re.fullmatch(pattern, p) or p in {'.', '..'} or p!=p.strip()
+                         or p.endswith('.') or p.split('.')[0].rstrip(' .').upper() in
                          {'CON', 'PRN', 'AUX', 'NUL', *(f'COM{i}' for i in range(10)),
                           *(f'LPT{i}' for i in range(10))} for p in parts)):
         raise ValueError('Unsafe relative path: ' + value)
@@ -104,7 +105,9 @@ class OutputPaths:
         if infrastructure and (kind != 'tags' or not self.infrastructure_namespace):
             raise ValueError('This target has no owned shader infrastructure namespace')
         namespace = root / (self.infrastructure_namespace if infrastructure else self.namespace)
-        path = namespace / relative(suffix) if suffix else namespace
+        # Normal Foundry animation authoring uses names such as "device
+        # position.gr2". Tag identities/namespaces retain the strict grammar.
+        path = namespace / relative(suffix,allow_spaces=kind=='data') if suffix else namespace
         # Reject any redirected component, even a link back inside the kit. This
         # prevents two textual asset identities from owning the same output.
         current = root

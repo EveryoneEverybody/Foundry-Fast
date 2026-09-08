@@ -67,3 +67,19 @@ Unsupported parents close over their dependent placements instead of silently
 detaching them. Source device-group indices and duplicate group names survive.
 Emission animation on otherwise supported object materials is staticized at
 the pinned source state; BSP lighting is unaffected.
+
+Native testing exposed and corrected Reach-specific API boundaries: ordinary
+flags use `RawValue`/`SetBit`, while block membership uses `IsSet`; Reach lacks
+the `GameRenderGeometry` helper exposed by newer kit APIs. Normal Foundry
+animation GR2 names may contain spaces, so only data-path suffixes permit them
+while retaining Windows alias and traversal rejection.
+
+The Voi switch passed native dependency readback and Tool XML export. The
+arms door generated native render/collision/physics and a 13-node graph, but
+its first animation import was rejected by timing validation: the Blender
+scene's default 24 fps stretched source motion. The worker now preserves the
+source 30 fps and validates codec-frame count separately from the extra
+JMA reference/end frame. Reimport is required before the door is accepted.
+The checked stock Reach crate and door physics tags also store zero in loose
+mass fields; this is not evidence of runtime effective mass. Physical behavior
+remains untested. Ten focused object checks and 22 compiler checks passed.

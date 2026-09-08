@@ -189,6 +189,8 @@ def validate(plan, report):
                 source_authored_portals=len(bsp['portals']),native_portals=tag.tag.SelectField('Block:cluster portals').Elements.Count,
                 portal_strategy='All source portal polygons authored in GR2; Tool regenerates and may merge portal/cluster topology'))
         design=bsp['structure_design']
+        if design is None:
+            continue
         with Tag(path=design['destination'],tag_must_exist=True) as tag:
             native=tag.tag.SelectField('Struct:physics[0]/Block:soft ceilings block').Elements
             by_name={e.SelectField('name').GetStringData():e for e in native}

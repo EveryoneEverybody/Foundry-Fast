@@ -27,8 +27,8 @@ def write(target,source):
         names={normalized(n) for _,n in bits.get('set_bits',[])}
         items=list(target.Items);native={normalized(i.FlagName if hasattr(i,'FlagName') else i.Name):i for i in items}
         if names-native.keys():raise ValueError('Unmapped native flags: '+str(sorted(names-native.keys())))
-        for name,item in native.items():item.IsSet=name in names
-        actual=sorted(name for name,item in native.items() if item.IsSet)
+        for name,item in native.items():target.SetBit(item.FlagName,name in names)
+        actual=sorted(name for name,item in native.items() if target.TestBit(item.FlagName))
         if actual!=sorted(names):raise ValueError('Native flag readback differs')
         return dict(source=source,readback=actual,method='FLAG_NAMES')
     if 'enum' in kind:
@@ -124,10 +124,28 @@ def author(row,payload):
     return report
 
 
-def validate(row,payload):
+def validate(row,payload,animation_authoring=None):
     from io_scene_foundry.managed_blam import Tag
     from io_scene_foundry.managed_blam.model import ModelTag
+    from io_scene_foundry.managed_blam.render_model import RenderModelTag
+    from io_scene_foundry.h3_import.core import groups
     report=dict(chain={},runtime_status='NOT_TESTED')
+    with RenderModelTag(path=row['target_base']+'.render_model',tag_must_exist=True) as render:
+        report['render_geometry']=dict(meshes=render.block_meshes.Elements.Count,
+            source_triangles=len(payload['render']['triangles']),nodes=render.get_nodes(),
+            triangle_validation='Native Tool import log; Reach ManagedBlam has no GameRenderGeometry API')
+        if payload['render']['triangles'] and not render.block_meshes.Elements.Count:raise ValueError('Native render meshes are absent')
+        if set(render.get_nodes())!={n['name'] for n in payload['render']['nodes']}:raise ValueError('Native skeleton identities differ')
+        names=render.get_nodes()
+        native_parents={names[n.ElementIndex]:(names[n.SelectField('parent node').Value] if n.SelectField('parent node').Value>=0 else None)
+            for n in render.block_nodes.Elements}
+        source_nodes=payload['render']['nodes']
+        source_parents={n['name']:(source_nodes[n['parent']]['name'] if n['parent']>=0 else None) for n in source_nodes}
+        if native_parents!=source_parents:raise ValueError('Native skeleton parent relationships differ')
+        report['render_geometry']['parent_relationships']='VERIFIED_BY_NODE_IDENTITY'
+        for region,permutation,lod,*rest in groups(payload['render']):
+            if lod:raise ValueError('Source LOD selection needs its own native adapter')
+            if permutation not in render.get_permutations(region):raise ValueError('Native region/permutation identity differs')
     with Tag(path=row['target_tag'],tag_must_exist=True) as tag:
         base='Struct:device[0]/Struct:object[0]' if row['source_group'] in {'device_machine','device_control'} else 'Struct:object[0]'
         path=tag.tag.SelectField(base+'/Reference:model').Path
@@ -136,7 +154,7 @@ def validate(row,payload):
         fields=[('render_model',tag.reference_render_model),('collision_model',tag.reference_collision_model),('physics_model',tag.reference_physics_model),('model_animation_graph',tag.reference_animation)]
         for kind,field in fields:
             expected=(kind=='render_model' or kind=='collision_model' and bool(payload.get('collision'))
-                or kind=='physics_model' and bool(payload.get('physics',{}).get('shapes'))
+                or kind=='physics_model' and bool((payload.get('physics') or {}).get('shapes'))
                 or kind=='model_animation_graph' and row['animation_policy']=='SOURCE_DEVICE_JMA_TO_NATIVE_GRAPH')
             if bool(field.Path)!=expected:raise ValueError('Native model dependency presence differs: '+kind)
             if expected:
@@ -149,11 +167,24 @@ def validate(row,payload):
                         if not bodies.Count:raise ValueError('Native physics contains no rigid bodies')
                         item['rigid_bodies']=bodies.Count
                         item['mass']=[float(b.SelectField('mass').Data) for b in bodies]
-                        if any(not math.isfinite(m) or m<=0 for m in item['mass']):raise ValueError('Native rigid body mass is not positive')
+                        if any(not math.isfinite(m) or m<0 for m in item['mass']):raise ValueError('Native rigid body mass is invalid')
+                        item['mass_status']='LOOSE_TAG_AUTHORING; zero also observed in unmodified Reach crate and door tags; runtime effective mass not validated'
                     if kind=='model_animation_graph':
-                        animations=dependency.tag.SelectField('Block:animations').Elements
+                        animations=dependency.tag.SelectField('definitions[0]/animations').Elements
                         if not animations.Count:raise ValueError('Native device graph has no animations')
                         item['animations']=[a.SelectField('name').GetStringData() for a in animations]
+                        nodes=dependency.tag.SelectField('definitions[0]/skeleton nodes').Elements
+                        item['nodes']=[n.Fields[0].GetStringData() for n in nodes]
+                        if set(item['nodes'])!={n['name'] for n in payload['render']['nodes']}:raise ValueError('Native graph skeleton identities differ')
+                        item['frame_counts']={a.SelectField('name').GetStringData():int(a.SelectField('shared animation data[0]/frame count').Data)
+                            for a in animations}
+                        if animation_authoring:
+                            if animation_authoring.get('source_clips'):
+                                expected={normalized(c['name'].replace(':',' ')):c['native_frames'] for c in animation_authoring['source_clips']}
+                            else:
+                                raise ValueError('Device source frame-rate/reference-frame receipt is absent')
+                            actual={normalized(n.replace(':',' ')):c for n,c in item['frame_counts'].items()}
+                            if actual!=expected:raise ValueError('Native animation frame counts or identities differ from source JMA: '+str(dict(source=expected,native=actual)))
                     report['chain'][kind]=item
         if tag.get_model_variants()!=[v['name'] for v in payload['variants']]:raise ValueError('Native model variant names differ')
     report['status']='NATIVE_DEPENDENCIES_VERIFIED'

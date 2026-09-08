@@ -3,6 +3,7 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import time
 import tomllib
@@ -12,7 +13,7 @@ from types import SimpleNamespace
 if __package__ in (None,''):
     sys.path.insert(0,str(Path(__file__).resolve().parent.parent));__package__='port_environment'
 from . import worker,object_ir,native_object_tags
-from .paths import OutputPaths,atomic_json,digest
+from .paths import OutputPaths,atomic_json,digest,relative
 from .model import stable_hash
 from .snapshot import verify_files
 
@@ -86,11 +87,20 @@ def construct(row,payload,scene,mats,animations,report):
         if receipt['skipped'] or receipt['written']!=receipt['source_animation_count']:raise ValueError('Source device animation decode is incomplete')
         files=sorted(p for p in directory.rglob('*') if p.is_file() and p.suffix.lower() in {'.jmm','.jma','.jmt','.jmz','.jmv','.jmw','.jmo','.jmr','.jmrx'})
         if len(files)!=receipt['written']:raise ValueError('Source device animation file count differs')
+        from io_scene_foundry.legacy.JMA import JMA
+        source_clips=[]
+        for file in files:
+            clip=JMA();clip.from_file(file)
+            if clip.fps!=30 or clip.frame_count<2:raise ValueError('Device JMA timing needs a separate native resampling adapter')
+            source_clips.append(dict(name=file.stem,jma_frames=clip.frame_count,native_frames=clip.frame_count-1,fps=clip.fps,
+                frame_convention='Pinned blam-tags JMA writer adds one reference/end frame for native Tool reimport'))
+        scene.render.fps=30;scene.render.fps_base=1.0
         from io_scene_foundry.tools.importer import NWOImporter
         importer=NWOImporter(bpy.context)
         importer.import_jma_files(files,session.armature)
         report['animation_authoring']=dict(source_graph=graph,files={str(p):digest(p) for p in files},
-            imported_names=[a.name for a in utils.get_scene_props().animations],frame_count=[a.frame_end-a.frame_start+1 for a in utils.get_scene_props().animations])
+            imported_names=[a.name for a in utils.get_scene_props().animations],frame_count=[a.frame_end-a.frame_start+1 for a in utils.get_scene_props().animations],
+            source_clips=source_clips,scene_fps=30)
     report['source_construction_warnings']=session.warnings
     report['source_object_count']=len(scene.objects)
     return session
@@ -109,38 +119,62 @@ def main():
     try:
         flush();project=bootstrap(paths,run,report)
         journal=worker.ToolJournal(paths,run,report,flush)
-        report['stage']='materials';flush()
-        material_config=dict(config,source_directory=plan['source_directory'],shader_manifest='authoring-shader-manifest.json')
-        mats=worker.materials(plan,material_config,paths,report)
-        animations=json.loads(Path(config['device_animations']).read_text())
-        import bpy
-        from io_scene_foundry import utils
         ready=[r for r in plan['objects'] if r['plan_status']=='READY_FOR_NATIVE']
-        # Verify the reusable source pair before the larger prop batch.
         ready.sort(key=lambda r:(0 if r['target_base'].split('/')[-1].startswith('voi_switch_') else
             1 if r['source_tag'].endswith('voi_door_arms_new.device_machine') else 2,r['source_tag']))
         if config.get('limit'):ready=ready[:config['limit']]
+        report['stage']='materials';flush()
+        material_config=dict(config,source_directory=plan['source_directory'],shader_manifest='authoring-shader-manifest.json')
+        material_plan=plan
+        if config.get('limit'):
+            used={s for r in ready for s in r['object_ir']['materials']}
+            rows=[r for r in plan['materials'] if r['source_shader'] in used]
+            keys={p['bitmap'] for r in rows for p in r['source_parameters'] if p.get('bitmap')}
+            material_plan=dict(plan,materials=rows,bitmaps={k:plan['bitmaps'][k] for k in keys})
+            source=Path(plan['source_directory']);dest=run/'selected-materials';dest.mkdir()
+            manifest=json.loads((source/'authoring-shader-manifest.json').read_text())
+            manifest.update(shaders={s:manifest['shaders'][s] for s in used},bitmaps={k:manifest['bitmaps'][k] for k in keys})
+            for b in material_plan['bitmaps'].values():
+                name=b.get('source_image') or b['source_layout']['tiff'];path=relative(name)
+                target=dest/path;target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(source/path,target)
+            atomic_json(dest/'authoring-shader-manifest.json',manifest)
+            material_config['source_directory']=str(dest)
+            report['material_selection']=dict(parent_plan_sha256=plan['plan_sha256'],source_shaders=sorted(used),bitmap_keys=sorted(keys),
+                scope='Exact dependency subset of the hash-verified object plan')
+        mats=worker.materials(material_plan,material_config,paths,report)
+        animations=json.loads(Path(config['device_animations']).read_text())
+        import bpy
+        from io_scene_foundry import utils
         for index,row in enumerate(ready):
             result=dict(source_tag=row['source_tag'],source_group=row['source_group'],target_tag=row['target_tag'],status='BUILDING',runtime_status='NOT_TESTED')
             report['objects'].append(result);report['stage']='object '+row['source_tag'];flush()
             print(f'Object {index+1}/{len(ready)}: {row["source_tag"]}',flush=True)
             start=time.monotonic();tool_start=len(report['tool_invocations'])
+            sys.stdout.flush();log_offset=(run/'blender-reach-worker.log').stat().st_size
             try:
                 verify_files(row['source_hashes'])
                 if digest(row['asset'])!=row['asset_sha256']:raise ValueError('Source object geometry changed')
-                payload=json.loads(Path(row['asset']).read_text())
+                from io_scene_foundry.h3_import.core import load_payload
+                payload=load_payload(row['asset'])
                 name=Path(row['target_base']).name;directory=row['target_base'].rsplit('/',1)[0]
                 scene=worker.setup_scene(name,'model',row['target_base']+'.sidecar.xml','default',project)
                 nwo=utils.get_scene_props()
                 for kind in ('scenery','crate','device_machine','device_control','biped','vehicle','weapon','equipment','giant','creature','effect_scenery','sound_scenery'):
                     if hasattr(nwo,'output_'+kind):setattr(nwo,'output_'+kind,kind==row['source_group'])
                 utils.get_export_props().export_animations='ALL'
+                utils.get_export_props().import_force=True
                 construct(row,payload,scene,mats,animations,result)
                 worker.export(scene,paths,directory,name,report)
                 journal.finish(wait=True)
                 if any(t.get('exit_code')!=0 for t in report['tool_invocations'][tool_start:]):raise ValueError('Native object Tool import failed')
+                sys.stdout.flush()
+                with (run/'blender-reach-worker.log').open('rb') as log:
+                    log.seek(log_offset);output=log.read().decode('utf-8',errors='replace')
+                result['geometry_tool_errors']=worker.geometry_errors(output)
+                if result['geometry_tool_errors']:raise ValueError('Native geometry diagnostics: '+str(result['geometry_tool_errors']))
                 result['tag_authoring']=native_object_tags.author(row,payload)
-                result['native_validation']=native_object_tags.validate(row,payload)
+                result['native_validation']=native_object_tags.validate(row,payload,result.get('animation_authoring'))
                 xml=run/(f'object-{index:03}-'+name+'.xml')
                 utils.run_tool(['export-tag-to-xml',str(paths.owned_tag(row['target_tag'])),str(xml)],force_tool=True)
                 journal.finish(wait=True)

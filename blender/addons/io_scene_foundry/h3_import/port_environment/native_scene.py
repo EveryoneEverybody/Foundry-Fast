@@ -138,6 +138,7 @@ def construct(scene, plan, config, mats, report, mesh_object):
     nwo = utils.get_scene_props()
     nwo.regions_table.clear()
     for bsp in plan['bsps']:
+        print('Constructing source BSP '+str(bsp['source_index'])+': '+bsp['source_tag'],flush=True)
         nwo.regions_table.add().name=bsp['region']
     report['native_construction'] = []
     timings=report.setdefault('native_stage_seconds',{})
@@ -296,7 +297,7 @@ def construct(scene, plan, config, mats, report, mesh_object):
             ob.nwo.portal_type=portal['portal_type'];ob.nwo.portal_is_door=portal['portal_is_door']
         elapsed('BSP construction',began)
         began=time.perf_counter()
-        for design in bsp['structure_design']['meshes']:
+        for design in (bsp.get('structure_design') or {}).get('meshes',[]):
             points=[p for tri in design['triangles_world'] for p in tri]
             record=polygon_record(points,[list(range(i,i+3)) for i in range(0,len(points),3)],design['mesh_type'])
             ob,_=mesh_object(record,[default],scene,region,design['name'],'structure_design')
@@ -439,6 +440,8 @@ def validate_scenario(plan, report):
         with Tag(path=bsp['destination'],tag_must_exist=True) as tag:
             clusters=tag.tag.SelectField('Block:clusters').Elements
             instances=tag.tag.SelectField('Block:instanced geometry instances').Elements
-            if not clusters.Count or instances.Count != len(bsp['instance_plan']['placements']):
+            proofs={r['source_definition']:r for r in bsp['instance_plan'].get('unified_breakable_definitions',[])}
+            split_count=sum(bool(proofs.get(p['source_definition'],{}).get('partition')) for p in bsp['instance_plan']['placements'])
+            if not clusters.Count or instances.Count != len(bsp['instance_plan']['placements'])+split_count:
                 raise ValueError(f'Native BSP cluster/instance count mismatch: {bsp["region"]}: {clusters.Count}/{instances.Count}')
             report['bsp_readback'].append(dict(path=bsp['destination'],clusters=clusters.Count,instances=instances.Count))

@@ -16,11 +16,25 @@ class ObjectContracts(unittest.TestCase):
             object_ir.dependency(dict(fields=[reference,dict(name='nested',fields=[reference])]),'model')
 
     def test_flags_use_names_instead_of_source_ordinals(self):
-        native=SimpleNamespace(Items=[SimpleNamespace(FlagName=n,IsSet=False) for n in ('unused','lock transform to env. object')])
+        values={n:False for n in ('unused','lock transform to env. object')}
+        native=SimpleNamespace(Items=[SimpleNamespace(FlagName=n) for n in values],SetBit=values.__setitem__,TestBit=values.__getitem__)
         source=dict(type='long flags',value=dict(value=4,set_bits=[[2,'lock transform to env. object']]))
         tags.write(native,source)
-        self.assertFalse(native.Items[0].IsSet)
-        self.assertTrue(native.Items[1].IsSet)
+        self.assertFalse(values['unused'])
+        self.assertTrue(values['lock transform to env. object'])
+
+    def test_native_regular_flags_are_not_block_flags(self):
+        from port_environment.native_zones import mask,write_mask
+        target=SimpleNamespace(RawValue=0,BitCount=16,Items=[])
+        write_mask(target,5)
+        self.assertEqual(mask(target),5)
+
+    def test_native_animation_spaces_do_not_allow_windows_aliases(self):
+        from port_environment.paths import relative
+        self.assertEqual(str(relative('export/animations/device position.gr2',allow_spaces=True)),
+            'export/animations/device position.gr2')
+        for path in ('../device position.gr2','CON .gr2','device.gr2 ','/device.gr2'):
+            with self.assertRaises(ValueError):relative(path,allow_spaces=True)
 
     def test_unknown_flag_cannot_be_silently_lost(self):
         with self.assertRaisesRegex(ValueError,'Unmapped'):

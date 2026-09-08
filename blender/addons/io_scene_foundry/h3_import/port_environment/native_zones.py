@@ -2,10 +2,18 @@
 
 
 def mask(field):
+    if hasattr(field,'RawValue'):
+        return int(field.RawValue) & ((1 << field.BitCount)-1)
     return sum(1 << i for i, item in enumerate(field.Items) if item.IsSet)
 
 
 def write_mask(field, value):
+    if hasattr(field,'RawValue'):
+        if value < 0 or value >> field.BitCount:
+            raise ValueError('Native flags cannot represent source value')
+        field.RawValue=value
+        if mask(field)!=value:raise ValueError('Native flags readback differs')
+        return
     items = list(field.Items)
     if value < 0 or value >> len(items):
         raise ValueError('Native bit field cannot represent source membership')

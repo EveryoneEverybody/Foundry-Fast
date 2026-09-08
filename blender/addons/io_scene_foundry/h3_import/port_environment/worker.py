@@ -811,6 +811,11 @@ def main():
             report['stage']='BSP construction'; flush()
             with profile.span('native multi-BSP construction'):
                 native_scene.construct(scene,plan,config,mats,report,mesh_object)
+            checkpoint=paths.destination('data',paths.asset+'.blend')
+            checkpoint.parent.mkdir(parents=True,exist_ok=True)
+            bpy.ops.wm.save_as_mainfile(filepath=str(checkpoint),check_existing=False)
+            report['construction_checkpoint']=dict(path=str(checkpoint),sha256=digest(checkpoint),
+                plan_sha256=plan['plan_sha256'],status='SOURCE_SCENE_SAVED_BEFORE_NATIVE_CONFIGURATION')
             report['stage']='BSP and scenario export'; flush()
             configure_scenario(paths,plan)
             # Rebuild instance import data along with the source-derived
