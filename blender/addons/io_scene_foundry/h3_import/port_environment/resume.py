@@ -42,13 +42,24 @@ def require_completed_authoring(worker):
 
 def xml_cache(prior, worker, paths, outputs):
     """Bind completed XML receipts to their original successful Tool commands."""
+    roots=[];cursor=prior
+    while True:
+        if cursor in roots:raise ValueError('Cyclic validation history')
+        roots.append(cursor)
+        config=read(cursor/'worker-config.json') if (cursor/'worker-config.json').is_file() else {}
+        if not config.get('validation_only'):break
+        previous=Path(config['previous_worker_report']).resolve(strict=True)
+        if (previous.name!='worker-report.json' or previous.parent.parent!=prior.parent or
+                digest(previous)!=config['previous_worker_sha256']):
+            raise ValueError('Previous validation history changed or escaped this build')
+        cursor=previous.parent
     commands={str(Path(row['command'][3]).resolve()):row['command'] for row in worker['tool_invocations']
               if row.get('exit_code')==0 and len(row.get('command',[]))==4
               and row['command'][1]=='export-tag-to-xml'}
     cache={}
     for row in worker.get('native_xml_validation',[]):
         xml=Path(row['path']).resolve(strict=True)
-        if not xml.is_relative_to((prior/'native-tag-xml').resolve()):
+        if not any(xml.is_relative_to((root/'native-tag-xml').resolve()) for root in roots):
             raise ValueError('Cached XML escapes the previous native validation directory')
         command=commands.get(str(xml))
         if not command or row['status']!='WELL_FORMED_STREAMED' or digest(xml)!=row['sha256']:

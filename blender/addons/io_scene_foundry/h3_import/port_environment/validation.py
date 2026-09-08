@@ -28,6 +28,11 @@ def native_xml_references(path,chunk_size=1024*1024):
         # lines retained across chunks so substitutions cannot be split.
         content=content.replace(b',\xff\xff\xff\xff" type="tag reference"',b',NULL" type="tag reference"')
         content=content.replace(b'value="<unavailable>" type="pageable resource"',b'value="&lt;unavailable&gt;" type="pageable resource"')
+        # Tool joins named flag bits with a literal ampersand, even though its
+        # XML attribute requires escaping. Restrict this repair to typed flag
+        # lists; tag references, markup and undeclared entities remain errors.
+        content=re.sub(rb'(<field name="[^"\r\n]+" value=")([^"<>;\r\n]*&[^"<>;\r\n]*)(" type="(?:byte|word|long) flags"\s*/>)',
+                       lambda m:m[1]+m[2].replace(b'&',b'&amp;')+m[3],content)
         parser.Parse(content,final)
     with open(path,'rb') as stream:
         pending=b''

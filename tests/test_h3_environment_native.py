@@ -52,6 +52,13 @@ class NativeContracts(unittest.TestCase):
             outputs={source.relative_to(paths.reach).as_posix():digest(source)}
             cache=resume.xml_cache(prior,worker,paths,outputs)
             self.assertEqual(cache[str(source)]['source_sha256'],digest(source))
+            previous_report=prior/'worker-report.json';previous_report.write_text(json.dumps(worker))
+            replay=root/'replay';replay.mkdir()
+            (replay/'worker-config.json').write_text(json.dumps(dict(validation_only=True,
+                previous_worker_report=str(previous_report),previous_worker_sha256=digest(previous_report))))
+            self.assertEqual(resume.xml_cache(replay,worker,paths,outputs),cache)
+            previous_report.write_text('{}')
+            with self.assertRaisesRegex(ValueError,'history changed'):resume.xml_cache(replay,worker,paths,outputs)
             command['exit_code']=1
             with self.assertRaises(ValueError):resume.xml_cache(prior,worker,paths,outputs)
             command['exit_code']=0;xml.write_text('<tag changed="true"/>')
@@ -71,11 +78,13 @@ class NativeContracts(unittest.TestCase):
     def test_native_xml_streaming_preserves_exact_sentinels_and_rejects_entities(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'native.xml'
-            data=b'<tag>\n<field value="levels\\generated\\bsp" type="tag reference"/>\n<field value="<unavailable>" type="pageable resource"/>\n<field value=",\xff\xff\xff\xff" type="tag reference"/>\n</tag>'
+            data=b'<tag>\n<field name="flags" value="shared entry point compilation&shared pixel shader compilation" type="word flags"/>\n<field value="levels\\generated\\bsp" type="tag reference"/>\n<field value="<unavailable>" type="pageable resource"/>\n<field value=",\xff\xff\xff\xff" type="tag reference"/>\n</tag>'
             path.write_bytes(data)
             for chunk in (1,7,64,1024):
                 self.assertEqual(native_xml_references(path,chunk),{'levels/generated/bsp'})
-            for bad in (b'<!DOCTYPE tag [<!ENTITY x "y">]><tag/>',b'<other/>',b'<tag>'):
+            for bad in (b'<!DOCTYPE tag [<!ENTITY x "y">]><tag/>',b'<other/>',b'<tag>',
+                        b'<tag><field name="flags" value="one&unknown;" type="word flags"/></tag>',
+                        b'<tag><field value="one&two" type="tag reference"/></tag>'):
                 path.write_bytes(bad)
                 with self.assertRaises(Exception):native_xml_references(path,7)
 

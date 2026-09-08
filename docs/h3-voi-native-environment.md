@@ -18,6 +18,8 @@ The runner defaults to Nate's H3EK, HREK and Blender 5.2.1 installations. `-Plan
 
 If a run completed geometry and Faux but its final validation was interrupted, `-ValidateExistingRun <run-directory>` resumes only validation. It requires the same source selection, target, tool hashes and every owned output hash. It reopens native references and source/world/lighting relationships, rechecks completed XML receipts against successful Tool commands and hashes, and exports missing XML. ManagedBlam writes, imports and Faux are prohibited in this mode. The original failed report stays intact; a new report records the resumed validation. Windows progress-report replacement now retries transient sharing violations for up to five seconds while keeping the previous complete report visible.
 
+Tool XML is validated after narrowly normalizing its null/resource sentinels and literal ampersand separators in typed byte/word/long flag lists. Raw export hashes are retained. This does not repair arbitrary malformed XML, references or undeclared entities, nor modify native tag data.
+
 Generated authoring and tags are owned under `levels/h3_port/040_voi/factory_a_env`. Shader infrastructure additionally lives under `tags/shaders/h3_port/040_voi/factory_a_env`: Reach requires render-method definitions used for template generation beneath `shaders`, so these unchanged target definitions have a separate, equally guarded namespace. The ownership manifest covers all three roots and rejects unowned or externally modified files. Stock Reach definitions are read as infrastructure evidence and remain untouched.
 
 ## Native build and validation
