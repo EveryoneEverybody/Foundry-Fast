@@ -149,12 +149,12 @@ def main(c):
         a = d['authored_raw']
         text.append(f"| {d['index']} | {a['source_fields']['shape']} | {a['intensity']:g} | {a['color']} | {a['hotspot_size']:.4f} / {a['hotspot_cutoff']:.4f} | {a['near_attenuation']} / {a['far_attenuation']} | {d['fields']['attenuation flags']['native']} |")
     text += ['', 'All are spots. Far bounds on definitions 0 and 1 are stored but disabled. Definition 2 alone enables far attenuation. Bounce 1 and hotspot falloff speed 1 are Reach defaults, not H3 source fields.', '',
-        '| Instance | Def | Source = native position WU | Cluster | Nearest emissive source mesh | Distance WU | Result |', '|---|---|---|---|---|---:|---|']
+        '| Instance | Def | Source = native position WU | H3 source cluster | Nearest emissive source mesh | Distance WU | Result |', '|---|---|---|---|---|---:|---|']
     for r in result['instances']:
         a=r['authored_raw'];n=r['nearest_emissive_geometry'][0]
         text.append(f"| {r['index']} | {a['definition_index']} | {a['origin']} | {r['spatial_membership']['clusters']} | {n['name']} / placement {n['source_placement']} | {n['distance_world']:.4f} | {r['status']} |")
     text += ['', 'Forward/up are preserved directly in every row; native bounce is 1, default lightmap type, empty light/shader/gel references, and no fade or volume override. No viewport-light inference is used.', '',
-        '| Omitted source row | Palette | Source position WU | Cluster | Nearest emissive source mesh | Distance WU |', '|---|---|---|---|---|---:|']
+        '| Omitted source row | Palette | Source position WU | H3 source cluster | Nearest emissive source mesh | Distance WU |', '|---|---|---|---|---|---:|']
     for r in placements:
         n=r['nearest_emissive_geometry'][0]
         text.append(f"| {r['index']} | {r['palette_index']} | {r['position']} | {r['spatial_membership']['clusters']} | {n['name']} / placement {n['source_placement']} | {n['distance_world']:.4f} |")

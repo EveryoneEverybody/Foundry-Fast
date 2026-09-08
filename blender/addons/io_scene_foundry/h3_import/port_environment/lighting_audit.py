@@ -148,6 +148,8 @@ def locate_point(tree, point, epsilon=1e-6):
     blam-tags collision_verify children/descend_point: n.dot(p)-d >= 0 -> front.
     A valid leaf cluster establishes spatial membership, not light-volume policy.
     """
+    if tree.get('unsupported_supernodes', 0):
+        raise ValueError('Reach supernode traversal is not implemented; native membership is unverified')
     stack, leaves, solid, boundary = [(0, frozenset())], set(), False, False
     visited_count = 0
     while stack:

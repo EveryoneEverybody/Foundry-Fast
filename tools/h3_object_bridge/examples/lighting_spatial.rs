@@ -13,6 +13,10 @@ fn main() -> Result<()> {
         .and_then(|f| f.as_block()).context("Missing collision BSP")?;
     ensure!(bsps.len() == 1, "Ambiguous collision BSP");
     let bsp = bsps.element(0).unwrap();
+    let supernodes = bsp.field("bsp3d supernodes").and_then(|f| f.as_block())
+        .map(|block| block.len()).unwrap_or(0);
+    ensure!(supernodes == 0,
+        "This H3 node-zero query cannot traverse {supernodes} Reach supernodes; native membership is unverified");
     let nodes = bsp.field("bsp3d nodes").and_then(|f| f.as_block()).context("Missing nodes")?;
     let planes = bsp.field("planes").and_then(|f| f.as_block()).context("Missing planes")?;
     let leaves = root.field("leaves").and_then(|f| f.as_block()).context("Missing cluster leaves")?;
@@ -30,7 +34,7 @@ fn main() -> Result<()> {
         .context("Missing leaf cluster")? as i32)).collect::<Result<Vec<_>>>()?;
     serde_json::to_writer_pretty(std::io::stdout(), &json!({
         "format": "foundry.h3-lighting-spatial-evidence", "version": 1,
-        "source_path": path, "source_sha256": format!("{:x}", Sha256::digest(bytes)),
+        "source_path": path.to_string_lossy(), "source_sha256": format!("{:x}", Sha256::digest(bytes)),
         "decoder": "blam-tags@5d0509fb75eadb96ac7774542ca0b2c10aed7b00",
         "units": "world_units", "nodes_u64": packed, "planes": planes, "leaf_clusters": clusters,
         "node_layout": "plane bits 0..15; back 16..39; front 40..63; leaf bit 23; solid 0xffffff"

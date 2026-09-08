@@ -100,6 +100,12 @@ class SourceEvidence(unittest.TestCase):
         self.assertEqual(a.locate_point(tree,[3,0,0])['clusters'],[11])
         self.assertEqual(a.locate_point(tree,[2,0,0])['clusters'],[6,11])
 
+    def test_native_supernodes_cannot_be_misread_as_h3_root_zero(self):
+        # Node zero may be a subtree, not the native query entry point.
+        tree={'unsupported_supernodes':27, 'nodes_u64':[], 'planes':[], 'leaf_clusters':[]}
+        with self.assertRaisesRegex(ValueError, 'supernode'):
+            a.locate_point(tree,[3,-103,2])
+
     def test_solid_cycle_and_corruption_cannot_fabricate_membership(self):
         tree={'nodes_u64':[(0xffffff<<16)|(0x800000<<40)],'planes':[[1,0,0,0]],'leaf_clusters':[6]}
         self.assertEqual(a.locate_point(tree,[-1,0,0])['status'],'BOUNDARY_OR_OUTSIDE')

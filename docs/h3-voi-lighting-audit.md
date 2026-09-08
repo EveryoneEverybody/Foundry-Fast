@@ -1,5 +1,7 @@
 # BSP010 lighting audit and controlled comparison
 
+The completed 10× test changed all three BSP010 definition powers and passed independent native readback, but **all six lightmap pixel payloads and the reported photon totals are identical to the low baseline**. There is no measured baked response to this power change. The baseline is restored; the diagnostic remains captured for investigation. The converter's intensity mapping is unchanged.
+
 Nate reports that the low bake only modestly improved the dark interior. The newer runtime screenshots show the sky/clouds rendering and interior strips glowing, while the surrounding room remains dark. This does not establish whether generic-light power, omitted scenario lights, surface emission, or another target behavior dominates the remaining difference.
 
 The audit begins from `86ed2a45a13f3e17957738f187042a1182838210` on `feature/h3-scenario-inspection`. Its working tree was clean. Prototype 1.9.49 remains runtime-accepted for core BSP conversion; collision, ladders, glass, materials, sunlight and the 1.9.48 proof_box fixture remain regressions. No source converter or source recipe is changed in this pass.
@@ -50,7 +52,7 @@ The test keeps the parent's exact `low` preset, one worker and **all-BSP** bake 
 Reproduction (use a new run directory and the manifest matching the current state):
 
 ```powershell
-python .\tools\audit_h3_environment_lights.py --config 'D:\HaloRE\PortCensus\voi_bsp010_light_audit_20260907\audit-config.json'
+python .\tools\audit_h3_environment_lights.py --config 'D:\HaloRE\PortCensus\voi_bsp010_light_audit_20260907\audit-config-restored.json'
 .\tools\Run-VoiRuntimeStabilization.ps1 -Action Bake -Config 'D:\HaloRE\PortCensus\voi_bsp010_light_audit_20260907\scale10-low-config.json'
 ```
 
@@ -62,4 +64,18 @@ Runtime test command remains:
 game_start levels\h3_port\040_voi\factory_a_env\factory_a_env
 ```
 
-Compare the same interior position, camera direction and exposure conditions against the captured low baseline. A large improvement would implicate generic-light magnitude; little improvement would constrain that hypothesis without proving scenario lights or emissive conversion are correct. Glowing fixture appearance alone does not establish illumination ([H3 baked-lighting workflow](https://c20.reclaimers.net/h3/guides/map-making/baked-lighting)). Do not adopt the 10× scale as a source semantic merely because it looks brighter.
+The 10× low bake completed in 2,141.10 seconds: all thirteen Faux stages and the pre-bake XML export returned zero. Independent post-bake XML confirmed powers 40/400/20, with no other lighting-info field delta. Geometry, source recipes, source light tags, sky and all fifty tracked proof_box outputs remained unchanged.
+
+Twelve tag files changed hashes, including the six lightmap bitmaps. Those hashes alone were misleading: the read-only `compare_bitmap_payloads` Rust example compares the actual `processed pixel data` blocks rather than tag headers or XML data counts. Both 16f arrays and all four VMF textures have **zero differing payload bytes** across baseline and diagnostic. This is equality of encoded data, not an estimated visual brightness score. BSP000 and BSP010 photon counts/energies also match: 1,225,360 / 186.655945 and 270,431 / 2.704310 respectively. The final-gather probe assertions occur in both baseline and diagnostic logs; they remain recorded and are not evidence of a newly introduced intensity problem.
+
+The bake result is `NO_BAKED_PIXEL_RESPONSE`, not a successful lighting correction or a runtime acceptance claim. Both native states and their hashes are retained in the comparison receipt; the accepted low baseline is restored through the guarded switch. A screenshot comparison is not required to establish the byte equality. Glowing fixture appearance alone does not establish illumination ([H3 baked-lighting workflow](https://c20.reclaimers.net/h3/guides/map-making/baked-lighting)). The community comment about missing export/low power is a useful hypothesis, not source or engine proof.
+
+## Remaining boundary
+
+The current scenario's two lighting-info references are populated, with empty local lighting overrides. Its per-BSP bounce override flag is off; the zero stored non-analytical override is therefore not an enabled zero-bounce setting. Normal Foundry writes lighting-info after geometry import too, then runs `faux_data_sync` and `faux_farm_begin`. Both stages ran in the comparison. Export order alone does not prove a stale-cache bug.
+
+All fourteen exact BSP010 position triplets occur uniquely, in source order, at 200-byte intervals in the captured Faux `main.blob`. This supports their presence in the intermediate file, but it is not a decoded light-energy record or proof that Faux evaluated the scaled power. The remaining missing fact is the mapping from native definition power/color and instance participation into Faux's actual emitter evaluation. Missing/cancelled energy, light applicability/occlusion, and reuse of derived data are not distinguished by the current evidence. No new scale, light, transform, or attenuation rule is justified yet.
+
+An attempted ordinary node-zero native collision query was rejected: the Reach BSP contains 27 supernodes. Applying the H3 traversal to it without decoding those nodes produces invalid membership results. `lighting_spatial` now refuses such input explicitly. The accepted H3 tree remains byte-equivalent after this guard; its source membership findings are unaffected. Native light-origin membership needs a verified Reach supernode traversal or engine query and is not asserted here.
+
+The complete evidence is in `audit-04-restored-baseline/bsp010-light-audit.json`, `pixel-payload-comparison.json`, `faux-log-comparison.json`, `diagnostic-outcome.json`, and `baseline-restoration.json` under the local audit directory. A fresh native XML export and real-source audit after restoration again match all three definitions and fourteen instances. Earlier audits remain preserved. The reusable field/spatial audit and guarded test were checkpointed at `5865a27e9b6b6d1856f1e4c221a654a39a276cda`; the follow-up checkpoint adds the measured negative result and pixel-payload reader. Local validation: 414 Python tests passed at that checkpoint; all 146 environment tests pass after the new guard, bringing the covered total to 415. The unchanged scenario/import suites are not rerun unnecessarily. The 102 Rust tests passed, one asset-dependent test was ignored, and Blender 5.2.1 environment smoke passed. Both read-only Rust examples build; the H3 source tree is unchanged and the native-supernode query is rejected. Hosted CI was not run and nothing was published to the normal release/feed.
