@@ -42,6 +42,18 @@ def native_bodies(tag):
     return result
 
 
+def shape_region_permutation(source,shape,payload):
+    """Use the decoded physics node to identify one authored rigid body."""
+    node=shape['node'];nodes=payload['physics']['nodes']
+    if node < -1 or node>=len(nodes):raise ValueError('Invalid physics shape node')
+    name=nodes[node]['name'] if node>=0 else None
+    matches=[k for k in source_bodies(source) if k[0]==name]
+    if len(matches)!=1:raise ValueError('Physics shape requires an unambiguous source body association')
+    _,region,permutation=matches[0]
+    if region is None or permutation is None:raise ValueError('Unassigned source physics region/permutation needs a separate authoring adapter')
+    return region,permutation
+
+
 def author(row):
     from io_scene_foundry.managed_blam import Tag
     source=row['object_ir']['physics_authoring'];expected=source_bodies(source)

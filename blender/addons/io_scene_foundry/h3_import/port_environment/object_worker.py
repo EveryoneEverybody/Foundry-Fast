@@ -64,6 +64,12 @@ def construct(row,payload,scene,mats,animations,report):
         if ob.type!='MESH':continue
         if ob.get('h3_physics_source'):
             shape=json.loads(ob['h3_physics_source'])
+            from .native_physics import shape_region_permutation
+            region,permutation=shape_region_permutation(row['object_ir']['physics_authoring'],shape,payload)
+            nwo=utils.get_scene_props()
+            for table,name in ((nwo.regions_table,region),(nwo.permutations_table,permutation)):
+                if name not in {e.name for e in table}:table.add().name=name
+            ob.nwo.region_name=region;ob.nwo.permutation_name=permutation
             ob.data.nwo.mesh_type='_connected_geometry_mesh_type_physics'
             ob.nwo.rigid_body_type='LEGACY'
             ob.nwo.mesh_primitive_type='_connected_geometry_primitive_type_'+{'box':'box','sphere':'sphere','convex':'none'}[shape['kind']]
@@ -124,10 +130,19 @@ def main():
         ready.sort(key=lambda r:(0 if r['target_base'].split('/')[-1].startswith('voi_switch_') else
             1 if r['source_tag'].endswith('voi_door_arms_new.device_machine') else 2,r['source_tag']))
         if config.get('limit'):ready=ready[:config['limit']]
+        if config.get('reuse_compiled_from'):
+            if digest(config['reuse_compiled_from'])!=config['reuse_receipt_sha256']:raise ValueError('Prior native receipt changed')
+            receipt=json.loads(Path(config['reuse_compiled_from']).read_text())
+            previous={r['source_tag']:r for r in receipt['worker']['objects']}
+            selected=set(config.get('retry_sources') or [s for s,r in previous.items() if r['status']!='NATIVE_COMPILED'])
+            report['objects']=[dict(r,reused_from=config['reuse_compiled_from']) for s,r in previous.items() if s not in selected]
+            ready=[r for r in ready if r['source_tag'] in selected]
+            report['receipt_reuse']=dict(path=config['reuse_compiled_from'],sha256=config['reuse_receipt_sha256'],
+                verified_output_files=config['reuse_verified_output_files'],retried_sources=sorted(selected))
         report['stage']='materials';flush()
         material_config=dict(config,source_directory=plan['source_directory'],shader_manifest='authoring-shader-manifest.json',defer_material_failures=True)
         material_plan=plan
-        if config.get('limit'):
+        if config.get('limit') or config.get('reuse_compiled_from'):
             used={s for r in ready for s in r['object_ir']['materials']}
             rows=[r for r in plan['materials'] if r['source_shader'] in used]
             keys={p['bitmap'] for r in rows for p in r['source_parameters'] if p.get('bitmap')}

@@ -370,6 +370,13 @@ def materials(plan, config, paths, report):
     if plan['version']>=2:
         from . import native_validation
         native_validation.bitmaps(plan,paths,report,config)
+        failed={r['source'] for r in report.get('native_bitmap_failures',[])}
+        for row in plan['materials']:
+            missing=sorted({p['bitmap'] for p in row['source_parameters'] if p.get('bitmap') in failed})
+            if missing:
+                result.pop(row['source_shader'],None)
+                report.setdefault('material_errors',[]).append(dict(source=row['source_shader'],stage='native bitmap validation',
+                    reason='Native bitmap readback remains unverified',bitmap_sources=missing))
     timings['native bitmap validation']=time.perf_counter()-began
     return result
 

@@ -4,12 +4,42 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'blender/addons/io_scene_foundry/h3_import'))
 from port_environment import object_ir,native_object_tags as tags,native_placements as places
 
 
 class ObjectContracts(unittest.TestCase):
+    def test_receipt_reuse_rejects_modified_outputs_and_partial_accounting(self):
+        from port_environment.object_receipts import verify_reuse
+        plan=dict(plan_sha256='plan',objects=[dict(source_tag='source',target_tag='native',plan_status='READY_FOR_NATIVE')])
+        receipt=dict(status='COMPLETE',plan_sha256='plan',generated_files=[dict(path='tags/native',sha256='bytes')],
+            worker=dict(objects=[dict(source_tag='source',target_tag='native',status='NATIVE_COMPILED')]))
+        self.assertEqual(verify_reuse(receipt,plan,{'tags/native':'bytes'}),1)
+        with self.assertRaisesRegex(ValueError,'changed'):verify_reuse(receipt,plan,{'tags/native':'user edit'})
+        receipt['worker']['objects']=[]
+        with self.assertRaisesRegex(ValueError,'accounting'):verify_reuse(receipt,plan,{'tags/native':'bytes'})
+
+    def test_physics_shape_does_not_guess_between_bodies_on_one_node(self):
+        from port_environment import native_physics
+        payload=dict(physics=dict(nodes=[dict(name='arm')]))
+        with patch.object(native_physics,'source_bodies',return_value={('arm','door','intact'):{}}):
+            self.assertEqual(native_physics.shape_region_permutation({},dict(node=0),payload),('door','intact'))
+        with patch.object(native_physics,'source_bodies',return_value={('arm','door','intact'):{},('arm','door','damaged'):{}}):
+            with self.assertRaisesRegex(ValueError,'unambiguous'):native_physics.shape_region_permutation({},dict(node=0),payload)
+
+    def test_failed_bitmap_is_isolated_only_for_explicit_object_batches(self):
+        from port_environment import native_validation
+        images=[dict(source_bitmap='a',destination='a.tif'),dict(source_bitmap='b',destination='b.tif')]
+        report=dict(bitmap_builds=images)
+        with patch.object(native_validation,'bitmap',side_effect=[ValueError('pixel mismatch'),dict(source='b#0')]):
+            native_validation.bitmaps({},None,report,dict(defer_material_failures=True))
+        self.assertEqual(report['native_bitmap_readback'],[dict(source='b#0')])
+        self.assertEqual(report['native_bitmap_failures'][0]['source'],'a#0')
+        with patch.object(native_validation,'bitmap',side_effect=ValueError('pixel mismatch')):
+            with self.assertRaisesRegex(ValueError,'pixel mismatch'):native_validation.bitmaps({},None,dict(bitmap_builds=images),{})
+
     def test_physics_body_mapping_rejects_ambiguous_source_nodes(self):
         from port_environment.native_physics import source_bodies
         def block(name,rows):return dict(name=name,type='block',elements=[dict(fields=r,source_index=i) for i,r in enumerate(rows)])

@@ -104,9 +104,9 @@ def author(row,payload):
         for variant in payload['variants']:
             e=variants.AddElement();e.SelectField('name').SetStringData(variant['name'])
             for region in variant['regions']:
-                reg=e.SelectField('regions').AddElement();reg.SelectField('name').SetStringData(region['name'])
+                reg=e.SelectField('regions').AddElement();select(reg,'region name').SetStringData(region['name'])
                 for perm in region['permutations']:
-                    p=reg.SelectField('permutations').AddElement();p.SelectField('name').SetStringData(perm['name'])
+                    p=reg.SelectField('permutations').AddElement();select(p,'permutation name').SetStringData(perm['name'])
                     if perm['flags']:
                         report.setdefault('fidelity_loss',[]).append('Variant permutation flags retained as source evidence; automatic random-state behavior deferred')
                     p.SelectField('probability').Data=perm['probability']
@@ -192,5 +192,17 @@ def validate(row,payload,animation_authoring=None):
                             if actual!=expected:raise ValueError('Native animation frame counts or identities differ from source JMA: '+str(dict(source=expected,native=actual)))
                     report['chain'][kind]=item
         if tag.get_model_variants()!=[v['name'] for v in payload['variants']]:raise ValueError('Native model variant names differ')
+        from .native_validation import close
+        for native,source in zip(tag.block_variants.Elements,payload['variants']):
+            regions=native.SelectField('regions').Elements
+            if regions.Count!=len(source['regions']):raise ValueError('Native variant region count differs')
+            for region,expected in zip(regions,source['regions']):
+                if select(region,'region name').GetStringData()!=expected['name']:raise ValueError('Native variant region identity differs')
+                permutations=region.SelectField('permutations').Elements
+                if permutations.Count!=len(expected['permutations']):raise ValueError('Native variant permutation count differs')
+                for permutation,p in zip(permutations,expected['permutations']):
+                    if select(permutation,'permutation name').GetStringData()!=p['name']:raise ValueError('Native variant permutation identity differs')
+                    close(select(permutation,'probability').Data,p['probability'],'variant permutation probability')
+        report['variant_regions_permutations']='SOURCE_IDENTITIES_AND_PROBABILITIES_VERIFIED'
     report['status']='NATIVE_DEPENDENCIES_VERIFIED'
     return report

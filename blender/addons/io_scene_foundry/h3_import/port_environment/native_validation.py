@@ -79,89 +79,98 @@ def lighting(plan, report):
 
 
 def bitmaps(plan,paths,report,config):
+    rows=[];errors=[]
+    for image in report['bitmap_builds']:
+        try:rows.append(bitmap(plan,paths,report,config,image))
+        except Exception as exc:
+            if not config.get('defer_material_failures'):raise
+            errors.append(dict(source=image['source_bitmap'].replace('\\','/')+'#0',
+                target=image['destination'],failure=str(exc)))
+    report['native_bitmap_readback']=rows
+    report['native_bitmap_failures']=errors
+
+
+def bitmap(plan,paths,report,config,image):
     import bpy
     import numpy as np
     from io_scene_foundry.managed_blam.bitmap import BitmapTag
     from .native_bitmaps import REACH_CELLS
-    rows=[]
-    for image in report['bitmap_builds']:
-        source=image['source_bitmap'].replace('\\','/')+'#0'
-        spec=plan['bitmaps'][source]
-        target=str(Path(image['destination']).with_suffix('.bitmap'))
-        cube=bool(spec.get('source_layout'))
-        with BitmapTag(path=target,tag_must_exist=True) as tag:
-            if tag.block_bitmaps.Elements.Count!=1:raise ValueError('Native bitmap image count changed: '+target)
-            element=tag.block_bitmaps.Elements[0]
-            width=tag._select_int(element,'ShortInteger:width');height=tag._select_int(element,'ShortInteger:height')
-            kind=tag._select_int(element,'CharEnum:type')
-            offset=tag._select_int(element,'LongInteger:pixels offset');size=tag._select_int(element,'LongInteger:pixels size')
-            if kind!=(2 if cube else 0) or size<=0 or offset<0:
-                raise ValueError('Native bitmap type/pixel payload invalid: '+target)
-            result=dict(source=source,target=target,type=kind,width=width,height=height,processed_bytes=size)
-            if cube:
-                expected=spec['dimensions']
-                dimensions_changed=[width,height,6]!=expected
-                if width<=0 or width!=height or width>expected[0]:
-                    raise ValueError('Native cube dimensions changed outside a possible constant-image compaction: '+target)
-                # The retail MCC vertical-resource swizzle is not the loose
-                # EK processed-data layout. Let Reach's own bitmap API decode
-                # its imported payload, then inspect the native authoring atlas.
-                from System import Array,Byte
-                from System.Drawing import Rectangle
-                from System.Drawing.Imaging import ImageLockMode,PixelFormat
-                from System.Runtime.InteropServices import Marshal
-                game=tag._GameBitmap()
-                bitmap=game.GetBitmap()
+    source=image['source_bitmap'].replace('\\','/')+'#0'
+    spec=plan['bitmaps'][source]
+    target=str(Path(image['destination']).with_suffix('.bitmap'))
+    cube=bool(spec.get('source_layout'))
+    with BitmapTag(path=target,tag_must_exist=True) as tag:
+        if tag.block_bitmaps.Elements.Count!=1:raise ValueError('Native bitmap image count changed: '+target)
+        element=tag.block_bitmaps.Elements[0]
+        width=tag._select_int(element,'ShortInteger:width');height=tag._select_int(element,'ShortInteger:height')
+        kind=tag._select_int(element,'CharEnum:type')
+        offset=tag._select_int(element,'LongInteger:pixels offset');size=tag._select_int(element,'LongInteger:pixels size')
+        if kind!=(2 if cube else 0) or size<=0 or offset<0:
+            raise ValueError('Native bitmap type/pixel payload invalid: '+target)
+        result=dict(source=source,target=target,type=kind,width=width,height=height,processed_bytes=size)
+        if cube:
+            expected=spec['dimensions']
+            dimensions_changed=[width,height,6]!=expected
+            if width<=0 or width!=height or width>expected[0]:
+                raise ValueError('Native cube dimensions changed outside a possible constant-image compaction: '+target)
+            # The retail MCC vertical-resource swizzle is not the loose
+            # EK processed-data layout. Let Reach's own bitmap API decode
+            # its imported payload, then inspect the native authoring atlas.
+            from System import Array,Byte
+            from System.Drawing import Rectangle
+            from System.Drawing.Imaging import ImageLockMode,PixelFormat
+            from System.Runtime.InteropServices import Marshal
+            game=tag._GameBitmap()
+            bitmap=game.GetBitmap()
+            try:
+                if (bitmap.Width,bitmap.Height)!=(width*4,height*3):
+                    raise ValueError('Native cube readback atlas dimensions changed: '+target)
+                locked=bitmap.LockBits(Rectangle(0,0,bitmap.Width,bitmap.Height),ImageLockMode.ReadOnly,PixelFormat.Format32bppArgb)
                 try:
-                    if (bitmap.Width,bitmap.Height)!=(width*4,height*3):
-                        raise ValueError('Native cube readback atlas dimensions changed: '+target)
-                    locked=bitmap.LockBits(Rectangle(0,0,bitmap.Width,bitmap.Height),ImageLockMode.ReadOnly,PixelFormat.Format32bppArgb)
-                    try:
-                        if locked.Stride<=0:raise ValueError('Unsupported negative bitmap readback stride')
-                        buffer=Array.CreateInstance(Byte,locked.Stride*bitmap.Height)
-                        Marshal.Copy(locked.Scan0,buffer,0,len(buffer))
-                        rgba=np.frombuffer(tag._dotnet_bytes_to_bytes(buffer),dtype=np.uint8).reshape(bitmap.Height,locked.Stride//4,4)[:,:bitmap.Width,[2,1,0,3]]
-                        faces={name:rgba[y*height:(y+1)*height,x*width:(x+1)*width].copy()
-                            for name,(x,y) in zip(('R','L','U','D','F','B'),REACH_CELLS)}
-                    finally:bitmap.UnlockBits(locked)
-                finally:
-                    bitmap.Dispose();game.Dispose()
-                source_path=Path(config['source_directory'])/spec['source_layout']['tiff']
-                original=bpy.data.images.load(str(source_path),check_existing=False)
-                original.colorspace_settings.name='Non-Color'
-                pixels=np.empty(original.size[0]*original.size[1]*4,dtype=np.float32)
-                original.pixels.foreach_get(pixels)
-                atlas=pixels.reshape(original.size[1],original.size[0],4)[::-1]
-                comparisons=[]
-                for name,(x,y) in zip(('R','L','U','D','F','B'),spec['source_layout']['cells']):
-                    source_width,source_height=expected[:2]
-                    reference=atlas[y*source_height:(y+1)*source_height,x*source_width:(x+1)*source_width,:3]
-                    actual=faces[name][:,:,:3]/255
-                    if dimensions_changed:
-                        if not np.all(reference==reference[0,0]):
-                            raise ValueError('Native cube resized a nonconstant source face: '+target+' '+name)
-                        reference=reference[0,0]
-                    error=float(np.abs(reference-actual).mean())
-                    comparisons.append(dict(face=name,mean_absolute_error=error))
-                if any(r['mean_absolute_error']>.04 for r in comparisons):
-                    data_image=bpy.data.images.load(str(paths.roots['data']/image['destination']),check_existing=False)
-                    data_image.colorspace_settings.name='Non-Color'
-                    data_pixels=np.empty(data_image.size[0]*data_image.size[1]*4,dtype=np.float32)
-                    data_image.pixels.foreach_get(data_pixels)
-                    artifact=Path(config['run_directory'])/('cube-diagnostic-'+Path(target).stem+'.npz')
-                    np.savez_compressed(artifact,source_atlas=atlas.copy(),native_faces=np.stack([faces[n] for n in ('R','L','U','D','F','B')]),
-                        target_atlas=data_pixels.reshape(data_image.size[1],data_image.size[0],4)[::-1])
-                    result['diagnostic_pixels']=str(artifact)
-                    bpy.data.images.remove(data_image)
-                bpy.data.images.remove(original)
-                result['face_readback']=comparisons
+                    if locked.Stride<=0:raise ValueError('Unsupported negative bitmap readback stride')
+                    buffer=Array.CreateInstance(Byte,locked.Stride*bitmap.Height)
+                    Marshal.Copy(locked.Scan0,buffer,0,len(buffer))
+                    rgba=np.frombuffer(tag._dotnet_bytes_to_bytes(buffer),dtype=np.uint8).reshape(bitmap.Height,locked.Stride//4,4)[:,:bitmap.Width,[2,1,0,3]]
+                    faces={name:rgba[y*height:(y+1)*height,x*width:(x+1)*width].copy()
+                        for name,(x,y) in zip(('R','L','U','D','F','B'),REACH_CELLS)}
+                finally:bitmap.UnlockBits(locked)
+            finally:
+                bitmap.Dispose();game.Dispose()
+            source_path=Path(config['source_directory'])/spec['source_layout']['tiff']
+            original=bpy.data.images.load(str(source_path),check_existing=False)
+            original.colorspace_settings.name='Non-Color'
+            pixels=np.empty(original.size[0]*original.size[1]*4,dtype=np.float32)
+            original.pixels.foreach_get(pixels)
+            atlas=pixels.reshape(original.size[1],original.size[0],4)[::-1]
+            comparisons=[]
+            for name,(x,y) in zip(('R','L','U','D','F','B'),spec['source_layout']['cells']):
+                source_width,source_height=expected[:2]
+                reference=atlas[y*source_height:(y+1)*source_height,x*source_width:(x+1)*source_width,:3]
+                actual=faces[name][:,:,:3]/255
                 if dimensions_changed:
-                    result['dimension_transform']=dict(source=expected,target=[width,height,6],
-                        status='VERIFIED_CONSTANT_FACE_COMPACTION',
-                        proof='Every pixel of each source face is equal; all six native faces retain that color')
-                rows.append(result);report['native_bitmap_readback']=rows
-                if any(r['mean_absolute_error']>.04 for r in comparisons):
-                    raise ValueError('Native cubemap face/orientation differs from source atlas: '+target+' '+str(comparisons))
-                continue
-            rows.append(result)
-    report['native_bitmap_readback']=rows
+                    if not np.all(reference==reference[0,0]):
+                        raise ValueError('Native cube resized a nonconstant source face: '+target+' '+name)
+                    reference=reference[0,0]
+                error=float(np.abs(reference-actual).mean())
+                comparisons.append(dict(face=name,mean_absolute_error=error))
+            if any(r['mean_absolute_error']>.04 for r in comparisons):
+                data_image=bpy.data.images.load(str(paths.roots['data']/image['destination']),check_existing=False)
+                data_image.colorspace_settings.name='Non-Color'
+                data_pixels=np.empty(data_image.size[0]*data_image.size[1]*4,dtype=np.float32)
+                data_image.pixels.foreach_get(data_pixels)
+                artifact=Path(config['run_directory'])/('cube-diagnostic-'+Path(target).stem+'.npz')
+                np.savez_compressed(artifact,source_atlas=atlas.copy(),native_faces=np.stack([faces[n] for n in ('R','L','U','D','F','B')]),
+                    target_atlas=data_pixels.reshape(data_image.size[1],data_image.size[0],4)[::-1])
+                result['diagnostic_pixels']=str(artifact)
+                bpy.data.images.remove(data_image)
+            bpy.data.images.remove(original)
+            result['face_readback']=comparisons
+            if dimensions_changed:
+                result['dimension_transform']=dict(source=expected,target=[width,height,6],
+                    status='VERIFIED_CONSTANT_FACE_COMPACTION',
+                    proof='Every pixel of each source face is equal; all six native faces retain that color')
+            if any(r['mean_absolute_error']>.04 for r in comparisons):
+                report.setdefault('failed_native_bitmap_readbacks',[]).append(result)
+                raise ValueError('Native cubemap face/orientation differs from source atlas: '+target+' '+str(comparisons))
+            return result
+        return result
