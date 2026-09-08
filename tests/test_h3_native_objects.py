@@ -50,14 +50,6 @@ class ObjectContracts(unittest.TestCase):
         receipt['worker']['objects']=[]
         with self.assertRaisesRegex(ValueError,'accounting'):verify_reuse(receipt,plan,{'tags/native':'bytes'})
 
-    def test_physics_shape_does_not_guess_between_bodies_on_one_node(self):
-        from port_environment import native_physics
-        payload=dict(physics=dict(nodes=[dict(name='arm')]))
-        with patch.object(native_physics,'source_bodies',return_value={('arm','door','intact'):{}}):
-            self.assertEqual(native_physics.shape_region_permutation({},dict(node=0),payload),('door','intact'))
-        with patch.object(native_physics,'source_bodies',return_value={('arm','door','intact'):{},('arm','door','damaged'):{}}):
-            with self.assertRaisesRegex(ValueError,'unambiguous'):native_physics.shape_region_permutation({},dict(node=0),payload)
-
     def test_failed_bitmap_is_isolated_only_for_explicit_object_batches(self):
         from port_environment import native_validation
         images=[dict(source_bitmap='a',destination='a.tif'),dict(source_bitmap='b',destination='b.tif')]

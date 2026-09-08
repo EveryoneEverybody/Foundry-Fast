@@ -123,7 +123,7 @@ def author(row,payload):
         {'model','render_model','collision_model','physics_model','model_animation_graph'}]
     if (payload.get('physics') or {}).get('shapes'):
         from . import native_physics
-        report['physics']=native_physics.author(row)
+        report['physics']=native_physics.author(row,payload)
     return report
 
 
@@ -167,7 +167,7 @@ def validate(row,payload,animation_authoring=None):
                     item=dict(path=path,status='MANAGEDBLAM_OPENED')
                     if kind=='physics_model':
                         from . import native_physics
-                        item['authoring_readback']=native_physics.validate(dependency.tag,row)
+                        item['authoring_readback']=native_physics.validate(dependency.tag,row,payload)
                         bodies=dependency.tag.SelectField('Block:rigid bodies').Elements
                         if not bodies.Count:raise ValueError('Native physics contains no rigid bodies')
                         item['rigid_bodies']=bodies.Count

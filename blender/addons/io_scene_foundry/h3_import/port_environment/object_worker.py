@@ -46,6 +46,11 @@ def construct(row,payload,scene,mats,animations,report):
     from io_scene_foundry import utils
     from io_scene_foundry.h3_import.builder import BuildSession
     from io_scene_foundry.h3_import.core import shader_candidates
+    if (payload.get('physics') or {}).get('shapes'):
+        from .physics_association import bind, RULE
+        payload=deepcopy(payload)
+        payload['physics']['shapes']=bind(row['object_ir']['physics_authoring'],payload)
+        report['physics_association_rule']=RULE
     session=BuildSession(bpy.context,payload,row['asset'],reference_only=False,source_axes=True,emit_warnings=False)
     for _ in session.build():pass
     for mat in session.render_materials:
@@ -64,8 +69,8 @@ def construct(row,payload,scene,mats,animations,report):
         if ob.type!='MESH':continue
         if ob.get('h3_physics_source'):
             shape=json.loads(ob['h3_physics_source'])
-            from .native_physics import shape_region_permutation
-            region,permutation=shape_region_permutation(row['object_ir']['physics_authoring'],shape,payload)
+            _,region,permutation=shape['source_body_identity']
+            ob.name='h3_'+shape['source_shape_type']+'_'+str(shape['source_shape_index'])
             nwo=utils.get_scene_props()
             for table,name in ((nwo.regions_table,region),(nwo.permutations_table,permutation)):
                 if name not in {e.name for e in table}:table.add().name=name
@@ -78,7 +83,7 @@ def construct(row,payload,scene,mats,animations,report):
             name=object_ir.scalar(object_ir.field(material,'name'))
             if not name:raise ValueError('Source physics material has no identity')
             ob.nwo.global_material=name
-            report.setdefault('physics_authoring',[]).append(dict(source_shape=shape,global_material=name,
+            report.setdefault('physics_authoring',[]).append(dict(source_shape=shape,native_mesh_name=ob.name,global_material=name,
                 rebuild='Normal Foundry physics mesh -> Reach Tool; native rigid-body mass/inertia required during readback'))
         elif ob.data.nwo.mesh_type=='_connected_geometry_mesh_type_collision':
             for mat in ob.data.materials:

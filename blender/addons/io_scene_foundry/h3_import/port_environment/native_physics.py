@@ -1,4 +1,4 @@
-"""Preserve loose physics authoring by node/region/permutation identity."""
+"""Preserve physics authoring after source-indexed shape ownership readback."""
 from . import object_ir as ir, native_object_tags as fields
 
 
@@ -42,24 +42,14 @@ def native_bodies(tag):
     return result
 
 
-def shape_region_permutation(source,shape,payload):
-    """Use the decoded physics node to identify one authored rigid body."""
-    node=shape['node'];nodes=payload['physics']['nodes']
-    if node < -1 or node>=len(nodes):raise ValueError('Invalid physics shape node')
-    name=nodes[node]['name'] if node>=0 else None
-    matches=[k for k in source_bodies(source) if k[0]==name]
-    if len(matches)!=1:raise ValueError('Physics shape requires an unambiguous source body association')
-    _,region,permutation=matches[0]
-    if region is None or permutation is None:raise ValueError('Unassigned source physics region/permutation needs a separate authoring adapter')
-    return region,permutation
-
-
-def author(row):
+def author(row,payload):
     from io_scene_foundry.managed_blam import Tag
     source=row['object_ir']['physics_authoring'];expected=source_bodies(source)
     report=dict(bodies=[],materials=[],fields=[],runtime_status='NOT_TESTED',
         runtime_resource_policy='Tool rebuilds shapes, bounds, centers/inertia tensors and Havok resources; no H3 runtime bytes copied')
     with Tag(path=row['target_base']+'.physics_model',tag_must_exist=True) as tag:
+        from .physics_association import validate_native
+        report['shape_body_association']=validate_native(tag.tag,source,payload)
         actual=native_bodies(tag.tag)
         if expected.keys()!=actual.keys():raise ValueError('Native/source rigid-body identities differ')
         fields.copy_fields(source,tag.tag,ROOT_FIELDS,report['fields'])
@@ -82,7 +72,7 @@ def author(row):
     return report
 
 
-def validate(tag,row):
+def validate(tag,row,payload):
     source=source_bodies(row['object_ir']['physics_authoring']);native=native_bodies(tag)
     if source.keys()!=native.keys():raise ValueError('Native/source physics identities differ on readback')
     rows=[]
@@ -105,4 +95,6 @@ def validate(tag,row):
                 close(actual,expected,'physics '+name)
             result['fields'][name]=actual
         rows.append(result)
-    return dict(bodies=rows,status='AUTHORING_FIELDS_READBACK_VERIFIED',runtime_effective_mass='NOT_TESTED')
+    from .physics_association import validate_native
+    return dict(bodies=rows,status='AUTHORING_FIELDS_READBACK_VERIFIED',runtime_effective_mass='NOT_TESTED',
+        shape_body_association=validate_native(tag,row['object_ir']['physics_authoring'],payload))
