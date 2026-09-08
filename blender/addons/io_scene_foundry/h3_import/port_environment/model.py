@@ -220,6 +220,8 @@ def spawn_above_collision(meshes):
 
 
 def bitmap_strategy(bitmap):
+    if bitmap.get('status') == 'error':
+        raise ValueError('Source bitmap unavailable: ' + str(bitmap.get('error') or bitmap.get('preview_error') or 'Unspecified decoder error'))
     if (bitmap.get('image_count') != 1 or str(bitmap.get('type')).lower() != '2d texture'
             or bitmap.get('depth') != 1 or bitmap.get('index') != 0):
         raise ValueError('Only a single indexed 2D bitmap is supported in the box proof')

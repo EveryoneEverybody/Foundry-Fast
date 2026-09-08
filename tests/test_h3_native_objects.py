@@ -11,6 +11,35 @@ from port_environment import object_ir,native_object_tags as tags,native_placeme
 
 
 class ObjectContracts(unittest.TestCase):
+    def test_missing_bitmap_preserves_decoder_error_before_layout_admission(self):
+        from port_environment.model import bitmap_strategy
+        error='Missing dependency: objects/pallet_change color.bitmap: The system cannot find the file specified. (os error 2)'
+        with self.assertRaises(ValueError) as caught:
+            bitmap_strategy(dict(status='error',error=error,index=0))
+        self.assertEqual(str(caught.exception),'Source bitmap unavailable: '+error)
+        self.assertNotIn('indexed',str(caught.exception))
+
+    def test_structure_origin_reconstruction_preserves_source_and_spawn_policy(self):
+        records=[dict(name='placement flags',type='long flags',value='23',set_flags=[
+            'not automatically','lock type to env. object','lock transform to env. object','lock name to env. object']),
+            dict(name='object id',type='struct'),dict(name='source',type='char enum',value='structure'),
+            dict(name='unique id',type='long integer',value='9880800')]
+        row=dict(source_records=records,stored_pose_count=0)
+        before=deepcopy(row)
+        native=places.placement_records(row)
+        self.assertEqual(row,before)
+        self.assertEqual(places.first(native,'placement flags')['set_flags'],['not automatically'])
+        self.assertEqual(places.first(native,'source')['value'],'editor')
+        self.assertEqual(places.first(native,'unique id')['value'],'9880800')
+        row['source_records'][2]['value']='editor'
+        self.assertEqual(places.placement_records(row),row['source_records'])
+
+    def test_structure_origin_reconstruction_rejects_existing_environment_objects(self):
+        places.require_empty_environment_objects([dict(environment_objects=0,environment_object_palette=0)])
+        for counts in ([],[dict(environment_objects=1,environment_object_palette=0)],
+                       [dict(environment_objects=0,environment_object_palette=1)]):
+            with self.assertRaisesRegex(ValueError,'empty native BSP'):places.require_empty_environment_objects(counts)
+
     def test_receipt_reuse_rejects_modified_outputs_and_partial_accounting(self):
         from port_environment.object_receipts import verify_reuse
         plan=dict(plan_sha256='plan',objects=[dict(source_tag='source',target_tag='native',plan_status='READY_FOR_NATIVE')])

@@ -35,6 +35,36 @@ def spawn_summary(translation):
     return result
 
 
+def zone_constraints(translation, family, row):
+    """Describe source palette loading policy without asserting runtime existence."""
+    structure = translation['structure']
+    block_name = {'crates': 'crate', 'machines': 'machine', 'controls': 'control'}.get(family, family)
+    memberships = []
+    for designer in structure['designer_zones']:
+        block = next(r for r in designer['source_records'] if r['name'] == block_name)
+        indices = [int(next(r['value'] for r in element if r['name'] == 'palette index').split(',')[-1])
+            for element in block['elements']]
+        if row['source_palette_index'] in indices:
+            memberships.append(dict(source_index=designer['source_index'], name=designer['name']))
+    membership_mask = sum(1 << r['source_index'] for r in memberships)
+    zones = []
+    for zone in structure['zone_sets']:
+        fields = zone['source_fields']
+        required = int(fields['required designer zones'])
+        forbidden = int(fields['forbidden designer zones'])
+        policy = ('UNZONED_PALETTE' if not membership_mask else
+            'REQUIRED' if required & membership_mask else
+            'ALL_MEMBERSHIPS_FORBIDDEN' if forbidden & membership_mask == membership_mask else
+            'OPTIONAL_OR_INACTIVE')
+        bsp = row['source_origin_bsp']
+        zones.append(dict(name=zone['target_name'], index=zone['target_index'],
+            bsp_mask=zone['target_bsp_mask'], required_designer_mask=required,
+            forbidden_designer_mask=forbidden, palette_policy=policy,
+            source_origin_bsp_in_zone=bool(zone['source_bsp_mask'] & (1 << bsp)) if bsp >= 0 else None))
+    return dict(designer_memberships=memberships, zone_sets=zones,
+        caveat='Source origin BSP is a location hint; palette policy, placement flags and live zone state must all be checked. No runtime acceptance is inferred.')
+
+
 def fixture(translation, objects, family, source_index):
     if family not in CHECKS:
         raise ValueError('Only scenery, crates, machines and controls are runtime fixture families')
@@ -57,6 +87,8 @@ def fixture(translation, objects, family, source_index):
               'source_origin_bsp', 'bsp_policy', 'source_manual_bsp_mask', 'device_groups',
               'parent', 'stored_pose_count', 'stored_pose_status', 'classification')
     result = {k: deepcopy(row.get(k)) for k in fields}
+    if row.get('native_origin'):
+        result['native_origin'] = deepcopy(row['native_origin'])
     result.update(id=f'{family}:{source_index}', family=family, source_tag=palette['source_tag'],
         target_tag=palette['target_tag'], source_placement_flags=placement_flags(row),
         tool_status='TOOL_COMPILED', native_status='NATIVE_READBACK_VERIFIED',
@@ -64,6 +96,7 @@ def fixture(translation, objects, family, source_index):
         checks={k: dict(status=PENDING, observations=[]) for k in CHECKS[family]})
     result['spawn_policy'] = ('EXPLICIT_SOURCE_SPAWN_REQUIRED'
         if 'not automatically' in result['source_placement_flags'] else 'AUTOMATIC_FLAG_ELIGIBLE')
+    result['zone_constraints'] = zone_constraints(translation, family, row)
     result['relationships'] = [deepcopy(r) for r in translation['compiled_relationships']
         if (family == 'controls' and r['source_control_index'] == source_index)
         or (family == 'machines' and r['source_machine_index'] == source_index)]

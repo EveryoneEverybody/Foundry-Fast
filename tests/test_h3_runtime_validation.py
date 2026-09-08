@@ -71,6 +71,22 @@ class RuntimeEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Duplicate'):
             runtime.blocker_yield(t, blockers*2)
 
+    def test_all_bsp_mask_does_not_override_designer_exclusion(self):
+        designer = dict(source_index=2, name='doors', source_records=[dict(name='machine',
+            elements=[[dict(name='palette index', value=',1')]])])
+        def zone(name, mask, required, forbidden):
+            return dict(target_name=name, target_index=0, source_bsp_mask=mask, target_bsp_mask=mask,
+                source_fields={'required designer zones': str(required), 'forbidden designer zones': str(forbidden)})
+        t = dict(structure=dict(designer_zones=[designer],
+            zone_sets=[zone('all', 255, 0, 32767), zone('intro_faa', 3, 4, 32763)]))
+        result = runtime.zone_constraints(t, 'machines', dict(source_palette_index=1, source_origin_bsp=1))
+        self.assertTrue(result['zone_sets'][0]['source_origin_bsp_in_zone'])
+        self.assertEqual(result['zone_sets'][0]['palette_policy'], 'ALL_MEMBERSHIPS_FORBIDDEN')
+        self.assertEqual(result['zone_sets'][1]['palette_policy'], 'REQUIRED')
+        result = runtime.zone_constraints(t, 'machines', dict(source_palette_index=8, source_origin_bsp=-1))
+        self.assertEqual(result['zone_sets'][0]['palette_policy'], 'UNZONED_PALETTE')
+        self.assertIsNone(result['zone_sets'][0]['source_origin_bsp_in_zone'])
+
 
 if __name__ == '__main__':
     unittest.main()

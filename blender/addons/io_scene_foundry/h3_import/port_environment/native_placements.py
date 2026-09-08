@@ -116,16 +116,58 @@ def verify_xml(rows,target,names):
         if actual!=expected:raise ValueError('Native scenario field differs: '+name)
 
 
-def object_element(element,row):
-    s=element.SelectField;records=row['source_records']
-    s('type').Value=row['target_palette_index'];s('name').Value=row['source_object_name_index']
-    data=s('object data').Elements[0]
-    flags=deepcopy(first(records,'placement flags'))
-    # No packed H3 runtime orientations enter native tags. The visible default
-    # skeleton and exact world transform remain source-authored.
+def placement_records(row):
+    """Reconstruct source structure objects as independent native placements.
+
+    The environment compiler does not author BSP environment-object identities.
+    Keeping source=structure makes Reach discard these scenario placements as
+    deleted environment objects. Source IDs and flags remain untouched in IR.
+    Callers must first verify the empty native environment-object contract.
+    """
+    records=deepcopy(row['source_records'])
+    origin=first(section(records,'object id'),'source')
+    flags=first(records,'placement flags')
+    if origin['value']=='structure':
+        origin['value']='editor'
+        locks={'lock name to env. object','lock type to env. object','lock transform to env. object'}
+        flags['set_flags']=[n for n in flags['set_flags'] if native_object_tags.normalized(n) not in locks]
     if row['stored_pose_count']:
         flags['set_flags']=[n for n in flags['set_flags'] if native_object_tags.normalized(n)!='store orientations']
-        if not flags['set_flags']:flags['value']='0'
+    if not flags['set_flags']:flags['value']='0'
+    return records
+
+
+def require_empty_environment_objects(counts):
+    if not counts or any(r['environment_objects'] or r['environment_object_palette'] for r in counts):
+        raise ValueError('Structure placement reconstruction requires empty native BSP environment-object tables')
+
+
+def structure_origin_contract(tag,translation):
+    from io_scene_foundry.managed_blam import Tag
+    affected=[dict(family=f,source_index=r['source_index'],target_index=r['target_index'])
+        for f in SUPPORTED for r in translation['families'][f]['placements']
+        if r['native_status']=='READY' and first(section(r['source_records'],'object id'),'source')['value']=='structure']
+    if not affected:return dict(placements=[],bsps=[])
+    counts=[]
+    for e in tag.tag.SelectField('structure bsps').Elements:
+        path=e.SelectField('structure bsp').Path
+        if path is None:raise ValueError('Native BSP identity absent for structure placement reconstruction')
+        with Tag(path=str(path.RelativePathWithExtension),tag_must_exist=True) as bsp:
+            counts.append(dict(path=str(path.RelativePathWithExtension),
+                environment_objects=bsp.tag.SelectField('environment objects').Elements.Count,
+                environment_object_palette=bsp.tag.SelectField('environment object palette').Elements.Count))
+    require_empty_environment_objects(counts)
+    return dict(placements=affected,bsps=counts,rule='SOURCE_STRUCTURE_TO_NATIVE_EDITOR',
+        source_provenance='Original object ID, origin BSP and placement flags retained in source_records')
+
+
+def object_element(element,row):
+    s=element.SelectField;records=placement_records(row)
+    s('type').Value=row['target_palette_index'];s('name').Value=row['source_object_name_index']
+    data=s('object data').Elements[0]
+    flags=first(records,'placement flags')
+    # No packed H3 runtime orientations enter native tags. The visible default
+    # skeleton and exact world transform remain source-authored.
     xml_write(data.SelectField('placement flags'),flags)
     data.SelectField('position').Data=row['position_world']
     data.SelectField('rotation').Data=row['rotation_degrees']
@@ -156,6 +198,7 @@ def object_element(element,row):
 def configure(tag,translation,environment,*,defer_zone_switches=False):
     s=tag.tag.SelectField
     report=dict(families={},runtime_status='NOT_TESTED',designer_zones=[])
+    report['structure_origin_contract']=structure_origin_contract(tag,translation)
     names=s('object names');names.RemoveAllElements()
     for row in translation['object_names']:
         e=names.AddElement();e.SelectField('name').SetStringData(row['name'])
@@ -174,11 +217,15 @@ def configure(tag,translation,environment,*,defer_zone_switches=False):
             if row['native_status']!='READY':continue
             element=block.AddElement()
             report['families'][family].append(object_element(element,row))
+            if first(section(row['source_records'],'object id'),'source')['value']=='structure':
+                row['native_origin']=dict(source='structure',target='editor',rule='SOURCE_STRUCTURE_TO_NATIVE_EDITOR')
             ni=row['source_object_name_index']
             if ni>=0:
                 e=names.Elements[ni]
-                # Object-name type uses the same native object-kind table as
-                # the typed placement ID; source numeric kind is never reused.
+                # Native postprocessing rebuilds these reverse lookup indices
+                # from placement names. ManagedBlam reloads them as -1; they
+                # are not stable authoring fields or a runtime acceptance gate.
+                # The forward placement name/index is validated below.
                 kind=element.SelectField('object data[0]/object id[0]/type').Value
                 e.SelectField('object_type').Value=kind;e.SelectField('scenario_datum_index').Value=row['target_index']
     for zone in environment['selection']['designer_zones']:
@@ -257,6 +304,9 @@ def validate(tag,translation,environment,*,defer_zone_switches=False):
             e=block.Elements[row['target_index']];d=e.SelectField('object data').Elements[0]
             if int(e.SelectField('type').Value)!=row['target_palette_index'] or int(e.SelectField('name').Value)!=row['source_object_name_index']:
                 raise ValueError('Native placement identity differs')
+            records=placement_records(row)
+            verify_xml(records,d,('placement flags',))
+            verify_xml(section(records,'object id'),d.SelectField('object id').Elements[0],('unique id','origin bsp index','type','source'))
             for name,expected in [('position',row['position_world']),('rotation',row['rotation_degrees']),('scale',[row['scale']])]:
                 value=d.SelectField(name).Data;actual=[value] if name=='scale' else list(value)
                 if any(not math.isclose(a,b,abs_tol=2e-4,rel_tol=1e-6) for a,b in zip(actual,expected)):

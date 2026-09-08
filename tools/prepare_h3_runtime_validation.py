@@ -43,6 +43,13 @@ def markdown(report):
         for group in f['group_authoring']:
             flags = [r.get('set_flags', []) for r in group['source_records'] if r['name'] == 'flags']
             lines += ['', f"Group {group['source_index']} initial value `{group['initial_value']}`; flags `{flags}`. Reset the scenario before repeating a one-change group test."]
+        zones = f['zone_constraints']
+        lines += ['', f"Designer memberships: `{zones['designer_memberships']}`.", '',
+            '| Authored zone | BSP mask | Palette policy | Source origin BSP included |',
+            '|---|---:|---|---|']
+        lines += [f"| {z['name']} | {z['bsp_mask']} | {z['palette_policy']} | {z['source_origin_bsp_in_zone']} |"
+            for z in zones['zone_sets']]
+        lines += ['', zones['caveat']]
     lines += ['', '## Reusable blocker populations', '',
         'Potential affected placements are not guaranteed unlocks; exact per-root reasons remain in JSON.', '',
         '| Class | Roots | Source placements |', '|---|---:|---:|']
