@@ -40,6 +40,19 @@ def gr2_values(variant):
     return result
 
 
+def attenuation_enablement(source_flags, exported_modes):
+    """Keep disabled H3 ranges distinct from the numbers stored beside them."""
+    source = sorted({bool(int(flags) & 1) for flags in source_flags})
+    exported = sorted(set(exported_modes))
+    if not source or not exported or any(mode not in (0, 1) for mode in exported):
+        raise ValueError('Missing/invalid material attenuation enablement')
+    mismatch = source != [bool(mode) for mode in exported]
+    return dict(source_use_attenuation=source, gr2_attenuation_enabled=exported,
+        native_bit_zero='reserved{use attenuation}',
+        status='TARGET_DISABLED_BEHAVIOR_REQUIRES_VERIFICATION' if mismatch else 'ENABLEMENT_MATCH',
+        numeric_range_equality_proves_enablement=False)
+
+
 def audit(args):
     plan = json.loads(args.plan.read_text())
     baseline = json.loads(args.baseline_report.read_text())
@@ -79,6 +92,7 @@ def audit(args):
         for index, bindings in sorted(by_index.items()):
             n = native_rows[index]
             matched = []
+            attenuation_modes = set()
             target = bindings[0]['target']
             for binding in bindings:
                 if binding['target'] != target or any(not close(n[k], v) for k, v in binding['expected'].items()):
@@ -90,6 +104,7 @@ def audit(args):
                     fields = gr2_values(variant)
                     if all(close(fields[k], v) for k, v in n.items() if k != 'flags') and fields['flags'] == n['flags']['value']:
                         covered_variants.add((mesh_index, variant_index))
+                        attenuation_modes.add(variant['fields']['bungie_lighting_attenuation_enabled'][0])
                         matched.append(dict(mesh=mesh['mesh'], triangles=variant['triangles'], fields=fields))
             if not matched:
                 raise ValueError('Native emissive row lacks matching GR2 triangle annotations')
@@ -109,19 +124,26 @@ def audit(args):
             rows.append(dict(source_bsp_index=bsp['source_index'], source_bsp=bsp['source_tag'],
                 source=source, target_shader=target, native_material_info_index=index,
                 native_material_slots=native_slots, native_fields=n, gr2_meshes=matched,
+                attenuation_enablement=attenuation_enablement(
+                    [s['source_fields']['flags'] for s in source], attenuation_modes),
                 unique_exported_triangle_count=sum(m['triangles'] for m in matched), status='MATCH'))
         expected_variants = {(i,j) for i,m in enumerate(exported['meshes']) for j,v in enumerate(m['variants'])
                              if gr2_values(v)['emissive power'] > 0}
         if covered_variants != expected_variants:
             raise ValueError('Positive GR2 annotations are not fully accounted for')
-    return dict(format='foundry.environment-emissive-path-audit', version=1, status='MATCH',
+    warnings = [dict(source_bsp_index=r['source_bsp_index'], native_material_info_index=r['native_material_info_index'],
+        **r['attenuation_enablement']) for r in rows if r['attenuation_enablement']['status'] != 'ENABLEMENT_MATCH']
+    return dict(format='foundry.environment-emissive-path-audit', version=2,
+        status='VALUE_MATCH_WITH_SEMANTIC_REVIEW_REQUIRED' if warnings else 'MATCH',
+        semantic_warnings=warnings,
         unique_native_positive_rows=len(rows), source_material_slots=sum(len(r['source']) for r in rows), rows=rows,
         inputs=dict(plan=dict(path=str(args.plan),sha256=sha(args.plan)),
             baseline_report=dict(path=str(args.baseline_report),sha256=sha(args.baseline_report)),
             gr2_report=dict(path=str(args.gr2_report),sha256=sha(args.gr2_report)),
             helper=dict(path=str(args.helper),sha256=sha(args.helper)), captures=captures),
         limitations=['GR2 triangle counts do not expand repeated model placements.',
-                    'Input identity and value agreement does not establish illumination or cache invalidation.'])
+                    'Input identity and value agreement does not establish illumination or cache invalidation.',
+                    'H3 disabled attenuation requires target behavior verification; no numeric range or flag copy is inferred.'])
 
 
 if __name__ == '__main__':
