@@ -24,7 +24,7 @@ respond to shots, move and collide with each other.
 
 The follow-up observation is
 `D:\HaloRE\PortCensus\voi_player_interaction_20260908_02\door-player-observation.json`.
-It retains the user's exact statement and binds it to the unchanged active
+It retains the user's exact statement and binds it to the unchanged tested
 scenario copy and source/native fixture indices. A live query after that test
 returned control 1, machine 1, deathless false and zone index 2 (`faa_lakea`).
 This accepts the selected fixture checks, not every translated door or zone.
@@ -110,7 +110,9 @@ TagPlay must run with its working directory set to the HREK root.
 
 ## Repeatable runtime sequence
 
-For the session's `runtime_interaction_04` copy, launch from the safe intro:
+The tested `runtime_interaction_04` copy was unloaded and restored after the
+manual tests. For a fresh copy prepared above, substitute its namespace and
+launch from the safe intro. The session used:
 
 ```text
 game_initial_zone_set intro
@@ -181,13 +183,21 @@ Session evidence is under
 - `runtime-events.jsonl`: timestamps, exact commands, scenario hashes and images.
 - Images 17–20: repeated damage, restored normal health, trigger membership and
   untouched closed device endpoints.
-- `fixture-05/fixture-manifest.json`: the currently tested copy, SHA-256
+- `fixture-05/fixture-manifest.json`: the tested copy, SHA-256
   `ba84f871bb8043c69a2832494964b1882bf7d1642a6a71bb4a447668993119a9`.
+- `fixture-05/restore-receipt.json`: exact diagnostic scenario removed after
+  unloading; the original main hash remained unchanged.
 - `harness-guards-validation.json`: stronger pose checks applied to all three
   successful copies and exact source startup calls checked against installed H3.
 
 The five focused guard tests exercise unexpected native edits, incorrect poses,
 source-script drift and guarded cleanup. They do not establish runtime collision.
+
+The follow-up directory `D:\HaloRE\PortCensus\voi_player_interaction_20260908_02`
+contains both manual observation records, captures of the original main loaded
+again, and `preservation-final.json`. All 2,659 full-scenario files, 986 Factory A
+files, 50 proof_box files, eight protected files and the H3 source scenario match
+the startup snapshot. The diagnostic files remain archived outside the kits.
 
 ```powershell
 python -m unittest discover -s tests -p test_h3_player_interaction.py -v

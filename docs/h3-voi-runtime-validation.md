@@ -106,9 +106,17 @@ deaths by applying the two original Voi startup `kill_volume_disable` calls in
 an isolated scenario copy. The user then confirmed normal door-button use,
 animation, closed-door blocking and open-door traversal. Live read-only queries
 of the selected switch and machine both returned 1 with deathless false.
-Collision during panel motion, measured animation duration and crate response
-remain separate pending checks. See
+The follow-up manual test confirms collision follows the moving panels, blocks
+the player at the panels and permits passage through the open aperture during
+motion. Cinderblocks respond to shooting, move and bump each other. Animation
+duration, all-node participation, crate player contact, settling, create-at-rest
+and stored-pose fidelity remain separate pending checks. See
 [h3-voi-player-interaction.md](h3-voi-player-interaction.md) and the exact manual
 observation under
 `D:\HaloRE\PortCensus\voi_player_interaction_20260908_02\door-player-observation.json`.
+The moving-collision and crate evidence is in
+`D:\HaloRE\PortCensus\voi_player_interaction_20260908_02\moving-collision-and-crate-observation.json`.
 The main scenario and the `SOURCE_STRUCTURE_TO_NATIVE_EDITOR` repair are intact.
+The temporary interaction copy was unloaded and removed with a hash-checked
+restore receipt. Subsequent physics coverage uses separately named objects and
+a 737-placement candidate; see [h3-physics-association.md](h3-physics-association.md).
