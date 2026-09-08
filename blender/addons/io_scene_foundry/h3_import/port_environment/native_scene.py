@@ -29,6 +29,33 @@ def polygon_record(points, triangles, mesh_type):
         triangles=[dict(vertices=t,material=0) for t in triangles],mesh_type=mesh_type)
 
 
+def repair_seam_ownership(scene, plan, report):
+    """Repair only metadata on a hash-verified saved source scene."""
+    import bpy
+    provenance=bpy.data.texts.get('H3 accepted environment provenance')
+    if not provenance or json.loads(provenance.as_string())['plan_sha256']!=plan['plan_sha256']:
+        raise ValueError('Saved scene does not carry the accepted source plan')
+    rows=[]
+    for seam in plan['seams']:
+        if seam.get('selected_state'):continue
+        ob=scene.objects.get('h3_seam_'+str(seam['source_index']))
+        if ob is None or ob.get('h3_port_role')!='seam':raise ValueError('Saved source seam is absent')
+        expected=polygon_record(seam['vertices_world'],seam['triangles'],'_connected_geometry_mesh_type_seam')
+        if (ob.data.nwo.mesh_type!=expected['mesh_type'] or len(ob.data.vertices)!=len(expected['vertices']) or
+                [list(p.vertices) for p in ob.data.polygons]!=seam['triangles'] or
+                any(abs(ob.matrix_world[r][c]-(r==c))>1e-7 for r in range(4) for c in range(4))):
+            raise ValueError('Saved seam geometry/type/transform differs from source')
+        error=max(abs(v.co[i]-e['position'][i]) for v,e in zip(ob.data.vertices,expected['vertices']) for i in range(3))
+        if error>.01:raise ValueError('Saved seam coordinates differ beyond float32 rounding')
+        owners=native_contracts.seam_owner_order(seam,plan['bsps'])
+        regions=[next(b['region'] for b in plan['bsps'] if b['source_index']==o['source_bsp_index']) for o in owners]
+        rows.append(dict(source_seam=seam['source_index'],owners=owners,maximum_rounding_ass=error,
+            previous_front=ob.nwo.region_name,previous_back=ob.nwo.seam_back,front=regions[0],back=regions[1]))
+        ob.nwo.region_name=regions[0];ob.nwo.seam_back=regions[1];ob.nwo.seam_back_manual=False
+    report['seam_orientation']=rows
+    report['scene_resume_changes']='Seam front/back BSP metadata only; source vertices, triangles and winding retained'
+
+
 def render_properties(ob, record, parts, material_rows, source_materials):
     # A part owns a shader slot. The decoder preserves this assignment even
     # when degenerate indices were removed during triangle reconstruction.
@@ -179,7 +206,7 @@ def construct(scene, plan, config, mats, report, mesh_object):
         bmats = []
         for row in material_rows:
             if row.get('special') == 'sky':
-                bmats.append(bpy.data.materials.new('+sky'+str(bsp['default_sky'])))
+                bmats.append(bpy.data.materials.new(row['name']))
             else:
                 bmats.append(mats.get(row.get('source_shader'),default))
         count = dict(region=region,base_meshes=0,placements=0,collision_only_placements=0,unified_breakable_placements=0)
@@ -308,7 +335,9 @@ def construct(scene, plan, config, mats, report, mesh_object):
     for seam in plan['seams']:
         if seam.get('selected_state'):
             continue
-        owners=[next(b for b in plan['bsps'] if b['source_index']==o['source_bsp_index']) for o in seam['owners']]
+        orientation=native_contracts.seam_owner_order(seam,plan['bsps'])
+        report.setdefault('seam_orientation',[]).append(dict(source_seam=seam['source_index'],owners=orientation))
+        owners=[next(b for b in plan['bsps'] if b['source_index']==o['source_bsp_index']) for o in orientation]
         if len(owners)!=2:
             raise ValueError('Native active seam does not have exactly two selected owners')
         record=polygon_record(seam['vertices_world'],seam['triangles'],'_connected_geometry_mesh_type_seam')

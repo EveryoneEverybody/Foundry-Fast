@@ -77,11 +77,16 @@ def retained_boundary(tag, raw, bsp, seam):
         area_vector=actual,status='VERIFIED_EXTANT_COLLISION',active_connection=False,added_geometry=False)
 
 
-def validate(plan, report):
+def validate(plan, report, *, collect_transform_errors=False):
     from io_scene_foundry.managed_blam import Tag
     from io_scene_foundry.managed_blam.scenario import ScenarioTag
-    world=dict(bsps=[],designs=[],skies=[],seams=[])
+    world=dict(bsps=[],designs=[],skies=[],seams=[],transform_errors=[])
     report['native_world_readback']=world
+    def transform(actual,expected,label):
+        try:close(actual,expected,label)
+        except ValueError as exc:
+            if not collect_transform_errors:raise
+            world['transform_errors'].append(dict(label=label,actual=list(actual),expected=list(expected),failure=str(exc)))
     with ScenarioTag(path=plan['target']['scenario'],tag_must_exist=True) as tag:
         full = plan.get('selection', {}).get('scope') == 'FULL_SCENARIO'
         if full:
@@ -123,9 +128,10 @@ def validate(plan, report):
                 name=bsp['region']+'_'+str(p['source_index'])+'_'+p['name'].lstrip('!?@')
                 if name not in by_name:raise ValueError('Native source instance absent: '+name)
                 e=by_name[name];scale=float(e.SelectField('scale').Data)
-                close(e.SelectField('position').Data,[p['matrix'][i][3]/100 for i in range(3)],name+' origin')
+                errors_before=len(world['transform_errors'])
+                transform(e.SelectField('position').Data,[p['matrix'][i][3]/100 for i in range(3)],name+' origin')
                 for column,axis in enumerate(('forward','left','up')):
-                    close([v*scale for v in e.SelectField(axis).Data],[p['matrix'][i][column] for i in range(3)],name+' '+axis)
+                    transform([v*scale for v in e.SelectField(axis).Data],[p['matrix'][i][column] for i in range(3)],name+' '+axis)
                 policy=e.SelectField('imposter policy')
                 if str(policy.Items[policy.Value].EnumName)!='never':
                     raise ValueError('Native instance requires an ungenerated imposter: '+name)
@@ -137,7 +143,7 @@ def validate(plan, report):
                     raise ValueError('Native instance collision presence differs from source: '+name)
                 item=dict(source_placement=p['source_index'],source_definition=p['source_definition'],name=name,
                     native_placement=e.ElementIndex,native_definition=index,collision_surfaces=surfaces.Count,
-                    imposter_policy='never',transform='VERIFIED')
+                    imposter_policy='never',transform='VERIFIED' if len(world['transform_errors'])==errors_before else 'UNRESOLVED_NATIVE_DIFFERENCE')
                 proof=proofs.get(p['source_definition'],{})
                 if proof and not proof.get('partition'):
                     if not surfaces.Count or any(not s.SelectField('flags').TestBit('breakable') for s in surfaces):
@@ -171,7 +177,10 @@ def validate(plan, report):
             surface_count=sum(b.SelectField('Block:surfaces').Elements.Count for b in [*collision,*large])
             if not surface_count:raise ValueError('Native BSP has no collision surfaces')
             skies=[e.SelectField('scenario sky index').Data for e in tag.tag.SelectField('Block:clusters').Elements]
-            if any(i not in {-1,bsp['default_sky']} for i in skies):raise ValueError('Unexpected native cluster sky identity')
+            sky_map={s['source_index']:s['target_index'] for s in plan['selection']['skies']}
+            source_skies={int(c['scenario sky index']) for c in bsp['authoring']['clusters']}
+            allowed_skies={-1,bsp['default_sky']}|{sky_map[i] for i in source_skies if i>=0}
+            if any(i not in allowed_skies for i in skies):raise ValueError('Unexpected native cluster sky identity')
             bounds=[list(tag.tag.SelectField('world bounds '+axis).Data) for axis in 'xyz']
             if any(len(v)!=2 or not all(math.isfinite(x) for x in v) or v[0]>=v[1] for v in bounds):
                 raise ValueError('Invalid native world bounds')
@@ -182,7 +191,7 @@ def validate(plan, report):
             inactive=[retained_boundary(tag.tag,raw,bsp,s) for s in plan['seams'] if s.get('selected_state') and
                 any(o['source_bsp_index']==bsp['source_index'] for o in s['owners'])]
             world['bsps'].append(dict(source=bsp['source_tag'],path=bsp['destination'],placements=placements,
-                collision_surfaces=surface_count,cluster_skies=skies,seam_ownership=seams,
+                collision_surfaces=surface_count,cluster_skies=skies,source_cluster_skies=sorted(source_skies),seam_ownership=seams,
                 inactive_seam_collision=inactive,
                 world_bounds=bounds,source_world_bounds=[b['values'] for b in bsp['authoring']['world_bounds']],
                 bounds_strategy='Reach Tool rebuilds structure bounds; instance bounds and transforms remain separate',
@@ -236,4 +245,5 @@ def validate(plan, report):
         with Tag(path=path+'.model',tag_must_exist=True) as tag:
             p=tag.tag.SelectField('ShortEnum:imposter policy')
             if str(p.Items[p.Value].EnumName)!='never':raise ValueError('Native sky requires an ungenerated imposter')
-    world['status']='VERIFIED_NATIVE_AUTHORING'
+    world['status']='FAILED_TRANSFORM_READBACK' if world['transform_errors'] else 'VERIFIED_NATIVE_AUTHORING'
+    if world['transform_errors']:raise ValueError(str(len(world['transform_errors']))+' native instance transform components differ; all differences retained')

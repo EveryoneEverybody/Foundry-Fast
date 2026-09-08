@@ -83,3 +83,26 @@ JMA reference/end frame. Reimport is required before the door is accepted.
 The checked stock Reach crate and door physics tags also store zero in loose
 mass fields; this is not evidence of runtime effective mass. Physical behavior
 remains untested. Ten focused object checks and 22 compiler checks passed.
+
+The corrected door reimport now passes: 13 native nodes and 100 codec frames
+from 101 source JMA samples at 30 fps. The switch and door both pass native
+model-chain readback and Tool XML export. Loose physics authoring now matches
+rigid bodies by node/region/permutation identity and preserves named motion,
+size, damping and inertia-scale settings plus source material identities.
+
+All nine BSP references, nineteen source zone masks, eight designs and ten
+seam owner/geometry relationships have native readback evidence. Global seam
+front ownership follows the original collision-cap normals. An owned saved
+scene can be re-exported after that metadata repair without reconstructing
+the source geometry. Native structural acceptance is still blocked by 76
+Tool diagnostics (33 open edges, 31 degenerate triangles and 12 overlaps)
+and one instance scale mismatch (three matrix components). These remain
+explicit failures; collision is not removed and tolerances are not widened.
+Faux and live runtime acceptance have not passed for the full target.
+
+Object batches defer failed material dependencies per asset so unrelated
+native objects can continue. The Reach material-model adapter does not admit
+the H3 MCC statue's `cook_torrance_pbr_maps`; it is deferred rather than
+silently using the node group's default BRDF. Thirty-nine focused checks
+passed after the seam/physics changes. Full object/placement results follow
+in the final native delivery report.

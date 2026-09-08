@@ -1,5 +1,32 @@
 """Pure lowering of accepted source semantics into Foundry authoring contracts."""
 from copy import deepcopy
+import math
+
+
+def seam_owner_order(seam, bsps):
+    """Match native front ownership to the preserved source collision winding."""
+    def normal(points):
+        a,b,c=points[:3];u=[y-x for x,y in zip(a,b)];v=[y-x for x,y in zip(a,c)]
+        n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
+        length=math.sqrt(sum(x*x for x in n))
+        if length<=1e-12:raise ValueError('Degenerate source seam normal')
+        return [x/length for x in n]
+    direction=normal([seam['vertices_world'][i] for i in seam['triangles'][0]])
+    rows=[]
+    for owner in seam['owners']:
+        bsp=next(b for b in bsps if b['source_index']==owner['source_bsp_index'])
+        meshes=[m for m in bsp['meshes'] if m['role']=='collision'];dots=[]
+        for mesh in meshes:
+            for t in mesh['triangles']:
+                if t.get('surface_type')!='seam' or bsp['materials'][t['material']].get('source_seam_mapping')!=seam['source_index']:continue
+                n=normal([mesh['vertices'][i]['position'] for i in t['vertices']])
+                dots.append(sum(x*y for x,y in zip(direction,n)))
+        if not dots or any(abs(d)<.999 for d in dots) or min(dots)*max(dots)<0:
+            raise ValueError('Source seam/collision-cap orientation is absent or ambiguous')
+        rows.append(dict(source_bsp_index=bsp['source_index'],alignment=dots,side='front' if dots[0]>0 else 'back'))
+    if len(rows)!=2 or {r['side'] for r in rows}!={'front','back'}:raise ValueError('Source seam must have opposing collision-cap owners')
+    rows.sort(key=lambda r:r['side']!='front')
+    return rows
 
 
 def material(row):

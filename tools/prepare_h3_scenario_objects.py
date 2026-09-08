@@ -35,6 +35,11 @@ def merge_materials(base,extra,base_dir,extra_dir,output,needed):
 def material(source,shader,manifest,namespace):
     errors=[];decisions=[];bits={}
     categories=semantics.options(shader)
+    # Native ShaderTag.MaterialModel has these seven options; the two source
+    # BRDF approximations are explicitly handled by native_contracts.material.
+    if shader.get('group')=='rmsh' and categories.get('material_model') not in {
+        'diffuse_only','cook_torrance','two_lobe_phong','foliage','none','organism','hair','single_lobe_phong','glass'}:
+        errors.append('Reach has no admitted material-model adapter: '+str(categories.get('material_model')))
     decal=(shader.get('group')=='rmd ' and categories.get('albedo')=='diffuse_only'
         and categories.get('blend_mode') in {'opaque','alpha_blend','multiply'}
         and categories.get('render_pass')=='pre_lighting' and categories.get('specular') in {'leave','modulate'}

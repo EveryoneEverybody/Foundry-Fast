@@ -317,7 +317,9 @@ def materials(plan, config, paths, report):
         result[row['source_shader']] = target
     if material_errors:
         report['material_errors'] = material_errors
-        raise ValueError('Native material staging has unresolved bindings: '+json.dumps(material_errors))
+        if not config.get('defer_material_failures'):
+            raise ValueError('Native material staging has unresolved bindings: '+json.dumps(material_errors))
+        for error in material_errors:result.pop(error['source'],None)
     timings['materials']=time.perf_counter()-began
     began=time.perf_counter()
     # Export each usage-specific staged image once; several shaders share the
@@ -349,12 +351,19 @@ def materials(plan, config, paths, report):
                                   source_bitmap=i.get('h3_source_bitmap')) for i in dict.fromkeys(stager.images.values())]
     timings['bitmaps']+=time.perf_counter()-began
     began=time.perf_counter()
-    for target in result.values():
-        if plan['version']>=2:
-            from .native_materials import complete_tag
-            complete_tag(target,manifest,report,paths)
-        else:
-            build_shader(target, False)
+    for identity,target in list(result.items()):
+        try:
+            if plan['version']>=2:
+                from .native_materials import complete_tag
+                complete_tag(target,manifest,report,paths)
+            else:
+                build_shader(target, False)
+        except Exception as exc:
+            if not config.get('defer_material_failures'):raise
+            material_errors.append(dict(source=identity,stage='native shader authoring',reason=str(exc),traceback=traceback.format_exc()))
+            result.pop(identity)
+            print('Deferred native material '+identity+': '+str(exc),flush=True)
+    if material_errors:report['material_errors']=material_errors
     report['material_staging'] = stager.results
     timings['materials']+=time.perf_counter()-began
     began=time.perf_counter()
@@ -715,7 +724,7 @@ def main():
     addon = Path(__file__).resolve().parents[2]
     report = dict(format='foundry.h3-reach-environment.worker', version=1, builder_version=BUILDER_VERSION,
                   status='BUILDING', stage='bootstrap', tool_invocations=[], geometry=[], lighting_status='NOT_RUN')
-    if config.get('validation_only'):
+    if config.get('validation_only') or config.get('export_existing_scene'):
         from .resume import read, require_outputs
         require_outputs(paths.snapshot(),config['expected_outputs'])
         if digest(config['previous_worker_report'])!=config['previous_worker_sha256']:
@@ -724,9 +733,12 @@ def main():
         report['previous_profile']=report.pop('profile',None)
         report['interrupted_tool_intents']=[r for r in report['tool_invocations'] if r.get('exit_code') is None]
         report['tool_invocations']=[r for r in report['tool_invocations'] if r.get('exit_code')==0]
-        report.update(status='BUILDING',stage='validation resume bootstrap',validation_only=True,native_xml_validation=[])
+        report.update(status='BUILDING',stage='resume bootstrap',validation_only=bool(config.get('validation_only')),native_xml_validation=[])
         report.pop('failure',None)
         report.pop('traceback',None)
+        if config.get('export_existing_scene'):
+            report['tool_invocations']=[]
+            report.pop('geometry_tool_errors',None)
     flush = lambda: atomic_json(run/'worker-report.json', report)
     journal, profile = None, None
     try:
@@ -786,79 +798,24 @@ def main():
             require_outputs(paths.snapshot(),config['expected_outputs'])
             report['status']='COMPLETE'
             return
-        report['stage'] = 'materials'
-        flush()
-        # Stage/export materials while the scenario asset is current so every
-        # generated bitmap lives under the common proof namespace.
-        scene = setup_scene(paths.asset, 'scenario', paths.scenario+'.sidecar.xml', 'proof_box_bsp', project.name)
-        with profile.span('native Reach material and bitmap build'):
-            mats = materials(plan, config, paths, report)
-        if plan['version'] >= 2:
+        if config.get('export_existing_scene'):
             from . import native_scene
-            for sky in plan_skies(plan):
-                began=time.perf_counter()
-                report['stage'] = 'sky export'; flush()
-                sky_name=Path(sky['destination']).stem
-                sky_asset=sky['destination'].rsplit('/',1)[0]
-                sky_scene=setup_scene(sky_name,'sky',sky_asset+'/'+sky_name+'.sidecar.xml','default',project.name)
-                construct_sky(sky_scene,sky,mats,report)
-                sky_view=dict(plan,sky=sky,lighting=dict(plan['lighting'],sky=sky['lighting']))
-                sky_lights(sky_scene,sky_view)
-                report.setdefault('native_stage_seconds',{})['sky']=report.get('native_stage_seconds',{}).get('sky',0)+time.perf_counter()-began
-                export(sky_scene,paths,sky_asset,sky_name,report)
-                configure_sky_model(sky_view)
+            checkpoint=Path(config['export_existing_scene']).resolve(strict=True)
+            if digest(checkpoint)!=config['checkpoint_sha256']:raise ValueError('Saved source scene changed')
+            bpy.ops.wm.open_mainfile(filepath=str(checkpoint),load_ui=False)
+            scene=bpy.data.scenes.get(paths.asset)
+            if scene is None:raise ValueError('Saved source scenario scene is absent')
             bpy.context.window.scene=scene
-            report['stage']='BSP construction'; flush()
-            with profile.span('native multi-BSP construction'):
-                native_scene.construct(scene,plan,config,mats,report,mesh_object)
-            checkpoint=paths.destination('data',paths.asset+'.blend')
-            checkpoint.parent.mkdir(parents=True,exist_ok=True)
-            bpy.ops.wm.save_as_mainfile(filepath=str(checkpoint),check_existing=False)
-            report['construction_checkpoint']=dict(path=str(checkpoint),sha256=digest(checkpoint),
-                plan_sha256=plan['plan_sha256'],status='SOURCE_SCENE_SAVED_BEFORE_NATIVE_CONFIGURATION')
-            report['stage']='BSP and scenario export'; flush()
+            scene.nwo.scene_project=project.name
+            native_scene.repair_seam_ownership(scene,plan,report)
+            report['stage']='BSP and scenario export';flush()
             configure_scenario(paths,plan)
-            # Rebuild instance import data along with the source-derived
-            # emissive material table. A previous partial build is not an
-            # authoritative cache for this accepted authoring snapshot.
             utils.get_export_props().import_force=True
             export(scene,paths,paths.namespace,paths.asset,report)
             configure_scenario(paths,plan)
-            for bsp in plan['bsps']:
-                lighting_path=bsp['destination'].rsplit('.',1)[0]+'.scenario_structure_lighting_info'
-                utils.run_tool(['export-tag-to-xml',str(paths.roots['tags']/lighting_path),
-                    str(run/(bsp['region']+'-lighting-before-static.xml'))],force_tool=True)
-            began=time.perf_counter()
             native_scene.write_static_lights(plan,report)
-            report.setdefault('native_stage_seconds',{})['lighting']=time.perf_counter()-began
         else:
-            report['stage'] = 'sky export'
-            flush()
-            bpy.context.window.scene = sky_scene
-            with profile.span('H3 sky construction and normal Reach export'):
-                _, stats = mesh_object(plan['sky']['mesh'], [mats[k] for k in plan['sky']['materials']],
-                                       sky_scene, 'default', 'h3_sky')
-                report['geometry'].append(stats)
-                sky_lights(sky_scene, plan)
-                export(sky_scene, paths, sky_asset, sky_name)
-                configure_sky_model(plan)
-            report['stage'] = 'BSP and scenario export'
-            flush()
-            bpy.context.window.scene = scene
-            with profile.span('H3 BSP construction and normal Reach export'):
-                bsp_materials = [mats.get(m['source_shader']) for m in plan['bsp']['materials']]
-                # Auxiliary collision slot has no H3 shader. Its render is disabled;
-                # use an owned native shader solely as a surface material definition.
-                collision_material = mats[plan['materials'][0]['source_shader']]
-                bsp_materials = [m or collision_material for m in bsp_materials]
-                for i, material in enumerate(plan['bsp']['materials']):
-                    if material.get('special') == 'sky':
-                        bsp_materials[i] = bpy.data.materials.new('+sky0')
-                for index, record in enumerate(plan['bsp']['meshes']):
-                    _, stats = mesh_object(record, bsp_materials, scene, 'proof_box_bsp', 'h3_bsp_'+str(index), record['role'])
-                    report['geometry'].append(stats)
-                configure_scenario(paths, plan)
-                export(scene, paths, paths.namespace, paths.asset)
+            build_source_scene(plan,config,paths,report,project,sky_scene,sky_asset,sky_name,profile,flush)
         journal.finish(wait=True)
         failed = [r for r in report['tool_invocations'] if r.get('exit_code')]
         if failed:
@@ -911,6 +868,85 @@ def main():
         flush()
     if report['status'] != 'COMPLETE':
         raise RuntimeError(report['failure'])
+
+
+def build_source_scene(plan, config, paths, report, project, sky_scene, sky_asset, sky_name, profile, flush):
+    """Construct source data once; native export resumes share the validation path."""
+    import bpy
+    from io_scene_foundry import utils
+    run=Path(config['run_directory'])
+    report['stage']='materials';flush()
+    # Stage/export materials while the scenario asset is current so every
+    # generated bitmap lives under the common proof namespace.
+    scene = setup_scene(paths.asset, 'scenario', paths.scenario+'.sidecar.xml', 'proof_box_bsp', project.name)
+    with profile.span('native Reach material and bitmap build'):
+        mats = materials(plan, config, paths, report)
+    if plan['version'] >= 2:
+        from . import native_scene
+        for sky in plan_skies(plan):
+            began=time.perf_counter()
+            report['stage'] = 'sky export'; flush()
+            sky_name=Path(sky['destination']).stem
+            sky_asset=sky['destination'].rsplit('/',1)[0]
+            sky_scene=setup_scene(sky_name,'sky',sky_asset+'/'+sky_name+'.sidecar.xml','default',project.name)
+            construct_sky(sky_scene,sky,mats,report)
+            sky_view=dict(plan,sky=sky,lighting=dict(plan['lighting'],sky=sky['lighting']))
+            sky_lights(sky_scene,sky_view)
+            report.setdefault('native_stage_seconds',{})['sky']=report.get('native_stage_seconds',{}).get('sky',0)+time.perf_counter()-began
+            export(sky_scene,paths,sky_asset,sky_name,report)
+            configure_sky_model(sky_view)
+        bpy.context.window.scene=scene
+        report['stage']='BSP construction'; flush()
+        with profile.span('native multi-BSP construction'):
+            native_scene.construct(scene,plan,config,mats,report,mesh_object)
+        checkpoint=paths.destination('data',paths.asset+'.blend')
+        checkpoint.parent.mkdir(parents=True,exist_ok=True)
+        bpy.ops.wm.save_as_mainfile(filepath=str(checkpoint),check_existing=False)
+        report['construction_checkpoint']=dict(path=str(checkpoint),sha256=digest(checkpoint),
+            plan_sha256=plan['plan_sha256'],status='SOURCE_SCENE_SAVED_BEFORE_NATIVE_CONFIGURATION')
+        report['stage']='BSP and scenario export'; flush()
+        configure_scenario(paths,plan)
+        # Rebuild instance import data along with the source-derived
+        # emissive material table. A previous partial build is not an
+        # authoritative cache for this accepted authoring snapshot.
+        utils.get_export_props().import_force=True
+        export(scene,paths,paths.namespace,paths.asset,report)
+        configure_scenario(paths,plan)
+        for bsp in plan['bsps']:
+            lighting_path=bsp['destination'].rsplit('.',1)[0]+'.scenario_structure_lighting_info'
+            utils.run_tool(['export-tag-to-xml',str(paths.roots['tags']/lighting_path),
+                str(run/(bsp['region']+'-lighting-before-static.xml'))],force_tool=True)
+        began=time.perf_counter()
+        native_scene.write_static_lights(plan,report)
+        report.setdefault('native_stage_seconds',{})['lighting']=time.perf_counter()-began
+    else:
+        report['stage'] = 'sky export'
+        flush()
+        bpy.context.window.scene = sky_scene
+        with profile.span('H3 sky construction and normal Reach export'):
+            _, stats = mesh_object(plan['sky']['mesh'], [mats[k] for k in plan['sky']['materials']],
+                                   sky_scene, 'default', 'h3_sky')
+            report['geometry'].append(stats)
+            sky_lights(sky_scene, plan)
+            export(sky_scene, paths, sky_asset, sky_name)
+            configure_sky_model(plan)
+        report['stage'] = 'BSP and scenario export'
+        flush()
+        bpy.context.window.scene = scene
+        with profile.span('H3 BSP construction and normal Reach export'):
+            bsp_materials = [mats.get(m['source_shader']) for m in plan['bsp']['materials']]
+            # Auxiliary collision slot has no H3 shader. Its render is disabled;
+            # use an owned native shader solely as a surface material definition.
+            collision_material = mats[plan['materials'][0]['source_shader']]
+            bsp_materials = [m or collision_material for m in bsp_materials]
+            for i, material in enumerate(plan['bsp']['materials']):
+                if material.get('special') == 'sky':
+                    bsp_materials[i] = bpy.data.materials.new('+sky0')
+            for index, record in enumerate(plan['bsp']['meshes']):
+                _, stats = mesh_object(record, bsp_materials, scene, 'proof_box_bsp', 'h3_bsp_'+str(index), record['role'])
+                report['geometry'].append(stats)
+            configure_scenario(paths, plan)
+            export(scene, paths, paths.namespace, paths.asset)
 
 
 if __name__ == '__main__':

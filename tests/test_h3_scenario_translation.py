@@ -7,13 +7,28 @@ import unittest
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'blender/addons/io_scene_foundry/h3_import'))
-from port_environment import scenario_ir, authoring, semantics
+from port_environment import scenario_ir, authoring, semantics, native_contracts
 from test_h3_environment_selection import scenario, field, block
 from test_h3_environment import inputs, roots
 from port_environment.model import map_collision
 
 
 class WholeScenario(unittest.TestCase):
+    def test_seam_front_matches_collision_winding_not_bsp_index_order(self):
+        points=[[0,0,0],[1,0,0],[0,1,0]]
+        seam=dict(source_index=0,vertices_world=points,triangles=[[0,1,2]],
+                  owners=[dict(source_bsp_index=i) for i in [1,2]])
+        bsps=[dict(source_index=i,materials=[dict(source_seam_mapping=0)],meshes=[dict(role='collision',
+            vertices=[dict(position=p) for p in points],triangles=[dict(vertices=t,material=0,surface_type='seam')])])
+            for i,t in [(1,[2,1,0]),(2,[0,1,2])]]
+        before=deepcopy(bsps)
+        self.assertEqual([r['source_bsp_index'] for r in native_contracts.seam_owner_order(seam,bsps)],[2,1])
+        self.assertEqual(bsps,before)
+        bsps[0]['meshes'][0]['triangles'][0]['vertices']=[0,1,2]
+        with self.assertRaisesRegex(ValueError,'opposing'):native_contracts.seam_owner_order(seam,bsps)
+        bsps[0]['meshes'][0]['triangles']=[]
+        with self.assertRaisesRegex(ValueError,'absent'):native_contracts.seam_owner_order(seam,bsps)
+
     def test_no_way_portal_is_a_native_visibility_barrier(self):
         bsp=dict(source_tag='b.scenario_structure_bsp',environment_semantics=dict(authoring=dict(clusters=[{}],portals=[
             dict(source_index=0,flags={'value':8},vertices=[{'point':p} for p in ['0,0,0','1,0,0','0,1,0']],

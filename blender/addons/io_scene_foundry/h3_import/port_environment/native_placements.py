@@ -27,10 +27,13 @@ def plan(inventory,compiled,objects):
             if source in compiled:
                 row.update(target_index=len(palette_map),target_tag=compiled[source]['target_tag'],native_status='NATIVE_COMPILED')
                 palette_map[row['source_index']]=row['target_index']
-            else:row.update(native_status='DEFERRED',reason=objects.get(source,{}).get('reasons',['Native dependency was not compiled']))
+            else:
+                evidence=objects.get(source,{})
+                row.update(native_status='DEFERRED',reason=evidence.get('reason') or evidence.get('blockers') or ['Native dependency was not compiled'])
         for row in group['placements']:
             if row['source_problems'] or row['source_palette_index'] not in palette_map:
-                row.update(native_status='DEFERRED',reason='Native dependency absent or invalid source placement')
+                palette=next((p for p in group['palette'] if p['source_index']==row['source_palette_index']),{})
+                row.update(native_status='DEFERRED',reason=row['source_problems'] or palette.get('reason') or 'Native dependency absent')
             else:
                 row.update(native_status='READY',target_palette_index=palette_map[row['source_palette_index']])
                 if row['stored_pose_count']:

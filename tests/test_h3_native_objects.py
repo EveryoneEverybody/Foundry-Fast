@@ -10,6 +10,17 @@ from port_environment import object_ir,native_object_tags as tags,native_placeme
 
 
 class ObjectContracts(unittest.TestCase):
+    def test_physics_body_mapping_rejects_ambiguous_source_nodes(self):
+        from port_environment.native_physics import source_bodies
+        def block(name,rows):return dict(name=name,type='block',elements=[dict(fields=r,source_index=i) for i,r in enumerate(rows)])
+        def field(name,value):return dict(name=name,type='short block index',value=value)
+        nodes=block('nodes',[[dict(name='name',type='string id',value='arm')]])
+        body=[field('node',0),field('region',-1),field('permutattion',-1)]
+        self.assertEqual(list(source_bodies([nodes,block('rigid bodies',[body])])),[('arm',None,None)])
+        with self.assertRaisesRegex(ValueError,'Ambiguous'):source_bodies([nodes,block('rigid bodies',[body,body])])
+        body[0]['value']=1
+        with self.assertRaisesRegex(ValueError,'Invalid'):source_bodies([nodes,block('rigid bodies',[body])])
+
     def test_ambiguous_dependency_is_rejected(self):
         reference=dict(name='model',value=dict(path='x/a',extension='model'))
         with self.assertRaisesRegex(ValueError,'Ambiguous'):

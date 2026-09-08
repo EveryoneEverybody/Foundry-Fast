@@ -24,7 +24,10 @@ def main():
     if digest(plan['environment_plan'])!=plan['environment_plan_sha256']:raise ValueError('Environment plan differs')
     environment=json.loads(Path(plan['environment_plan']).read_text())
     compiled={r['source_tag']:r for r in receipt['worker']['objects'] if r['status']=='NATIVE_COMPILED'}
-    translation=native_placements.plan(source,compiled,{r['source_tag']:r for r in plan['objects']})
+    objects={r['source_tag']:r for r in plan['objects']}
+    for row in receipt['worker']['objects']:
+        if row['status']=='DEFERRED':objects[row['source_tag']]=dict(objects[row['source_tag']],reason=row['reason'])
+    translation=native_placements.plan(source,compiled,objects)
     atomic_json(run/'placement-plan.json',translation)
     paths=OutputPaths(config['h3_root'],config['reach_root'],plan['target']['namespace'],allow_nested=True)
     report=dict(status='BUILDING',runtime_status='NOT_TESTED',tool_invocations=[],source_inventory_sha256=digest(config['inventory']),

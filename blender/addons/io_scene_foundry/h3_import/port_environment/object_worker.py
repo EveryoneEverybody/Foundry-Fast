@@ -69,7 +69,8 @@ def construct(row,payload,scene,mats,animations,report):
             ob.nwo.mesh_primitive_type='_connected_geometry_primitive_type_'+{'box':'box','sphere':'sphere','convex':'none'}[shape['kind']]
             if not 0<=shape['material']<len(physics_materials):raise ValueError('Physics material identity is absent')
             material=physics_materials[shape['material']]['fields']
-            name=object_ir.scalar(object_ir.field(material,'global material name')) or 'default'
+            name=object_ir.scalar(object_ir.field(material,'name'))
+            if not name:raise ValueError('Source physics material has no identity')
             ob.nwo.global_material=name
             report.setdefault('physics_authoring',[]).append(dict(source_shape=shape,global_material=name,
                 rebuild='Normal Foundry physics mesh -> Reach Tool; native rigid-body mass/inertia required during readback'))
@@ -87,7 +88,7 @@ def construct(row,payload,scene,mats,animations,report):
         if receipt['skipped'] or receipt['written']!=receipt['source_animation_count']:raise ValueError('Source device animation decode is incomplete')
         files=sorted(p for p in directory.rglob('*') if p.is_file() and p.suffix.lower() in {'.jmm','.jma','.jmt','.jmz','.jmv','.jmw','.jmo','.jmr','.jmrx'})
         if len(files)!=receipt['written']:raise ValueError('Source device animation file count differs')
-        from io_scene_foundry.legacy.JMA import JMA
+        from io_scene_foundry.legacy.jma import JMA
         source_clips=[]
         for file in files:
             clip=JMA();clip.from_file(file)
@@ -124,7 +125,7 @@ def main():
             1 if r['source_tag'].endswith('voi_door_arms_new.device_machine') else 2,r['source_tag']))
         if config.get('limit'):ready=ready[:config['limit']]
         report['stage']='materials';flush()
-        material_config=dict(config,source_directory=plan['source_directory'],shader_manifest='authoring-shader-manifest.json')
+        material_config=dict(config,source_directory=plan['source_directory'],shader_manifest='authoring-shader-manifest.json',defer_material_failures=True)
         material_plan=plan
         if config.get('limit'):
             used={s for r in ready for s in r['object_ir']['materials']}
@@ -146,13 +147,20 @@ def main():
         animations=json.loads(Path(config['device_animations']).read_text())
         import bpy
         from io_scene_foundry import utils
+        anchor=bpy.context.scene
         for index,row in enumerate(ready):
             result=dict(source_tag=row['source_tag'],source_group=row['source_group'],target_tag=row['target_tag'],status='BUILDING',runtime_status='NOT_TESTED')
             report['objects'].append(result);report['stage']='object '+row['source_tag'];flush()
             print(f'Object {index+1}/{len(ready)}: {row["source_tag"]}',flush=True)
             start=time.monotonic();tool_start=len(report['tool_invocations'])
             sys.stdout.flush();log_offset=(run/'blender-reach-worker.log').stat().st_size
+            collections=('objects','meshes','armatures','collections','actions','scenes')
+            previous={name:set(getattr(bpy.data,name)) for name in collections}
             try:
+                missing=[s for s in row['object_ir']['materials'] if s not in mats]
+                if missing:
+                    errors=[e for e in report.get('material_errors',[]) if e['source'] in missing]
+                    raise ValueError('Native material dependencies deferred: '+json.dumps(errors or missing))
                 verify_files(row['source_hashes'])
                 if digest(row['asset'])!=row['asset_sha256']:raise ValueError('Source object geometry changed')
                 from io_scene_foundry.h3_import.core import load_payload
@@ -183,6 +191,11 @@ def main():
             except Exception as exc:
                 result.update(status='DEFERRED',reason=str(exc),traceback=traceback.format_exc())
                 traceback.print_exc()
+            finally:
+                bpy.context.window.scene=anchor
+                for name in collections:
+                    data=getattr(bpy.data,name)
+                    for item in set(data)-previous[name]:data.remove(item,do_unlink=True)
             result['seconds']=time.monotonic()-start;flush()
         report['status']='COMPLETE'
     except Exception as exc:
