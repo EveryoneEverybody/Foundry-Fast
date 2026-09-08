@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'blender/addons/io_scene_foundry/h3_import'))
@@ -65,6 +66,37 @@ def inputs(paths):
 
 
 class PairedXML(unittest.TestCase):
+    def test_report_replace_retries_windows_reader_and_keeps_atomic_contents(self):
+        from port_environment import paths as module
+        with tempfile.TemporaryDirectory() as directory:
+            target=Path(directory)/'report.json'
+            atomic_json(target,{'old':True})
+            original=module.os.replace
+            error=PermissionError('reader omitted FILE_SHARE_DELETE');error.winerror=32
+            calls=[]
+            def replace(source,destination):
+                calls.append(source)
+                if len(calls)==1:
+                    self.assertEqual(json.loads(target.read_text()),{'old':True})
+                    raise error
+                original(source,destination)
+            with patch.object(module.os,'replace',side_effect=replace),patch.object(module.time,'sleep'):
+                atomic_json(target,{'new':True})
+            self.assertEqual(len(calls),2)
+            self.assertEqual(json.loads(target.read_text()),{'new':True})
+            self.assertEqual(list(Path(directory).iterdir()),[target])
+
+    def test_report_failure_preserves_previous_file_and_cleans_own_temp(self):
+        from port_environment import paths as module
+        with tempfile.TemporaryDirectory() as directory:
+            target=Path(directory)/'report.json';atomic_json(target,{'valid':True})
+            error=PermissionError('persistent access denied');error.winerror=5
+            with patch.object(module.os,'replace',side_effect=error),patch.object(module.time,'monotonic',side_effect=[0,6]):
+                with self.assertRaises(PermissionError):atomic_json(target,{'new':True})
+            with self.assertRaises(ValueError):atomic_json(target,{'nan':float('nan')})
+            self.assertEqual(json.loads(target.read_text()),{'valid':True})
+            self.assertEqual(list(Path(directory).iterdir()),[target])
+
     def test_tool_zero_exit_does_not_hide_geometry_errors(self):
         log='Writing errors to tag\n[Foundry Icons] Failed to load icon\n(structure_bsp proof_box_bsp) open edge: h3_bsp_0: open edge (#1)\n'
         self.assertEqual(len(geometry_errors(log)),1)

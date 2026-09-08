@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import time
+import uuid
 
 from . import DEFAULT_NAMESPACE, FORMAT
 
@@ -28,13 +30,26 @@ def relative(value):
 def atomic_json(path, value, *, compact=False):
     path = Path(path)
     # The caller must already own and have validated this directory.
-    temp = path.with_name(path.name + '.tmp-' + str(os.getpid()))
-    with temp.open('x', encoding='utf-8', newline='\n') as stream:
-        json.dump(value, stream, indent=None if compact else 2, sort_keys=True, allow_nan=False)
-        stream.write('\n')
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temp, path)
+    temp = path.with_name(path.name + '.tmp-' + uuid.uuid4().hex)
+    try:
+        with temp.open('x', encoding='utf-8', newline='\n') as stream:
+            json.dump(value, stream, indent=None if compact else 2, sort_keys=True, allow_nan=False)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                os.replace(temp, path)
+                break
+            except PermissionError as exc:
+                # Windows readers may briefly omit FILE_SHARE_DELETE. Keep the
+                # old complete report visible while retrying the atomic rename.
+                if getattr(exc, 'winerror', None) not in {5, 32, 33} or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.05)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 class OutputPaths:

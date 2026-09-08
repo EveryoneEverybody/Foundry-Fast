@@ -545,9 +545,13 @@ def main():
     parser.add_argument('--lighting', choices=('direct_only', 'draft', 'none'), default='direct_only')
     parser.add_argument('--plan-only', action='store_true')
     parser.add_argument('--accepted-plan', help='Build a hash-verified accepted decoded snapshot; do not reopen loose H3 inputs')
+    parser.add_argument('--validate-existing-run', help='Resume native validation of an unchanged owned run after successful geometry/Faux')
     parser.add_argument('--semantic-baseline', help='Original unsupported-semantics.json to reconcile by stable source-record identity')
     args = parser.parse_args()
     try:
+        if args.validate_existing_run:
+            from .resume import validate_existing
+            return validate_existing(args)
         return build(args)
     except Exception as exc:
         print(f'Preflight rejected: {exc}', file=sys.stderr)

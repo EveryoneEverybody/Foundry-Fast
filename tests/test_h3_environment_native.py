@@ -12,10 +12,62 @@ from port_environment.paths import OutputPaths, Ownership
 from port_environment import native_cache
 from port_environment.native_world import match_triangles
 from port_environment.validation import native_xml_references
+from port_environment import resume
 from test_h3_environment_remaining_rules import glass_fixture
 
 
 class NativeContracts(unittest.TestCase):
+    def test_validation_resume_rejects_changed_added_or_missing_outputs(self):
+        expected={'tags/generated.shader':'sha'}
+        resume.require_outputs(dict(expected),expected)
+        for actual in ({},{'tags/generated.shader':'changed'},{**expected,'extra':'sha'}):
+            with self.assertRaises(ValueError):resume.require_outputs(actual,expected)
+        with self.assertRaises(ValueError):resume.require_outputs({},{})
+
+    def test_validation_resume_requires_geometry_faux_and_read_only_pending_jobs(self):
+        worker=dict(stage='native tag validation',lighting_status='REACH_FAUX_DIRECT_ONLY',geometry_tool_errors=[],
+            lighting_evidence=dict(errors=[],vmf_energy_statistics=[1,2]),
+            tool_invocations=[dict(command=['tool','import'],exit_code=0),dict(command=['tool','export-tag-to-xml'])])
+        resume.require_completed_authoring(worker)
+        for key,value in [('stage','lighting'),('lighting_status','NOT_RUN'),('geometry_tool_errors',['open edge']),
+                          ('lighting_evidence',dict(errors=['failed'],vmf_energy_statistics=[1])),
+                          ('lighting_evidence',dict(errors=[],vmf_energy_statistics=[float('nan')]))]:
+            with self.assertRaises(ValueError):resume.require_completed_authoring(dict(worker,**{key:value}))
+        worker['tool_invocations'][-1]['command'][1]='import'
+        with self.assertRaises(ValueError):resume.require_completed_authoring(worker)
+
+    def test_validation_resume_xml_requires_successful_tool_and_matching_hashes(self):
+        from port_environment.paths import digest
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for kit in ('source','target'):
+                for folder in ('data','tags'):(root/kit/folder).mkdir(parents=True)
+            paths=OutputPaths(root/'source',root/'target','levels/h3_port/synthetic/slice',allow_nested=True)
+            source=paths.destination('tags','glass.shader');source.parent.mkdir(parents=True);source.write_bytes(b'native')
+            prior=root/'run';(prior/'native-tag-xml').mkdir(parents=True)
+            xml=prior/'native-tag-xml/glass.xml';xml.write_text('<tag/>')
+            row=dict(path=str(xml),sha256=digest(xml),status='WELL_FORMED_STREAMED')
+            command=dict(command=['tool','export-tag-to-xml',str(source),str(xml)],exit_code=0)
+            worker=dict(tool_invocations=[command],native_xml_validation=[row])
+            outputs={source.relative_to(paths.reach).as_posix():digest(source)}
+            cache=resume.xml_cache(prior,worker,paths,outputs)
+            self.assertEqual(cache[str(source)]['source_sha256'],digest(source))
+            command['exit_code']=1
+            with self.assertRaises(ValueError):resume.xml_cache(prior,worker,paths,outputs)
+            command['exit_code']=0;xml.write_text('<tag changed="true"/>')
+            with self.assertRaises(ValueError):resume.xml_cache(prior,worker,paths,outputs)
+
+    def test_validation_journal_rejects_import_and_faux(self):
+        from port_environment.worker import ToolJournal
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            journal=object.__new__(ToolJournal)
+            journal.paths=type('Paths',(),{'reach':root.resolve()})()
+            journal.report={'validation_only':True}
+            for action in ('import','faux_data_sync','generate-specified-template'):
+                with self.assertRaisesRegex(ValueError,'Validation-only'):
+                    journal.check([root/'tool.exe',action,'unused'])
+
     def test_native_xml_streaming_preserves_exact_sentinels_and_rejects_entities(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'native.xml'

@@ -59,6 +59,8 @@ class ToolJournal:
         if Path(command[0]).resolve() not in {self.paths.reach/'tool.exe', self.paths.reach/'tool_fast.exe'}:
             raise ValueError('Unexpected target executable: '+command[0])
         action = command[1]
+        if self.report.get('validation_only') and action != 'export-tag-to-xml':
+            raise ValueError('Validation-only worker rejects target writes: '+action)
         if action in {'import', 'reimport-bitmaps-single'}:
             arg = command[2].replace('\\', '/')
             if not arg.startswith(self.paths.namespace+'/'):
@@ -143,11 +145,13 @@ class ToolJournal:
         self.running = still
 
 
-def protect_tag_writes(paths):
+def protect_tag_writes(paths, *, read_only=False):
     from io_scene_foundry.managed_blam import Tag
     original_init, original_exit = Tag.__init__, Tag.__exit__
 
     def check(tag):
+        if read_only:
+            raise ValueError('Validation-only worker rejects ManagedBlam tag writes')
         name = str(tag.tag_path.RelativePathWithExtension).replace('\\', '/')
         expected = paths.owned_tag(name)
         if Path(str(tag.tag_path.Filename)).resolve() != expected:
@@ -532,7 +536,7 @@ def validate_lighting_inputs(plan, report):
         native_validation.lighting(plan,report)
 
 
-def validate_native(paths, plan, run, report, *, export_xml=True):
+def validate_native(paths, plan, run, report, *, export_xml=True, xml_cache=None):
     from io_scene_foundry.managed_blam import Tag
     from io_scene_foundry import utils
     from io_scene_foundry.managed_blam.scenario import ScenarioTag
@@ -633,8 +637,15 @@ def validate_native(paths, plan, run, report, *, export_xml=True):
     for index,source in enumerate(validated_tags):
         if index%50==0:
             print(f'Validating native XML {index+1}/{len(validated_tags)}: {source.name}',flush=True)
-        target = output/(f'{index:04}_'+source.name+'.xml')
-        utils.run_tool(['export-tag-to-xml', str(source), str(target)], force_tool=True)
+        cached=(xml_cache or {}).get(str(source))
+        source_hash=digest(source)
+        if cached:
+            if source_hash!=cached['source_sha256'] or digest(cached['path'])!=cached['sha256']:
+                raise ValueError('Previously validated native tag/XML changed: '+str(source))
+            target=Path(cached['path'])
+        else:
+            target = output/(f'{index:04}_'+source.name+'.xml')
+            utils.run_tool(['export-tag-to-xml', str(source), str(target)], force_tool=True)
         if not target.is_file():
             raise ValueError('Reach Tool could not open generated tag: '+str(source))
         for value in native_xml_references(target):
@@ -642,7 +653,8 @@ def validate_native(paths, plan, run, report, *, export_xml=True):
                 raise ValueError('Foreign/stock-box reference in generated Reach tag: '+value)
             references.add(value)
         report.setdefault('native_xml_validation',[]).append(dict(path=str(target),bytes=target.stat().st_size,
-            sha256=digest(target),status='WELL_FORMED_STREAMED',runtime_identities='ManagedBlam readback; XML contains display labels'))
+            sha256=digest(target),source_sha256=source_hash,reused=bool(cached),status='WELL_FORMED_STREAMED',
+            runtime_identities='ManagedBlam readback; XML contains display labels'))
     report['runtime_references'] = sorted(references)
     report['native_tag_open_status'] = 'MANAGEDBLAM_AND_REACH_TOOL_OPENED'
 
@@ -676,6 +688,18 @@ def main():
     addon = Path(__file__).resolve().parents[2]
     report = dict(format='foundry.h3-reach-environment.worker', version=1, builder_version=BUILDER_VERSION,
                   status='BUILDING', stage='bootstrap', tool_invocations=[], geometry=[], lighting_status='NOT_RUN')
+    if config.get('validation_only'):
+        from .resume import read, require_outputs
+        require_outputs(paths.snapshot(),config['expected_outputs'])
+        if digest(config['previous_worker_report'])!=config['previous_worker_sha256']:
+            raise ValueError('Previous worker evidence changed')
+        report=read(config['previous_worker_report'])
+        report['previous_profile']=report.pop('profile',None)
+        report['interrupted_tool_intents']=[r for r in report['tool_invocations'] if r.get('exit_code') is None]
+        report['tool_invocations']=[r for r in report['tool_invocations'] if r.get('exit_code')==0]
+        report.update(status='BUILDING',stage='validation resume bootstrap',validation_only=True,native_xml_validation=[])
+        report.pop('failure',None)
+        report.pop('traceback',None)
     flush = lambda: atomic_json(run/'worker-report.json', report)
     journal, profile = None, None
     try:
@@ -721,8 +745,20 @@ def main():
         managed_blam.mb_init()
         if not managed_blam.mb_active:
             raise RuntimeError('Reach ManagedBlam did not initialize')
-        protect_tag_writes(paths)
+        protect_tag_writes(paths,read_only=bool(config.get('validation_only')))
         journal = ToolJournal(paths, run, report, flush)
+        if config.get('validation_only'):
+            report['stage']='native tag validation';flush()
+            with profile.span('native lighting input validation before Faux'):
+                validate_lighting_inputs(plan,report)
+            with profile.span('native Reach tag validation'):
+                validate_native(paths,plan,run,report,xml_cache=config['native_xml_cache'])
+            journal.finish(wait=True)
+            if any(r.get('exit_code')!=0 for r in report['tool_invocations']):
+                raise ValueError('Native Tool validation did not complete successfully')
+            require_outputs(paths.snapshot(),config['expected_outputs'])
+            report['status']='COMPLETE'
+            return
         report['stage'] = 'materials'
         flush()
         # Stage/export materials while the scenario asset is current so every
