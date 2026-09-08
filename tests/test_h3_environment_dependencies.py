@@ -51,6 +51,15 @@ def fixture(directory):
 
 
 class EnvironmentDependencies(unittest.TestCase):
+    def test_source_sphere_marker_has_no_render_material_usage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, bsp, _, _, _ = fixture(directory)
+            expected = shader_usage([bsp], [])
+            bsp['objects'].append(dict(id=2, kind='sphere_marker', radius=1, material=0))
+            bsp['instances'].append(dict(id=13, object=2, name='authored_sphere_marker'))
+            self.assertEqual(shader_usage([bsp], []), expected)
+            self.assertEqual(bsp['objects'][-1]['kind'], 'sphere_marker')
+
     def test_full_tree_basename_match_is_reported_but_never_substituted(self):
         with tempfile.TemporaryDirectory() as directory:
             m, b, selection, inventory, _ = fixture(directory)

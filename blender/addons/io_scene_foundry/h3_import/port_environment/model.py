@@ -106,7 +106,7 @@ def map_collision(bsp, *, sky_index=None):
     cursor = 0
     for s in semantics['collision_surfaces']:
         count = s['triangle_count']
-        if s['flags'] & ~(1 if sky_index is not None else 0) or s['triangle_start'] != cursor or count < 1:
+        if s['flags'] & ~(5 if sky_index is not None else 0) or s['triangle_start'] != cursor or count < 1:
             raise ValueError('Unsupported collision flags or incomplete source surface coverage')
         material = s['material']
         if material == -1:
@@ -136,6 +136,8 @@ def map_collision(bsp, *, sky_index=None):
             t.update(material=slot, source_surface=s['source_surface'], source_collision_material=material, surface_type=kind)
             if s['flags']:
                 t['two_sided'] = bool(s['flags'] & 1)
+            if s['flags'] & 4:
+                t['ladder'] = True
         cursor += count
     if cursor != len(obj['triangles']):
         raise ValueError('Incomplete collision surface coverage')

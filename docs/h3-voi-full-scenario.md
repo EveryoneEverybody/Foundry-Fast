@@ -11,8 +11,10 @@ Factory A lighting fidelity: **DEFERRED / technically responsive material-power
 path but no meaningful visible runtime improvement from diagnostic Power25.**
 Nate reports no perceptible difference in the clean Power25 runtime comparison.
 No multiplier is accepted. Further attenuation, brightness and Low-bake
-experiments are outside this session. The installed diagnostic files are
-preserved as found; this is not lighting acceptance.
+experiments are outside this session. At Nate's subsequent request, the four
+diagnostic BSP010 lighting files were restored to their baseline hashes. The
+current warm/cool shader files and all 50 proof_box hashes were verified after
+that switch (`restore-baseline-result.json`).
 
 Nate's latest user-owned shader settings are warm self illumination 3 and cool
 1. Protect the current installed bytes instead of restoring an earlier shader
@@ -28,3 +30,18 @@ Machine-readable evidence starts at
 `D:\HaloRE\PortCensus\voi_full_scenario_20260908`. Runtime status remains
 `NOT_TESTED` until Nate tests the new target in Tag Test. AI, units, vehicles,
 HSC, character animation and vehicle-specific physics remain deferred.
+
+The complete source plan now resolves nine BSPs, eight structure designs,
+nineteen authored zones and ten seams. The zone named `all` retains mask 255;
+BSP008 belongs to specific later zones. No synthetic mask-511 zone is created.
+Source vertex indices preserve seam topology across bounded XML/compile
+coordinate differences. Native no-way portal authoring preserves visibility
+barriers. One mixed glass/frame definition has a verified material partition:
+both parts retain the source transform, with unified glass and solid frame
+collision authored separately. Six invalid source lighting-row indices retain
+their embedded properties and explicit deferred lighting status.
+
+Forty-two focused Python checks passed at this checkpoint (scenario translation,
+campaign selection, glass/seam contracts). Source-plan acceptance does not imply
+native Tool acceptance or runtime success. The first complete native build is
+the next validation stage.

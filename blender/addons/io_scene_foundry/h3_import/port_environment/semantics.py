@@ -79,6 +79,14 @@ def parameter_plan(parameter, authored, categories, *, baked_emission_preserved=
     name = parameter['name']
     extern = parameter.get('extern')
     if extern:
+        change_colors = {'primary_change_color':'change color primary',
+                         'secondary_change_color':'change color secondary'}
+        if (categories.get('albedo')=='two_change_color' and parameter.get('type')=='color'
+            and change_colors.get(name)==extern and not authored.get('functions')):
+            return decision('material.engine_extern','NATIVE_DIRECT',dict(source_parameter=parameter,
+                target='Native Reach albedo_two_change_color option owns the identically named change-color extern',
+                source_option='two_change_color',target_option='two_change_color',runtime_resource_copy=False,
+                evidence='Installed Reach albedo_two_change_color.render_method_option exposes primary_change_color and secondary_change_color with matching source extern names'))
         if extern in {'dynamic environment map 1', 'dynamic environment map 2'}:
             if categories.get('environment_mapping', categories.get('environment_map')) != 'dynamic':
                 return unknown('material.engine_extern', 'Dynamic cube extern without matching native environment option', parameter)
@@ -234,12 +242,12 @@ def foliage_plan(shader):
 
 def cube_plan(bitmap, bindings):
     c = bitmap.get('cube_source', {})
-    if (bitmap.get('type') != 'cube map' or bitmap.get('format', '').lower() not in {'dxt1','dxt5'}
+    if (bitmap.get('type') != 'cube map' or bitmap.get('format', '').lower() not in {'dxt1','dxt5','x8r8g8b8','a8r8g8b8'}
         or bitmap.get('image_count') != 1 or bitmap.get('index') != 0 or bitmap.get('depth') != 1
         or bitmap.get('width') != bitmap.get('height') or bitmap.get('width', 0) <= 0
         or c.get('decoded_faces') != 6 or c.get('layout') != 'directx_cross_4x3'
         or not bitmap.get('dds') or not c.get('tiff')):
-        return unknown('bitmap.single_cube', 'Need verified single-image BC1/BC3 six-face source pixels', bitmap)
+        return unknown('bitmap.single_cube', 'Need verified single-image BC1/BC3 or RGBA8 six-face source pixels', bitmap)
     return decision('bitmap.single_cube', 'NATIVE_REBUILD', dict(source_bitmap=bitmap, usage=bindings,
         source_layout=c, target_type='Cube Map', target_usage='Environment Map',
         native_import='Decoded source TIFF cross -> normal Reach bitmap import; regenerate target compressed mip resources',
@@ -334,10 +342,11 @@ def collision_flags(evidence, unified=None):
         physical_collision='Preserved', ladder=4 in bits), confidence='MEDIUM' if 2 in bits else 'HIGH')
 
 
-def lighting_material(bsp, index):
+def lighting_material(bsp, index, *, defer_invalid_lighting=False):
     m = bsp['environment_semantics']['authoring']['materials'][index]
     identity = bsp['materials'][index]['source_shader']
-    if m['imported material index'] != -1:
+    invalid = m['imported material index'] != -1
+    if invalid and not defer_invalid_lighting:
         return unknown('lighting.material_properties', 'Invalid positive lighting index cannot be treated as an absent row', m)
     props = {p['type']['name']: p for p in m['properties']}
     if len(props) != len(m['properties']) or set(props) - {'lightmap resolution','lightmap transparency override','lightmap additive transparency'}:
@@ -352,10 +361,12 @@ def lighting_material(bsp, index):
         if not 0 <= packed <= 0xFFFFFF:
             return unknown('lighting.material_properties', 'Unrecognized source packed transparency color', m)
         target['lightmap_additive_transparency'] = [(packed >> shift & 255)/255 for shift in (16,8,0)]
-    return decision('lighting.material_properties', 'NATIVE_REBUILD', dict(source_material=m,
+    return decision('lighting.material_properties', 'RUNTIME_LATER' if invalid else 'NATIVE_REBUILD', dict(source_material=m,
         source_shader=identity, source_material_slot=index, imported_lighting_index=None,
-        target_material_properties=target, emission='No imported emissive row; preserve embedded properties, never index row -1',
-        binding='Source shader identity plus source material slot/property signature; shader cache remains shared'))
+        target_material_properties=target,
+        emission='Unknown: invalid source lighting-row index; no row guessed' if invalid else 'No imported emissive row; preserve embedded properties, never index row -1',
+        binding='Source shader identity plus source material slot/property signature; shader cache remains shared'),
+        loss=['Source imported lighting-row relationship is invalid; retain embedded properties and defer lighting fidelity for this slot'] if invalid else [])
 
 
 def scenario_lights(plan):
@@ -430,7 +441,8 @@ def resolve_record(record, plan, bsps, shaders):
                     for p in v['parameters'] if p.get('bitmap') == key]
         return cube_plan(shaders['bitmaps'][key], bindings)
     if field == 'materials[].imported material index':
-        return lighting_material(by_bsp[source], record['affected'][0])
+        return lighting_material(by_bsp[source], record['affected'][0],
+            defer_invalid_lighting=plan['selection'].get('scope')=='FULL_SCENARIO')
     if field == 'light volumes':
         return scenario_lights(plan)
     if field == 'material info':

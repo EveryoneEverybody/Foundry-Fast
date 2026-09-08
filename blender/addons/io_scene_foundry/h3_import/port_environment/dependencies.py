@@ -72,7 +72,7 @@ def shader_usage(bsps, skies):
                 placements[instance['object']].append(dict(id=instance['id'], name=instance['name']))
         collision_object = bsp['environment_semantics']['collision_object']
         for obj in bsp['objects']:
-            if obj['id'] == collision_object or not placements[obj['id']]:
+            if obj['id'] == collision_object or not placements[obj['id']] or obj.get('kind') == 'sphere_marker':
                 continue
             by_material = defaultdict(list)
             for index, tri in enumerate(obj['triangles']):

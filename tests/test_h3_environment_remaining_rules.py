@@ -113,6 +113,23 @@ class UnifiedBreakableGeometry(unittest.TestCase):
         placements[0]['render_object']=42;r['affected'].pop()
         with self.assertRaisesRegex(ValueError,'partition'):glass.plan(bsp,ip,r)
 
+    def test_mixed_frame_partition_preserves_solid_geometry_and_proves_glass(self):
+        render,collision,materials,collision_materials=glass_fixture()
+        render['triangles'].append(dict(vertices=[0,1,2],material=1))
+        solid=deepcopy(collision['source_surfaces'][0]);solid.update(source_surface=2,flags=0,material=0)
+        collision['source_surfaces'].append(solid)
+        collision_materials[0]={'render method':dict(path='synthetic/frame',extension='shader')}
+        bsp=dict(units='ass_100_per_world_unit',objects=[render],materials=[dict(source_shader=materials[0]),dict(source_shader='synthetic/frame.shader')],
+            environment_semantics=dict(authoring=dict(definitions=[{'mesh index':17,'collision_mesh':collision}],collision_materials=collision_materials)))
+        placements=[dict(source_index=5,source_definition=0,render_object=42,collision_definition=0,matrix=[5])]
+        record=dict(source_definition=0,affected=[0,1],affected_instances=[5])
+        p=glass.plan(bsp,dict(placements=placements),record)
+        self.assertEqual(p['partition']['solid_render_triangles'],[4])
+        self.assertEqual(p['partition']['solid_collision_surfaces'],[2])
+        self.assertEqual(p['retained_render_triangles'],[0,2])
+        collision_materials[0]=collision_materials[1]
+        with self.assertRaisesRegex(ValueError,'disjoint'):glass.plan(bsp,dict(placements=placements),record)
+
 
 class DirectionalEmission(unittest.TestCase):
     def test_source_power_color_and_distance_survive_angular_approximation(self):

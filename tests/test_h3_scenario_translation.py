@@ -2,14 +2,71 @@
 from copy import deepcopy
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'blender/addons/io_scene_foundry/h3_import'))
-from port_environment import scenario_ir
+from port_environment import scenario_ir, authoring, semantics
 from test_h3_environment_selection import scenario, field, block
+from test_h3_environment import inputs, roots
+from port_environment.model import map_collision
 
 
 class WholeScenario(unittest.TestCase):
+    def test_no_way_portal_is_a_native_visibility_barrier(self):
+        bsp=dict(source_tag='b.scenario_structure_bsp',environment_semantics=dict(authoring=dict(clusters=[{}],portals=[
+            dict(source_index=0,flags={'value':8},vertices=[{'point':p} for p in ['0,0,0','1,0,0','0,1,0']],
+                 **{'front cluster':0,'back cluster':-1})])))
+        portals,errors=authoring.portal_plan(bsp)
+        self.assertFalse(errors)
+        self.assertEqual(portals[0]['portal_type'],'_connected_geometry_portal_type_no_way')
+
+    def test_seam_uses_explicit_original_indices_and_rejects_unbounded_drift(self):
+        root=ET.Element('tag',group='structure_seams',id='b')
+        row=block(root,'seams',[{f'seam_id{k}':k+1 for k in range(4)}])[0]
+        block(row,'original vertices',[{'original vertex':p,'final point index':i} for i,p in enumerate(['0,0,0','1,0,0','0,1,0'])])
+        final=block(row,'points',[{'final point':p} for p in ['0.0001,0,0','1,0,0','0,1,0']])
+        block(row,'triangles',[{f'final point{k}':f',{k}' for k in range(3)}]*2)
+        bsps=[dict(source_tag=str(i),bsp_index=i,environment_semantics=dict(authoring=dict(seams=[dict(source_index=0,
+            **{'seams identifier':{f'seam_id{k}':k+1 for k in range(4)},'cluster mapping':[{}],'edge mapping':[]})]))) for i in range(2)]
+        result,errors=authoring.seam_plan(root,bsps)
+        self.assertFalse(errors)
+        self.assertEqual(result[0]['vertices_world'][0],[0,0,0])
+        self.assertEqual(result[0]['source_vertex_correspondence']['rows'][0]['distance_world'],.0001)
+        final[0][0].set('value','0.1,0,0')
+        result,errors=authoring.seam_plan(root,bsps)
+        self.assertEqual(len(errors),1)
+        self.assertEqual(errors[0]['source_triangles'],[0,1])
+        self.assertFalse(result[0]['triangles'])
+
+    def test_change_color_extern_requires_the_matching_native_option(self):
+        p=dict(name='primary_change_color',type='color',extern='change color primary')
+        result=semantics.parameter_plan(p,{},dict(albedo='two_change_color'))
+        self.assertFalse(result['still_blocking'])
+        self.assertTrue(semantics.parameter_plan(p,{},dict(albedo='default'))['still_blocking'])
+
+    def test_invalid_lighting_index_is_only_deferred_when_explicitly_requested(self):
+        bsp=dict(materials=[dict(source_shader='b.shader')],environment_semantics=dict(authoring=dict(materials=[
+            {'imported material index':2089878893,'properties':[]}])))
+        self.assertTrue(semantics.lighting_material(bsp,0)['still_blocking'])
+        result=semantics.lighting_material(bsp,0,defer_invalid_lighting=True)
+        self.assertFalse(result['still_blocking'])
+        self.assertEqual(result['resolution_class'],'RUNTIME_LATER')
+        self.assertEqual(result['target_authoring_plan']['source_material']['imported material index'],2089878893)
+
+    def test_structure_ladder_faces_preserve_collision_and_two_sided_flag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data=inputs(roots(directory))
+            bsp=data[1]
+            bsp['environment_semantics']['collision_surfaces'][0]['flags']=5
+            converted=map_collision(bsp,sky_index=0)
+            triangle=converted['objects'][1]['triangles'][0]
+            self.assertTrue(triangle['ladder'])
+            self.assertTrue(triangle['two_sided'])
+            self.assertEqual(triangle['vertices'],bsp['objects'][1]['triangles'][0]['vertices'])
+            with self.assertRaises(ValueError):map_collision(bsp)
+
     def source(self):
         root = scenario()
         zones = next(e for e in root if e.get('name') == 'zone sets')

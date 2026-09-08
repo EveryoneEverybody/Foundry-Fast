@@ -6,6 +6,7 @@ material identity. Opposite render copies may be represented by a two-sided face
 only when their corner attributes agree. No geometry is written or modified.
 """
 from collections import Counter, defaultdict
+from copy import deepcopy
 import math
 
 from .authoring import number
@@ -173,8 +174,10 @@ def plan(bsp, instance_plan, record):
     placements = [p for p in instance_plan['placements'] if p['source_definition'] == definition]
     if not placements or {p['source_index'] for p in placements} != set(record['affected_instances']):
         raise ValueError('Unified breakable placement accounting differs from the source contract')
-    if set(record['affected']) != {s['source_surface'] for s in d['collision_mesh']['source_surfaces']}:
-        raise ValueError('Mixed breakable/nonbreakable definition needs a separately verified face partition')
+    selected_surfaces = set(record['affected'])
+    all_surfaces = {s['source_surface'] for s in d['collision_mesh']['source_surfaces']}
+    if selected_surfaces != {s['source_surface'] for s in d['collision_mesh']['source_surfaces'] if number(s['flags']) & 8}:
+        raise ValueError('Breakable face partition does not cover every source breakable surface')
     object_ids = {p['render_object'] for p in placements}
     if len(object_ids) != 1 or None in object_ids or any(p['collision_definition'] != definition for p in placements):
         raise ValueError('Missing or inconsistent validated render/collision definition linkage')
@@ -182,9 +185,48 @@ def plan(bsp, instance_plan, record):
     if len(objects) != 1:
         raise ValueError('Validated instance render object is absent or ambiguous')
     render = objects[0]
-    result = prove(render, d['collision_mesh'], {i:m.get('source_shader') for i,m in enumerate(bsp['materials'])},
+    partition = None
+    collision = d['collision_mesh']
+    source_render = render
+    if selected_surfaces != all_surfaces:
+        glass_surfaces=[s for s in collision['source_surfaces'] if s['source_surface'] in selected_surfaces]
+        solid_surfaces=[s for s in collision['source_surfaces'] if s['source_surface'] not in selected_surfaces]
+        def shader(s):
+            slot=s['material']
+            if not 0<=slot<len(a['collision_materials']):
+                raise ValueError('Mixed face partition has no explicit collision material')
+            return shader_reference(a['collision_materials'][slot])
+        glass_shaders={shader(s) for s in glass_surfaces}; solid_shaders={shader(s) for s in solid_surfaces}
+        if None in glass_shaders or glass_shaders & solid_shaders:
+            raise ValueError('Mixed face partition needs disjoint explicit render/collision shader identities')
+        ids=[i for i,t in enumerate(render['triangles']) if bsp['materials'][t['material']].get('source_shader') in glass_shaders]
+        other=sorted(set(range(len(render['triangles'])))-set(ids))
+        if not ids or not other or any(number(s['flags']) & ~7 for s in solid_surfaces):
+            raise ValueError('Mixed face partition is empty or contains unsupported solid flags')
+        used=sorted({v for i in ids for v in render['triangles'][i]['vertices']})
+        remap={v:i for i,v in enumerate(used)}
+        render=deepcopy(render)
+        render['vertices']=[source_render['vertices'][v] for v in used]
+        render['triangles']=[dict(source_render['triangles'][i],vertices=[remap[v] for v in source_render['triangles'][i]['vertices']]) for i in ids]
+        collision=dict(collision,source_surfaces=glass_surfaces)
+        partition=dict(method='Disjoint source shader identities followed by complete local glass geometry proof',
+            breakable_render_triangles=ids,solid_render_triangles=other,
+            breakable_collision_surfaces=sorted(selected_surfaces),solid_collision_surfaces=sorted(all_surfaces-selected_surfaces),
+            original_render_vertices=used,generated_instance_suffix='_breakable',
+            source_geometry_preserved='Glass becomes a separate unified instance; original frame render and collision remain paired at the same source transform')
+    result = prove(render, collision, {i:m.get('source_shader') for i,m in enumerate(bsp['materials'])},
                    a['collision_materials'], units=bsp['units'])
-    result.update(source_definition=definition, source_render_mesh=d['mesh index'], source_render_object=render['id'],
+    if partition:
+        ids=partition['breakable_render_triangles']
+        for name in ('retained_render_triangles','suppressed_opposite_render_triangles'):
+            result[name]=[ids[i] for i in result[name]]
+        mapped=[-1]*len(source_render['vertices'])
+        for original,position in zip(partition['original_render_vertices'],result['render_vertex_position_ids']):
+            mapped[original]=position
+        result['render_vertex_position_ids']=mapped
+        result['partition']=partition
+        result['coverage_scope']='Exact breakable partition; solid remainder preserved separately'
+    result.update(source_definition=definition, source_render_mesh=d['mesh index'], source_render_object=source_render['id'],
         placements=placements, source_surface_mapping=d.get('surfaces'),
         source_triangle_mapping=d.get('surface to triangle mapping'),
         correspondence_basis='Local coordinates, source planes, ring boundary edges, exact render coverage and shader identity; compiled triangle offsets are audit evidence only',

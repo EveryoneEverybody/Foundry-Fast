@@ -32,7 +32,7 @@ FAMILIES = {
 }
 FIELDS = frozenset({
     'type', 'flags', 'structure bsps', 'structure seams', 'skies', 'zone sets',
-    'lighting zone sets', 'object names', 'device groups', 'reference frames',
+    'lighting zone sets', 'object names', 'device groups', 'reference frames', 'designer zones',
     'player starting locations', 'player starting profile', 'cutscene flags',
     'zone set switch trigger volumes', 'trigger volumes', 'soft ceilings',
     *FAMILIES, *(v[0] for v in FAMILIES.values()),
@@ -116,6 +116,8 @@ def select_all(root, source_scenario, initial_zone=None, spawn_flag=None):
             pvs_policy='REBUILD_WITH_REACH_TOOL', audibility_policy='REBUILD_WITH_REACH_TOOL'))
     initial = translated[names.index(initial_zone)]
     result.update(scope='FULL_SCENARIO', zone_sets=translated,
+        designer_zones=[dict(source_index=i, target_index=i, name=first(e, 'name'),
+                            source_records=records(e)) for i,e in enumerate(optional_block(root,'designer zones'))],
         geometry_source_bsp_mask=(1 << len(bsps))-1,
         source_bsp_mask=initial['source_bsp_mask'], target_bsp_mask=initial['target_bsp_mask'],
         source_zone_index=initial['source_index'], source_zone_fields=initial['source_fields'])

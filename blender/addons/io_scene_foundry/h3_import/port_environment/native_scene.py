@@ -192,13 +192,17 @@ def construct(scene, plan, config, mats, report, mesh_object):
             else:
                 ids=[i for i,t in enumerate(record['triangles']) if t.get('two_sided')]
                 face_property(ob.data,'face_sides',dict(two_sided=True),ids)
+                ladders=[i for i,t in enumerate(record['triangles']) if t.get('ladder')]
+                if ladders:
+                    face_property(ob.data,'ladder',dict(ladder=True),ladders)
             report['geometry'].append(stats); count['base_meshes']+=1
         elapsed('BSP construction',began)
         began=time.perf_counter()
-        templates={}
+        templates={}; split_templates={}
         proofs={u['source_definition']:u for u in bsp['instance_plan'].get('unified_breakable_definitions',[])}
         for placement in bsp['instance_plan']['placements']:
             di=placement['source_definition']
+            partition=proofs.get(di,{}).get('partition')
             key=(di,placement['render_object'],placement['collision_definition'] is not None)
             if key not in templates:
                 definition=decoded['environment_semantics']['authoring']['definitions'][di]
@@ -210,7 +214,9 @@ def construct(scene, plan, config, mats, report, mesh_object):
                 else:
                     record=deepcopy(decoded['objects'][source_render])
                     record.update(mesh_type='_connected_geometry_mesh_type_default',face_mode='render_only')
-                    if di in proofs:
+                    if partition:
+                        record['triangles']=[record['triangles'][i] for i in partition['solid_render_triangles']]
+                    elif di in proofs:
                         record=native_contracts.unified_mesh(record,proofs[di])
                     else:
                         record=native_topology.render_slivers(record,bsp['source_tag']+' definition '+str(di))
@@ -220,10 +226,15 @@ def construct(scene, plan, config, mats, report, mesh_object):
                     collision_properties(ob,record)
                 else:
                     render_properties(ob,record,bsp['authoring']['render_meshes'][definition['mesh index']]['parts'],material_rows,bsp['authoring']['materials'])
-                    if di in proofs:
+                    if di in proofs and not partition:
                         face_property(ob.data,'face_sides',dict(two_sided=True))
                     elif placement['collision_definition'] is not None:
-                        proxy_record=collision_record(definition,bsp,material_rows)
+                        solid_definition=definition
+                        if partition:
+                            mesh=definition['collision_mesh']
+                            solid_definition=dict(definition,collision_mesh=dict(mesh,source_surfaces=[s for s in mesh['source_surfaces']
+                                if s['source_surface'] in partition['solid_collision_surfaces']]))
+                        proxy_record=collision_record(solid_definition,bsp,material_rows)
                         report.setdefault('collision_topology',[]).append(dict(proxy_record['native_topology'],definition=di))
                         proxy,_=mesh_object(proxy_record,bmats,scene,region,f'{region}_collision_{di}','collision_proxy')
                         proxy.nwo.export_this=False
@@ -231,9 +242,19 @@ def construct(scene, plan, config, mats, report, mesh_object):
                         ob.data.nwo.proxy_collision=proxy
                 templates[key]=ob
                 report['geometry'].append(stats)
+                if partition:
+                    record=native_contracts.unified_mesh(decoded['objects'][source_render],proofs[di])
+                    glass,stats=mesh_object(record,bmats,scene,region,f'{region}_def_{di}_breakable','unified_breakable')
+                    render_properties(glass,record,bsp['authoring']['render_meshes'][definition['mesh index']]['parts'],material_rows,bsp['authoring']['materials'])
+                    face_property(glass.data,'face_sides',dict(two_sided=True))
+                    split_templates[key]=glass
+                    report['geometry'].append(stats)
             else:
                 ob=templates[key].copy()
                 scene.collection.objects.link(ob)
+                if partition:
+                    glass=split_templates[key].copy()
+                    scene.collection.objects.link(glass)
             ob.name=region+'_'+str(placement['source_index'])+'_'+placement['name'].lstrip('!?@')
             ob.matrix_world=Matrix(placement['matrix'])
             source_fields=placement['source_fields']
@@ -243,6 +264,14 @@ def construct(scene, plan, config, mats, report, mesh_object):
             ob.nwo.poop_pathfinding={'cut-out':'cutout','static':'static','none':'none'}[source_fields['pathfinding policy']['name']]
             ob.nwo.poop_imposter_policy='never'
             ob['h3_source_bsp']=bsp['source_tag'];ob['h3_source_placement']=placement['source_index']
+            if partition:
+                glass.name=ob.name+partition['generated_instance_suffix']
+                glass.matrix_world=ob.matrix_world.copy()
+                for name in ('poop_lighting','poop_lightmap_resolution_scale','poop_pathfinding','poop_imposter_policy'):
+                    setattr(glass.nwo,name,getattr(ob.nwo,name))
+                glass['h3_source_bsp']=bsp['source_tag'];glass['h3_source_placement']=placement['source_index']
+                glass['h3_source_partition']='Proven breakable glass partition; solid frame retained in '+ob.name
+                count['partitioned_breakable_placements']=count.get('partitioned_breakable_placements',0)+1
             count['placements']+=1
             count['collision_only_placements']+=placement['render_object'] is None
             count['unified_breakable_placements']+=di in proofs
@@ -339,7 +368,11 @@ def configure_scenario(paths, plan):
                 item.IsSet=bool(sky['active_bsp_mask'] & (1<<i))
             for name in ('cloud scale','cloud speed','cloud direction'):
                 element.SelectField(name).Data=0.0
-        if not tag.block_zone_sets.Elements.Count:
+        if plan.get('selection', {}).get('scope') == 'FULL_SCENARIO':
+            from .native_zones import configure
+            configure(tag, plan)
+            zone = None
+        elif not tag.block_zone_sets.Elements.Count:
             zone=tag.block_zone_sets.AddElement()
             zone.SelectField('name').SetStringData(plan['scenario']['zone_set'])
             for name in ('pvs index','hint previous zone set','audibility index'):
@@ -352,9 +385,10 @@ def configure_scenario(paths, plan):
                 raise ValueError('Unexpected native zone-set identity')
             # Preserve PVS/audibility indices generated by Tool on the second
             # configuration pass. They are compiled target relationships.
-        for field,count in [('bsp zone flags',len(plan['bsps'])),('structure design zone flags',len(plan['structure_designs']))]:
-            for i,item in enumerate(zone.SelectField(field).Items):
-                item.IsSet=i<count
+        if zone is not None:
+            for field,count in [('bsp zone flags',len(plan['bsps'])),('structure design zone flags',len(plan['structure_designs']))]:
+                for i,item in enumerate(zone.SelectField(field).Items):
+                    item.IsSet=i<count
         starts=tag.tag.SelectField('Block:player starting locations')
         if not starts.Elements.Count:
             tag.create_default_profile()
@@ -374,7 +408,11 @@ def validate_scenario(plan, report):
             actual=[e.SelectField(field).Path.RelativePathWithExtension.replace('\\','/') for e in block.Elements]
             if actual != expected:
                 raise ValueError('Native scenario readback mismatch: '+field)
-        zone=tag.block_zone_sets.Elements[0]
+        full = plan.get('selection', {}).get('scope') == 'FULL_SCENARIO'
+        if full:
+            from .native_zones import readback
+            report['zone_set_readback'] = readback(tag, plan)
+        zone=tag.block_zone_sets.Elements[plan['selection']['source_zone_index'] if full else 0]
         mask=sum(1<<i for i,v in enumerate(zone.SelectField('bsp zone flags').Items) if v.IsSet)
         if mask!=plan['scenario']['active_bsp_mask']:
             raise ValueError('Native zone set activates the wrong BSPs')

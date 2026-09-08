@@ -204,7 +204,7 @@ def portal_plan(bsp):
         front, back = p['front cluster'], p['back cluster']
         if any(c < -1 or c >= len(a['clusters']) for c in (front,back)):
             raise ValueError('Invalid source portal cluster relationship')
-        if flags & ~4:
+        if flags & ~12:
             problems.append(issue(bsp['source_tag'], 'cluster portals[].flags', [i],
                                   'Unmapped portal flags', source_value=p['flags']))
         vertices = [vector(v['point']) for v in p['vertices']]
@@ -212,7 +212,7 @@ def portal_plan(bsp):
             raise ValueError('Degenerate source portal polygon')
         result.append(dict(source_index=i, source_front_cluster=front, source_back_cluster=back,
                            vertices_world=vertices, mesh_type='_connected_geometry_mesh_type_portal',
-                           portal_type='_connected_geometry_portal_type_two_way', portal_is_door=bool(flags & 4),
+                           portal_type='_connected_geometry_portal_type_no_way' if flags & 8 else '_connected_geometry_portal_type_two_way', portal_is_door=bool(flags & 4),
                            source_flags=p['flags'], strategy='Source polygon -> native Reach portal authoring; Tool rebuilds PVS'))
     return result, problems
 
@@ -305,17 +305,33 @@ def seam_plan(root, bsps):
         vertices=[vector(fixtures.field(v,'original vertex')) for v in original]
         point_map={int(fixtures.field(v,'final point index')):j for j,v in enumerate(original)}
         final_points=[vector(fixtures.field(v,'final point')) for v in fixtures.block(row,'points')]
-        triangles=[]
-        for triangle in fixtures.block(row,'triangles'):
+        triangles=[]; invalid=[]; correspondence=[]
+        for ti,triangle in enumerate(fixtures.block(row,'triangles')):
             ids=[index(fixtures.field(triangle,f'final point{k}')) for k in range(3)]
-            if any(k not in point_map or final_points[k]!=vertices[point_map[k]] for k in ids):
-                problems.append(issue(root.get('id')+'.structure_seams','seams[].original vertices',[i],
-                                      'Compiled seam vertices have no exact original authoring correspondence'))
+            # Use the authored index relationship, never a nearest-point join.
+            # H3 Tool's six-significant-digit XML plus seam compilation can
+            # differ by 0.0001 world units. Retain ORIGINAL coordinates and
+            # record that bounded difference; larger/ambiguous joins block.
+            if (len(point_map)!=len(original) or any(k not in point_map or not 0<=k<len(final_points)
+                or math.dist(final_points[k],vertices[point_map[k]])>1e-4+1e-10 for k in ids)):
+                invalid.append(ti)
                 continue
             triangles.append([point_map[k] for k in ids])
+        if invalid:
+            problems.append(issue(root.get('id')+'.structure_seams','seams[].original vertices',[i],
+                'Compiled seam vertices have no bounded explicit original authoring correspondence',
+                source_triangles=invalid))
+        for k,j in sorted(point_map.items()):
+            if 0<=k<len(final_points) and final_points[k]!=vertices[j]:
+                correspondence.append(dict(final_point_index=k,original_vertex_index=j,
+                    original_world=vertices[j],compiled_world=final_points[k],
+                    distance_world=math.dist(final_points[k],vertices[j])))
         if len(owners)!=2:
             problems.append(issue(root.get('id')+'.structure_seams','seams[].selected BSP owners',[i],
                                   'A seam has no selected partner; source activation and collision state require resolution',source_owners=owners))
         result.append(dict(source_index=i,identifier=identity,owners=owners,vertices_world=vertices,triangles=triangles,
                            strategy='Paired original source seam geometry -> Reach connected-geometry seam authoring'))
+        if correspondence:
+            result[-1]['source_vertex_correspondence']=dict(method='Explicit authored final point index',
+                native_coordinates='Original authoring vertices',tolerance_world=1e-4,rows=correspondence)
     return result,problems

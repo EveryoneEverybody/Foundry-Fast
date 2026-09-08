@@ -68,6 +68,8 @@ def unified_mesh(render, proof):
     # Keep corner attributes at original split vertices, snap only positions to
     # the exact proven collision/render equivalence classes. Tool welds topology.
     for i,v in enumerate(result['vertices']):
-        v['position'] = proof['unified_position_table'][proof['render_vertex_position_ids'][i]]
+        position = proof['render_vertex_position_ids'][i]
+        if position>=0:
+            v['position'] = proof['unified_position_table'][position]
     result.update(face_mode='breakable', mesh_type='_connected_geometry_mesh_type_default', role='unified_breakable')
     return result

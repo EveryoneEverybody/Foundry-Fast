@@ -83,13 +83,19 @@ def validate(plan, report):
     world=dict(bsps=[],designs=[],skies=[],seams=[])
     report['native_world_readback']=world
     with ScenarioTag(path=plan['target']['scenario'],tag_must_exist=True) as tag:
-        if tag.block_zone_sets.Elements.Count!=1:
+        full = plan.get('selection', {}).get('scope') == 'FULL_SCENARIO'
+        if full:
+            from .native_zones import readback
+            world['zone_sets'] = readback(tag, plan)
+        elif tag.block_zone_sets.Elements.Count!=1:
             raise ValueError('Unexpected generated zone-set count')
-        zone=tag.block_zone_sets.Elements[0]
+        zone=tag.block_zone_sets.Elements[plan['selection']['source_zone_index'] if full else 0]
         if zone.SelectField('name').GetStringData()!=plan['scenario']['zone_set']:
             raise ValueError('Native zone-set identity differs')
         design_mask=sum(1<<i for i,v in enumerate(zone.SelectField('structure design zone flags').Items) if v.IsSet)
-        if design_mask!=(1<<len(plan['structure_designs']))-1:
+        expected_design = (plan['selection']['zone_sets'][plan['selection']['source_zone_index']]['target_design_mask']
+                           if full else (1<<len(plan['structure_designs']))-1)
+        if design_mask!=expected_design:
             raise ValueError('Native zone-set design membership differs')
         for e,b in zip(tag.block_bsps.Elements,plan['bsps']):
             close(e.SelectField('default sky').Value,b['default_sky'],'BSP default sky')
@@ -107,7 +113,9 @@ def validate(plan, report):
             definitions=raw.SelectField('Block:instanced geometries definitions').Elements
             instances=tag.tag.SelectField('Block:instanced geometry instances').Elements
             by_name={e.SelectField('name').GetStringData():e for e in instances}
-            if len(by_name)!=len(bsp['instance_plan']['placements']):
+            proofs={u['source_definition']:u for u in bsp['instance_plan'].get('unified_breakable_definitions',[])}
+            split_count=sum(bool(proofs.get(p['source_definition'],{}).get('partition')) for p in bsp['instance_plan']['placements'])
+            if len(by_name)!=len(bsp['instance_plan']['placements'])+split_count:
                 raise ValueError('Native placement names/counts differ')
             proofs={u['source_definition']:u for u in bsp['instance_plan'].get('unified_breakable_definitions',[])}
             placements=[]
@@ -130,7 +138,8 @@ def validate(plan, report):
                 item=dict(source_placement=p['source_index'],source_definition=p['source_definition'],name=name,
                     native_placement=e.ElementIndex,native_definition=index,collision_surfaces=surfaces.Count,
                     imposter_policy='never',transform='VERIFIED')
-                if p['source_definition'] in proofs:
+                proof=proofs.get(p['source_definition'],{})
+                if proof and not proof.get('partition'):
                     if not surfaces.Count or any(not s.SelectField('flags').TestBit('breakable') for s in surfaces):
                         raise ValueError('Unified glass lost native breakable collision: '+name)
                     sets=d.SelectField('Block:breakable surface sets').Elements.Count
@@ -138,6 +147,25 @@ def validate(plan, report):
                     if not sets or not mappings:raise ValueError('Native breakable render/collision relationship missing: '+name)
                     item['breakable']=dict(subsystem='BSP_BREAKABLE_SURFACES',surface_sets=sets,render_mappings=mappings)
                 placements.append(item)
+                if proof.get('partition'):
+                    split_name=name+proof['partition']['generated_instance_suffix']
+                    if split_name not in by_name:raise ValueError('Native split glass instance absent: '+split_name)
+                    split=by_name[split_name];split_scale=float(split.SelectField('scale').Data)
+                    close(split.SelectField('position').Data,[p['matrix'][i][3]/100 for i in range(3)],split_name+' origin')
+                    for column,axis in enumerate(('forward','left','up')):
+                        close([v*split_scale for v in split.SelectField(axis).Data],[p['matrix'][i][column] for i in range(3)],split_name+' '+axis)
+                    split_index=split.SelectField('instance definition').Value
+                    if not 0<=split_index<definitions.Count:raise ValueError('Invalid native split glass definition')
+                    sd=definitions[split_index];ss=sd.SelectField('Struct:collision info[0]/Block:surfaces').Elements
+                    sets=sd.SelectField('Block:breakable surface sets').Elements.Count
+                    mappings=sd.SelectField('Block:surface to triangle mapping').Elements.Count
+                    if not ss.Count or any(not s.SelectField('flags').TestBit('breakable') for s in ss) or not sets or not mappings:
+                        raise ValueError('Native split glass lost breakable geometry/linkage: '+split_name)
+                    if any(s.SelectField('flags').TestBit('breakable') for s in surfaces):
+                        raise ValueError('Native solid frame incorrectly became breakable: '+name)
+                    item['partition']=dict(name=split_name,native_placement=split.ElementIndex,native_definition=split_index,
+                        transform='VERIFIED',breakable_surfaces=ss.Count,surface_sets=sets,render_mappings=mappings,
+                        source_partition=proof['partition'])
             collision=raw.SelectField('Block:collision bsp').Elements
             large=raw.SelectField('Block:large collision bsp').Elements
             surface_count=sum(b.SelectField('Block:surfaces').Elements.Count for b in [*collision,*large])
