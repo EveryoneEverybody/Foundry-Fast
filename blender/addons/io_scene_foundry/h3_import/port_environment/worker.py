@@ -47,9 +47,10 @@ def dependencies(addon, run):
 
 class ToolJournal:
     """Observe normal Foundry's subprocess boundary and reject out-of-scope jobs."""
-    def __init__(self, paths, run, report, flush):
+    def __init__(self, paths, run, report, flush, *, lighting_qualities=('direct_only', 'draft')):
         from io_scene_foundry import utils
         self.paths, self.run, self.report, self.flush = paths, run, report, flush
+        self.lighting_qualities = tuple(lighting_qualities)
         self.original = utils._popen_tool
         self.running = []
         utils._popen_tool = self.popen
@@ -95,8 +96,8 @@ class ToolJournal:
             first = command[2].replace('\\', '/')
             if first not in {self.paths.scenario, blob}:
                 raise ValueError('Faux invocation belongs to a different job: '+first)
-            if action == 'faux_farm_begin' and command[5] not in {'direct_only', 'draft'}:
-                raise ValueError('Only direct_only/draft lighting is allowed')
+            if action == 'faux_farm_begin' and command[5] not in getattr(self, 'lighting_qualities', ('direct_only', 'draft')):
+                raise ValueError('Lighting quality is not authorized for this build: '+command[5])
         else:
             # In particular, do not let missing shader templates cause writes
             # under the shared stock shader namespace. Existing Reach templates
@@ -364,6 +365,31 @@ def materials(plan, config, paths, report):
     return result
 
 
+def construct_sky(scene, sky, mats, report):
+    """Keep source color-presence and draw order through normal sky export."""
+    from io_scene_foundry import utils
+    from .sky_attributes import draw_meshes
+    materials = [mats[k] for k in sky['materials']]
+    groups = list(draw_meshes(sky['mesh']))
+    if not groups:
+        _, stats = mesh_object(sky['mesh'], materials, scene, 'default', Path(sky['destination']).stem)
+        report['geometry'].append(stats)
+        return
+    nwo = utils.get_scene_props()
+    nwo.regions_table.clear()
+    nwo.permutations_table.clear()
+    for name in dict.fromkeys(group['region_name'] for group, _ in groups):
+        nwo.regions_table.add().name = name
+    for name in dict.fromkeys(group['permutation_name'] for group, _ in groups):
+        nwo.permutations_table.add().name = name
+    for group, record in groups:
+        ob, stats = mesh_object(record, materials, scene, group['region_name'],
+            f'h3_sky_mesh_{group["source_mesh"]:03}', 'sky')
+        ob.nwo.permutation_name = group['permutation_name']
+        report['geometry'].append(dict(stats, source_draw_group=group))
+    report['sky_attribute_recovery'] = sky['mesh']['source_attribute_recovery']
+
+
 def sky_lights(scene, plan):
     import bpy
     from mathutils import Vector
@@ -385,8 +411,9 @@ def sky_lights(scene, plan):
         ob.rotation_mode = 'QUATERNION'
         ob.rotation_quaternion = Vector(sample['direction']).to_track_quat('Z','Y')
         ob.nwo.export_this = True
-        ob.nwo.region_name = 'default'
-        ob.nwo.permutation_name = 'default'
+        nwo = utils.get_scene_props()
+        ob.nwo.region_name = nwo.regions_table[0].name
+        ob.nwo.permutation_name = nwo.permutations_table[0].name
         ob['h3_port_classification'] = 'GENERATED'
         ob['h3_sky_sample'] = i
     nwo = utils.get_scene_props()
@@ -774,8 +801,7 @@ def main():
                 sky_name=Path(sky['destination']).stem
                 sky_asset=sky['destination'].rsplit('/',1)[0]
                 sky_scene=setup_scene(sky_name,'sky',sky_asset+'/'+sky_name+'.sidecar.xml','default',project.name)
-                _,stats=mesh_object(sky['mesh'],[mats[k] for k in sky['materials']],sky_scene,'default',sky_name)
-                report['geometry'].append(stats)
+                construct_sky(sky_scene,sky,mats,report)
                 sky_view=dict(plan,sky=sky,lighting=dict(plan['lighting'],sky=sky['lighting']))
                 sky_lights(sky_scene,sky_view)
                 report.setdefault('native_stage_seconds',{})['sky']=report.get('native_stage_seconds',{}).get('sky',0)+time.perf_counter()-began

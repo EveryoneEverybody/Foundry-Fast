@@ -481,6 +481,11 @@ def construct_selected(paths, scene, bsps, skies, shaders, scenario_xml, lightin
             raise ValueError('Decoded sky differs from source palette identity')
         sources.update([source,*sky['dependencies'].values()])
         mesh=deepcopy(sky['render']);validate_mesh(mesh,len(mesh['materials']))
+        # The pinned JMS bridge omits raw sky colors. Recover them from the
+        # same source render-model XML, with checked triangle correspondence.
+        if any(e.get('name')=='per mesh temporary' for e in sky_render_xmls[source]):
+            from .sky_attributes import recover
+            mesh=recover(mesh,sky_render_xmls[source])
         nodes=mesh['nodes']
         if len(nodes)!=1 or nodes[0]['parent']!=-1 or any(nodes[0]['position']) or any(abs(x)>1e-6 for x in nodes[0]['rotation'][1:]):
             problems.append(authoring.issue(source,'render model nodes',list(range(len(nodes))),'Unmapped sky skeleton transform'))

@@ -70,12 +70,47 @@ with tempfile.TemporaryDirectory() as directory:
         np.testing.assert_allclose(actual[dy*4:(dy+1)*4,dx*4:(dx+1)*4],
             original[sy*4:(sy+1)*4,sx*4:(sx+1)*4],atol=1/255)
     assert not list(paths.roots['tags'].rglob('*')), 'Geometry test must not write tags'
+    from test_h3_environment_sky_attributes import fixture as sky_fixture
+    from port_environment.sky_attributes import recover
+    from port_environment.worker import construct_sky
+    source, xml = sky_fixture()
+    sky = dict(mesh=recover(source, xml), materials=['synthetic/sky', 'synthetic/sky'],
+        destination='levels/h3_port/synthetic/sky.scenery')
+    sky_scene = setup_scene('sky', 'sky', 'levels/h3_port/synthetic/sky.sidecar.xml', 'default', project.name)
+    construct_sky(sky_scene, sky, {'synthetic/sky': materials[0]}, dict(geometry=[]))
+    assert [r.name for r in utils.get_scene_props().regions_table] == ['00', '01']
+    colored = sky_scene.objects['h3_sky_mesh_000'].data
+    uncolored = sky_scene.objects['h3_sky_mesh_001'].data
+    np.testing.assert_allclose(colored.color_attributes['Color'].data[0].color[:3], [.1, .2, .3])
+    assert not uncolored.color_attributes, 'Do not manufacture a color attribute for uncolored H3 sky source'
+    from port_environment.worker import ToolJournal
+    journal = object.__new__(ToolJournal)
+    journal.paths = paths; journal.report = {}; journal.lighting_qualities = ('low',)
+    command = [str(paths.reach/'tool_fast.exe'), 'faux_farm_begin', paths.scenario,
+        'all', '', 'low', 'test', 'true']
+    assert journal.check(command) == command
+    for quality in ('direct_only', 'high'):
+        other = list(command); other[5] = quality
+        try:
+            journal.check(other)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('A bake must not escape its explicit quality choice')
+    other = list(command); other[2] = 'levels/stock/example'
+    try:
+        journal.check(other)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('A bake must not escape its owned scenario')
 # Unit-test the real shared Reach orchestration's command decisions. No Tool
 # result is simulated as native acceptance; only dispatch and early aborts are
 # examined here. Native Tool/Faux acceptance remains the Windows local runner.
 from unittest.mock import patch
 from io_scene_foundry.tools.scenario import lightmap
 for quality,expected in [('direct_only',['dillum']),('draft',['dillum','pcast','radest_extillum','fgather']),
+                         ('low',['dillum','pcast','radest_extillum','fgather']),
                          ('high',['dillum','pcast','radest_extillum','fgather'])]:
     for fail in (None,'dillum'):
         driver=object.__new__(lightmap.LightMapper)
