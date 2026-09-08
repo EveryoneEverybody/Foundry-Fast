@@ -100,3 +100,15 @@ remaining check-level failure asserted from the inconclusive player-positioning
 attempts. The pre-repair door-existence failure is retained in the captures.
 See [h3-voi-runtime-findings.md](h3-voi-runtime-findings.md) for the material,
 geometry, sky and reusable dependency findings from this continuation.
+
+The subsequent player-interaction continuation resolved the repeated player
+deaths by applying the two original Voi startup `kill_volume_disable` calls in
+an isolated scenario copy. The user then confirmed normal door-button use,
+animation, closed-door blocking and open-door traversal. Live read-only queries
+of the selected switch and machine both returned 1 with deathless false.
+Collision during panel motion, measured animation duration and crate response
+remain separate pending checks. See
+[h3-voi-player-interaction.md](h3-voi-player-interaction.md) and the exact manual
+observation under
+`D:\HaloRE\PortCensus\voi_player_interaction_20260908_02\door-player-observation.json`.
+The main scenario and the `SOURCE_STRUCTURE_TO_NATIVE_EDITOR` repair are intact.

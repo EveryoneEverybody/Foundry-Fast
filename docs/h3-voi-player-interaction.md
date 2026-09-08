@@ -3,8 +3,32 @@
 The actual player can remain at `factory_a_entry02_switch` with normal health
 and `cheat_deathless_player = false` once the original mission's startup
 kill-volume settings are applied. The control displays **Hold [E] to open door**.
-Ordinary button activation, moving door collision, traversal and cinderblock
-response still require their own runtime observations.
+The user subsequently confirmed normal button activation, door animation,
+blocking by closed doors and traversal through open doors. Collision while the
+panels are moving and cinderblock response still require separate observations.
+
+| Selected door check | Runtime result | Basis |
+|---|---|---|
+| Normal player button use | RUNTIME_PASS | User manual test |
+| Player-driven control → group → linked machine | RUNTIME_PASS | User manual test; subsequent control/machine queries both 1 |
+| Door animation | RUNTIME_PASS | User manual test; duration and node participation not measured |
+| Fully closed door blocks player | RUNTIME_PASS | User manual test |
+| Fully open door permits passage | RUNTIME_PASS | User manual test |
+| Player traversal | RUNTIME_PASS | User manual test |
+| Collision during panel motion | RUNTIME_TEST_PENDING | Not established by the fully open/closed checks |
+
+The follow-up observation is
+`D:\HaloRE\PortCensus\voi_player_interaction_20260908_02\door-player-observation.json`.
+It retains the user's exact statement and binds it to the unchanged active
+scenario copy and source/native fixture indices. A live query after that test
+returned control 1, machine 1, deathless false and zone index 2 (`faa_lakea`).
+This accepts the selected fixture checks, not every translated door or zone.
+
+After `game_revert`, the source startup calls and actual-player teleport to
+`diag_crate` reached the crate area without enabling deathless. The fresh replay
+and post-test door endpoints are captured under the same follow-up evidence
+directory. Crate collision, physical response and stored orientation fidelity
+remain separate checks; the stored-pose classification is still `STATICIZED_MVP`.
 
 ## Why the earlier teleports appeared to fail
 
