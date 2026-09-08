@@ -4,8 +4,10 @@ The actual player can remain at `factory_a_entry02_switch` with normal health
 and `cheat_deathless_player = false` once the original mission's startup
 kill-volume settings are applied. The control displays **Hold [E] to open door**.
 The user subsequently confirmed normal button activation, door animation,
-blocking by closed doors and traversal through open doors. Collision while the
-panels are moving and cinderblock response still require separate observations.
+blocking by closed doors and traversal through open doors. The follow-up manual
+test confirms that collision follows moving panels, the panels block the player,
+and the open part of the doorway remains passable during animation. Cinderblocks
+respond to shots, move and collide with each other.
 
 | Selected door check | Runtime result | Basis |
 |---|---|---|
@@ -15,7 +17,10 @@ panels are moving and cinderblock response still require separate observations.
 | Fully closed door blocks player | RUNTIME_PASS | User manual test |
 | Fully open door permits passage | RUNTIME_PASS | User manual test |
 | Player traversal | RUNTIME_PASS | User manual test |
-| Collision during panel motion | RUNTIME_TEST_PENDING | Not established by the fully open/closed checks |
+| Collision follows moving panels and blocks player | RUNTIME_PASS | Follow-up user manual test |
+| Open aperture passable during motion | RUNTIME_PASS | Follow-up user manual test |
+| Crate collision with its pair | RUNTIME_PASS | User reports blocks bump each other |
+| Crate shot response and rigid-body motion | RUNTIME_PASS | User reports blocks move when shot |
 
 The follow-up observation is
 `D:\HaloRE\PortCensus\voi_player_interaction_20260908_02\door-player-observation.json`.
@@ -27,8 +32,17 @@ This accepts the selected fixture checks, not every translated door or zone.
 After `game_revert`, the source startup calls and actual-player teleport to
 `diag_crate` reached the crate area without enabling deathless. The fresh replay
 and post-test door endpoints are captured under the same follow-up evidence
-directory. Crate collision, physical response and stored orientation fidelity
-remain separate checks; the stored-pose classification is still `STATICIZED_MVP`.
+directory. `moving-collision-and-crate-observation.json` records the subsequent
+manual collision and shot passes with the exact statement, input, scenario hash
+and fixture indices. The selected player control → group → animated machine →
+moving collision → traversal chain and crate shot-response chain are runtime
+proven. This does not accept scenery collision or every translated object.
+
+Opening duration, all-node participation, repeat-use/reset semantics, crate
+player contact, settling and create-at-rest behavior remain unmeasured. Stored
+orientation fidelity remains `STATICIZED_MVP`; effective mass is not measured.
+The observed shot response is not grounds for replacing the loose authored mass
+value or changing physics.
 
 ## Why the earlier teleports appeared to fail
 
