@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import threading
 import tomllib
 import traceback
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ from . import BUILDER_VERSION
 from . import fixtures
 from .model import stable_hash, plan_bsps, plan_skies
 from .paths import OutputPaths, atomic_json, digest, relative
-from .validation import NATIVE_TAG_EXTENSIONS, geometry_errors, lighting_evidence, lighting_count_errors
+from .validation import NATIVE_TAG_EXTENSIONS, geometry_errors, lighting_evidence, lighting_count_errors, native_xml_references
 
 
 def dependencies(addon, run):
@@ -112,18 +113,25 @@ class ToolJournal:
             row['source_log'] = str(Path(cwd, stream_name).resolve())
         self.report['tool_invocations'].append(row)
         self.flush()
+        start=time.perf_counter()
         process = self.original(command, cwd, **kwargs)
-        self.running.append((process, row, time.perf_counter()))
+        def measure():
+            process.wait()
+            row['seconds']=time.perf_counter()-start
+        observer=threading.Thread(target=measure,daemon=True)
+        observer.start()
+        self.running.append((process, row, observer))
         return process
 
     def finish(self, wait=False):
         still = []
-        for process, row, start in self.running:
+        for process, row, observer in self.running:
             code = process.wait() if wait else process.poll()
             if code is None:
-                still.append((process, row, start))
+                still.append((process, row, observer))
             else:
-                row.update(exit_code=code, seconds=time.perf_counter()-start,
+                observer.join()
+                row.update(exit_code=code,
                            status='ACCEPTED' if code == 0 else 'FAILED')
                 if row.get('source_log') and Path(row['source_log']).is_file():
                     folder = self.run/'tool-logs'
@@ -239,6 +247,8 @@ def mesh_object(record, materials, scene, region, name, role='render'):
 
 
 def materials(plan, config, paths, report):
+    began=time.perf_counter()
+    timings=report.setdefault('native_stage_seconds',{})
     import bpy
     from io_scene_foundry.h3_import.reach_builder import ReachStager
     from io_scene_foundry.tools.export_bitmaps import export_bitmap
@@ -272,6 +282,8 @@ def materials(plan, config, paths, report):
     # Blender's text buffer inserts a very long line quadratically. Campaign
     # manifests need line breaks; the JSON content/decoded values stay identical.
     text.write(json.dumps(adapted, indent=1))
+    timings['bitmaps']=time.perf_counter()-began
+    began=time.perf_counter()
     stager = ReachStager(native_cube_sources=plan['version']>=2)
     report['material_staging'] = stager.results
     material_errors = []
@@ -301,11 +313,15 @@ def materials(plan, config, paths, report):
     if material_errors:
         report['material_errors'] = material_errors
         raise ValueError('Native material staging has unresolved bindings: '+json.dumps(material_errors))
+    timings['materials']=time.perf_counter()-began
+    began=time.perf_counter()
     # Export each usage-specific staged image once; several shaders share the
     # concrete detail and default textures. The ordinary shader writer sees
     # existing target identities and does not rebuild these bitmap tags.
     from .native_cache import previous_bitmaps
-    previous = previous_bitmaps(paths,plan,config) if plan['version']>=2 else {}
+    from io_scene_foundry import utils
+    identities={paths.namespace+'/bitmaps/'+utils.valid_image_name(i.name) for i in stager.images.values()}
+    previous = previous_bitmaps(paths,plan,config,identities) if plan['version']>=2 else {}
     report['bitmap_cache_reused'] = []
     for image in dict.fromkeys(stager.images.values()):
         # Image.copy retains packed bytes but Blender loads the copied buffer
@@ -323,6 +339,11 @@ def materials(plan, config, paths, report):
             bitmap_path = export_bitmap(image)
         if not bitmap_path or not (paths.roots['tags']/bitmap_path).is_file():
             raise ValueError('Reach bitmap import did not produce a tag for '+image.name)
+    from .native_bitmaps import PIXEL_EXPORT
+    report['bitmap_builds'] = [dict(name=i.name, destination=i.nwo.filepath,native_cube_layout=i.get('h3_native_cube_layout'),pixel_export=PIXEL_EXPORT,
+                                  source_bitmap=i.get('h3_source_bitmap')) for i in dict.fromkeys(stager.images.values())]
+    timings['bitmaps']+=time.perf_counter()-began
+    began=time.perf_counter()
     for target in result.values():
         if plan['version']>=2:
             from .native_materials import complete_tag
@@ -330,12 +351,12 @@ def materials(plan, config, paths, report):
         else:
             build_shader(target, False)
     report['material_staging'] = stager.results
-    from .native_bitmaps import PIXEL_EXPORT
-    report['bitmap_builds'] = [dict(name=i.name, destination=i.nwo.filepath,native_cube_layout=i.get('h3_native_cube_layout'),pixel_export=PIXEL_EXPORT,
-                                  source_bitmap=i.get('h3_source_bitmap')) for i in dict.fromkeys(stager.images.values())]
+    timings['materials']+=time.perf_counter()-began
+    began=time.perf_counter()
     if plan['version']>=2:
         from . import native_validation
         native_validation.bitmaps(plan,paths,report,config)
+    timings['native bitmap validation']=time.perf_counter()-began
     return result
 
 
@@ -372,11 +393,12 @@ def sky_lights(scene, plan):
     bpy.context.view_layer.update()
 
 
-def export(scene, paths, relative_asset, name):
+def export(scene, paths, relative_asset, name, report=None):
     import bpy
     from io_scene_foundry import utils
     from io_scene_foundry.export import export_asset
     bpy.context.window.scene = scene
+    began=time.perf_counter()
     nwo = utils.get_scene_props()
     target = paths.destination('data', relative_asset[len(paths.namespace)+1:] if relative_asset != paths.namespace else '')
     target.mkdir(parents=True, exist_ok=True)
@@ -385,6 +407,9 @@ def export(scene, paths, relative_asset, name):
     sidecar = relative_asset+'/'+name+'.sidecar.xml'
     export_asset(bpy.context, str(target/(name+'.sidecar.xml')), sidecar.replace('/', '\\'), name,
                  str(target), nwo, utils.get_export_props(), False, False, True)
+    if report is not None:
+        report.setdefault('export_intervals',[]).append(dict(asset=relative_asset,seconds=time.perf_counter()-began,
+            includes='Blend save, GR2/sidecar export, synchronous Tool import and Foundry postprocessing'))
     if not (target/(name+'.sidecar.xml')).is_file() or not list((target/'export').rglob('*.gr2')):
         raise ValueError('Foundry did not produce the expected sidecar and GR2 source')
 
@@ -507,13 +532,15 @@ def validate_lighting_inputs(plan, report):
         native_validation.lighting(plan,report)
 
 
-def validate_native(paths, plan, run, report):
+def validate_native(paths, plan, run, report, *, export_xml=True):
     from io_scene_foundry.managed_blam import Tag
     from io_scene_foundry import utils
     from io_scene_foundry.managed_blam.scenario import ScenarioTag
     if plan['version'] >= 2:
         from .native_scene import validate_scenario
         validate_scenario(plan, report)
+        from .native_world import validate as validate_world
+        validate_world(plan,report)
     else:
         with ScenarioTag(path=plan['target']['scenario'], tag_must_exist=True) as tag:
             actual_bsp = tag.block_bsps.Elements[0].SelectField('structure bsp').Path.RelativePathWithExtension.replace('\\','/')
@@ -549,12 +576,13 @@ def validate_native(paths, plan, run, report):
                 raise ValueError('Generated sky model still requires an ungenerated imposter asset')
             report['sky_imposter_policy'] = 'never'
     output = run/'native-tag-xml'
-    output.mkdir()
+    if export_xml:output.mkdir()
     references = set()
     report['native_reference_details'] = []
     report['optional_native_placeholders'] = []
     report['auxiliary_outputs_without_xml_validation'] = []
-    for index, source in enumerate(sorted(p for base in paths.tag_directories() for p in base.rglob('*'))):
+    validated_tags=[]
+    for source in sorted(p for base in paths.tag_directories() for p in base.rglob('*')):
         if not source.is_file():
             continue
         if source.suffix not in NATIVE_TAG_EXTENSIONS:
@@ -578,13 +606,15 @@ def validate_native(paths, plan, run, report):
                     # an imposter resource or broadly permit missing references.
                     optional_bsp = (source.suffix == '.scenario_structure_bsp'
                         and name in {b['destination'].rsplit('.',1)[0]+'.instance_imposter_definition' for b in plan_bsps(plan)}
-                        and tag.tag.SelectField('Block:instanced geometry instances').Elements.Count == 0)
+                        and (tag.tag.SelectField('Block:instanced geometry instances').Elements.Count == 0 or
+                            (plan['version']>=2 and all(str(e.SelectField('imposter policy').Items[e.SelectField('imposter policy').Value].EnumName)=='never'
+                                for e in tag.tag.SelectField('Block:instanced geometry instances').Elements))))
                     optional_sky = (source.suffix == '.model'
                         and name in {s['destination'].rsplit('.',1)[0]+'.imposter_model' for s in plan_skies(plan)}
                         and tag.tag.SelectField('ShortEnum:imposter policy').Value == 1)
                     if optional_bsp or optional_sky:
-                        report['optional_native_placeholders'].append(dict(reference=name, classification='UNRESOLVED',
-                            reason=('Tool-authored imposter reference for zero instances; paired/live stock Reach box has the same missing-asset shape'
+                        report['optional_native_placeholders'].append(dict(reference=name, classification='UNUSED_NATIVE_PLACEHOLDER',
+                            reason=('Tool-authored imposter reference; native instance policy is never or there are zero instances; full geometry remains required'
                                 if optional_bsp else 'Tool regenerates this placeholder even after clearing it; native sky imposter policy is never; generated render model is required'),
                             runtime_status='PENDING_NATE'))
                         continue
@@ -595,20 +625,24 @@ def validate_native(paths, plan, run, report):
                 report['native_reference_details'].append(dict(owner=source.relative_to(paths.roots['tags']).as_posix(),
                     field=str(field.FieldPath), reference=name,
                     classification='GENERATED' if generated else 'TARGET_DEFAULT'))
+        validated_tags.append(source)
+    report['native_reference_audit_status']='VERIFIED_ALL_GENERATED_TAGS'
+    if not export_xml:
+        report['native_tag_open_status']='MANAGEDBLAM_OPENED_TOOL_XML_PENDING'
+        return
+    for index,source in enumerate(validated_tags):
+        if index%50==0:
+            print(f'Validating native XML {index+1}/{len(validated_tags)}: {source.name}',flush=True)
         target = output/(f'{index:04}_'+source.name+'.xml')
         utils.run_tool(['export-tag-to-xml', str(source), str(target)], force_tool=True)
         if not target.is_file():
             raise ValueError('Reach Tool could not open generated tag: '+str(source))
-        root = fixtures.parse(target.read_bytes())
-        for field in root.iter('field'):
-            if field.get('type') != 'tag reference':
-                continue
-            value = field.get('value', '').split(',', 1)[0].replace('\\','/')
-            if not value:
-                continue
+        for value in native_xml_references(target):
             if ':' in value or value.startswith('/') or value.lower().startswith('levels/test/box'):
                 raise ValueError('Foreign/stock-box reference in generated Reach tag: '+value)
             references.add(value)
+        report.setdefault('native_xml_validation',[]).append(dict(path=str(target),bytes=target.stat().st_size,
+            sha256=digest(target),status='WELL_FORMED_STREAMED',runtime_identities='ManagedBlam readback; XML contains display labels'))
     report['runtime_references'] = sorted(references)
     report['native_tag_open_status'] = 'MANAGEDBLAM_AND_REACH_TOOL_OPENED'
 
@@ -699,6 +733,7 @@ def main():
         if plan['version'] >= 2:
             from . import native_scene
             for sky in plan_skies(plan):
+                began=time.perf_counter()
                 report['stage'] = 'sky export'; flush()
                 sky_name=Path(sky['destination']).stem
                 sky_asset=sky['destination'].rsplit('/',1)[0]
@@ -707,7 +742,8 @@ def main():
                 report['geometry'].append(stats)
                 sky_view=dict(plan,sky=sky,lighting=dict(plan['lighting'],sky=sky['lighting']))
                 sky_lights(sky_scene,sky_view)
-                export(sky_scene,paths,sky_asset,sky_name)
+                report.setdefault('native_stage_seconds',{})['sky']=report.get('native_stage_seconds',{}).get('sky',0)+time.perf_counter()-began
+                export(sky_scene,paths,sky_asset,sky_name,report)
                 configure_sky_model(sky_view)
             bpy.context.window.scene=scene
             report['stage']='BSP construction'; flush()
@@ -715,9 +751,19 @@ def main():
                 native_scene.construct(scene,plan,config,mats,report,mesh_object)
             report['stage']='BSP and scenario export'; flush()
             configure_scenario(paths,plan)
-            export(scene,paths,paths.namespace,paths.asset)
+            # Rebuild instance import data along with the source-derived
+            # emissive material table. A previous partial build is not an
+            # authoritative cache for this accepted authoring snapshot.
+            utils.get_export_props().import_force=True
+            export(scene,paths,paths.namespace,paths.asset,report)
             configure_scenario(paths,plan)
+            for bsp in plan['bsps']:
+                lighting_path=bsp['destination'].rsplit('.',1)[0]+'.scenario_structure_lighting_info'
+                utils.run_tool(['export-tag-to-xml',str(paths.roots['tags']/lighting_path),
+                    str(run/(bsp['region']+'-lighting-before-static.xml'))],force_tool=True)
+            began=time.perf_counter()
             native_scene.write_static_lights(plan,report)
+            report.setdefault('native_stage_seconds',{})['lighting']=time.perf_counter()-began
         else:
             report['stage'] = 'sky export'
             flush()
@@ -759,6 +805,10 @@ def main():
         flush()
         with profile.span('native lighting input validation before Faux'):
             validate_lighting_inputs(plan, report)
+        if plan['version']>=2:
+            from .native_world import validate as validate_world
+            with profile.span('native world validation before Faux'):
+                validate_world(plan,report)
         report['stage'] = 'lighting'
         flush()
         if config['lighting'] != 'none':

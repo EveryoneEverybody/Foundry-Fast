@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 import math
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from . import authoring, native_contracts, native_topology
@@ -139,12 +140,18 @@ def construct(scene, plan, config, mats, report, mesh_object):
     for bsp in plan['bsps']:
         nwo.regions_table.add().name=bsp['region']
     report['native_construction'] = []
+    timings=report.setdefault('native_stage_seconds',{})
+    def elapsed(name,start):
+        timings[name]=timings.get(name,0)+time.perf_counter()-start
     source_run = Path(config['snapshot_input']['source_run']) if config.get('snapshot_input') else Path(config['run_directory'])
     for bsp in plan['bsps']:
+        began=time.perf_counter()
         region = bsp['region']
         decoded = json.loads((source_run/'source'/bsp['geometry_source']['file']).read_text())
         if stable_hash(decoded) != bsp['geometry_source']['canonical_sha256']:
             raise ValueError('Decoded BSP changed before native construction')
+        elapsed('accepted geometry JSON verification',began)
+        began=time.perf_counter()
         material_rows = deepcopy(bsp['materials'])
         material_rows.append(dict(name='collision_default',source_shader=None))
         # An untextured collision shell has no source shader. This is a special
@@ -186,6 +193,8 @@ def construct(scene, plan, config, mats, report, mesh_object):
                 ids=[i for i,t in enumerate(record['triangles']) if t.get('two_sided')]
                 face_property(ob.data,'face_sides',dict(two_sided=True),ids)
             report['geometry'].append(stats); count['base_meshes']+=1
+        elapsed('BSP construction',began)
+        began=time.perf_counter()
         templates={}
         proofs={u['source_definition']:u for u in bsp['instance_plan'].get('unified_breakable_definitions',[])}
         for placement in bsp['instance_plan']['placements']:
@@ -237,17 +246,23 @@ def construct(scene, plan, config, mats, report, mesh_object):
             count['placements']+=1
             count['collision_only_placements']+=placement['render_object'] is None
             count['unified_breakable_placements']+=di in proofs
+        elapsed('instance construction',began)
+        began=time.perf_counter()
         for portal in bsp['portals']:
             points=portal['vertices_world']
             record=polygon_record(points,[list(range(len(points)))],portal['mesh_type'])
             ob,_=mesh_object(record,[default],scene,region,f'{region}_portal_{portal["source_index"]}','portal')
             ob.nwo.portal_type=portal['portal_type'];ob.nwo.portal_is_door=portal['portal_is_door']
+        elapsed('BSP construction',began)
+        began=time.perf_counter()
         for design in bsp['structure_design']['meshes']:
             points=[p for tri in design['triangles_world'] for p in tri]
             record=polygon_record(points,[list(range(i,i+3)) for i in range(0,len(points),3)],design['mesh_type'])
             ob,_=mesh_object(record,[default],scene,region,design['name'],'structure_design')
             ob.data.nwo.boundary_surface_type=design['boundary_surface_type']
+        elapsed('structure design',began)
         report['native_construction'].append(count)
+    began=time.perf_counter()
     for seam in plan['seams']:
         if seam.get('selected_state'):
             continue
@@ -257,6 +272,7 @@ def construct(scene, plan, config, mats, report, mesh_object):
         record=polygon_record(seam['vertices_world'],seam['triangles'],'_connected_geometry_mesh_type_seam')
         ob,_=mesh_object(record,[default],scene,owners[0]['region'],'h3_seam_'+str(seam['source_index']),'seam')
         ob.nwo.seam_back=owners[1]['region'];ob.nwo.seam_back_manual=False
+    elapsed('BSP construction',began)
     text=bpy.data.texts.new('H3 accepted environment provenance')
     text.write(json.dumps(dict(source=plan['source'],selection=plan['selection'],plan_sha256=plan['plan_sha256'],
         global_seams=plan['seam_source_context'],lighting=plan['lighting_by_bsp']),indent=1))
@@ -281,6 +297,7 @@ def write_static_lights(plan, report):
             fade_out_distance=0.0,fade_start_distance=0.0,light_tag='',shader='',gel='',lens_flare='') for i in lighting['instances']]
         path=bsp['destination'].rsplit('.',1)[0]+'.scenario_structure_lighting_info'
         with ScenarioStructureLightingInfoTag(path=path,tag_must_exist=True) as tag:
+            before_materials=tag.tag.SelectField('Block:material info').Elements.Count
             tag.build_tag(instances,definitions)
             # Foundry's ordinary writer enables far attenuation by default.
             # Restore the decoded authored flags by name, not numeric analogy.
@@ -289,7 +306,11 @@ def write_static_lights(plan, report):
                 flags.SetBit('use near attenuation',bool(d['flags'] & 1))
                 flags.SetBit('use far attenuation',bool(d['flags'] & 2))
             tag.tag.Save()
+            after_materials=tag.tag.SelectField('Block:material info').Elements.Count
+            if before_materials!=after_materials:
+                raise ValueError('Native static-light writer changed the imported emissive material table')
         report['static_light_authoring'].append(dict(path=path,definitions=len(definitions),instances=len(instances),
+            imported_material_rows_before=before_materials,imported_material_rows_after=after_materials,
             source_bsp=bsp['source_tag'],strategy='Foundry ScenarioStructureLightingInfoTag.build_tag; authored static baseline'))
 
 

@@ -1,5 +1,6 @@
 """Package a verified extension with the one-command Windows compiler runner."""
 import hashlib
+import argparse
 import json
 from pathlib import Path
 import subprocess
@@ -8,10 +9,15 @@ import tomllib
 from zipfile import ZipFile, ZIP_DEFLATED
 
 root = Path(__file__).resolve().parents[1]
-extension = Path(sys.argv[1]).resolve(strict=True)
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('extension')
+parser.add_argument('--environment',choices=('proof_box','voi_factory_a'),default='proof_box')
+args=parser.parse_args()
+extension = Path(args.extension).resolve(strict=True)
 with ZipFile(extension) as source:
     version = tomllib.loads(source.read('blender_manifest.toml').decode())['version']
-    name = f'Foundry-H3-proof-box-{version}-windows'
+    kind='proof-box' if args.environment=='proof_box' else 'voi-factory-a-environment'
+    name = f'Foundry-H3-{kind}-{version}-windows'
     output = extension.parent/(name+'.zip')
     hashes = {}
     with ZipFile(output,'w',ZIP_DEFLATED) as target:
@@ -21,12 +27,13 @@ with ZipFile(extension) as source:
             path = 'io_scene_foundry/'+member.filename
             target.writestr(path,content)
             hashes[path] = hashlib.sha256(content).hexdigest()
-        for path,local in [('Run-ProofBox.ps1',root/'tools/Run-ProofBox.ps1'),
-                           ('README.md',root/'docs/h3-proof-box.md')]:
+        runner='Run-ProofBox.ps1' if args.environment=='proof_box' else 'Run-VoiFactoryAEnvironment.ps1'
+        document='h3-proof-box.md' if args.environment=='proof_box' else 'h3-voi-native-environment.md'
+        for path,local in [(runner,root/'tools'/runner),('README.md',root/'docs'/document)]:
             content = local.read_bytes()
             target.writestr(path,content)
             hashes[path] = hashlib.sha256(content).hexdigest()
-        target.writestr('build.json',json.dumps(dict(format='foundry.h3-proof-box-package',version=version,
+        target.writestr('build.json',json.dumps(dict(format='foundry.h3-'+kind+'-package',version=version,
             source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
             extension_sha256=hashlib.sha256(extension.read_bytes()).hexdigest(),files=hashes),indent=2))
 with ZipFile(output) as target:

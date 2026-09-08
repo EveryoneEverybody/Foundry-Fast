@@ -7,7 +7,7 @@ from . import authoring
 def close(actual, expected, label, tolerance=1e-4):
     a=list(actual) if hasattr(actual,'__iter__') else [actual]
     b=list(expected) if hasattr(expected,'__iter__') else [expected]
-    if len(a)!=len(b) or any(not math.isfinite(float(x)) or
+    if len(a)!=len(b) or any(not math.isfinite(float(x)) or not math.isfinite(float(y)) or
         abs(float(x)-float(y))>tolerance*max(1,abs(float(y))) for x,y in zip(a,b)):
         raise ValueError(f'Native authoring readback mismatch {label}: {a} != {b}')
 
@@ -33,24 +33,28 @@ def lighting(plan, report):
                         ('hotspot falloff speed','hotspot_falloff')]:
                         close(element.SelectField(field).Data,d[key],path+' '+field)
                 flags=element.SelectField('flags')
-                actual_flags=sum(1<<i for i,item in enumerate(flags.Items) if item.IsSet)
+                # Reach sets its light-version marker when compiling authored
+                # definitions. It is not a source attenuation flag.
+                actual_flags=int(flags.RawValue) & ~(8 if flags.TestBit('light version 1') else 0)
                 close(actual_flags,d['flags'],path+' named attenuation flags')
             for element,i in zip(instances,light['instances']):
                 for field,key in [('definition index','definition_index'),('origin','origin'),('forward','forward'),('up','up')]:
                     close(element.SelectField(field).Data,i[key],path+' instance '+field)
             native_emission=[]
             for m in tag.tag.SelectField('Block:material info').Elements:
-                native_emission.append({k:m.SelectField(k).Data for k in ('emissive power','emissive color',
-                    'emissive focus','attenuation falloff','attenuation cutoff')})
+                native_emission.append({k:(list(m.SelectField(k).Data) if k=='emissive color' else float(m.SelectField(k).Data))
+                    for k in ('emissive power','emissive color','emissive focus','attenuation falloff','attenuation cutoff')})
         with Tag(path=bsp['destination'],tag_must_exist=True) as tag:
             native_materials={}
             for m in tag.tag.SelectField('Block:materials').Elements:
                 ref=m.SelectField('render method').Path
                 index=m.SelectField('imported material index').Data
+                if not -1<=index<len(native_emission):
+                    raise ValueError('Native imported material index is outside its lighting table: '+bsp['destination']+' material '+str(m.ElementIndex))
                 if ref is not None and 0<=index<len(native_emission):
                     native_materials.setdefault(str(ref.RelativePathWithExtension).replace('\\','/'),[]).append((index,native_emission[index]))
         verified=[]
-        for m in bsp['materials'][:len(bsp['authoring']['materials'])]:
+        for source_slot,m in enumerate(bsp['materials'][:len(bsp['authoring']['materials'])]):
             s=m.get('lighting',{})
             if float(s.get('emissive power',0))<=0:continue
             destination=next(r['destination'] for r in plan['materials'] if r['source_shader']==m['source_shader'])
@@ -66,8 +70,9 @@ def lighting(plan, report):
                 except ValueError:continue
                 matches.append(index)
             if not matches:
-                raise ValueError('Source emissive material lacks matching native power/color/focus/attenuation: '+destination)
-            verified.append(dict(source_material=m['slot'],source_shader=m['source_shader'],target=destination,
+                raise ValueError('Source emissive material lacks matching native power/color/focus/attenuation: '+destination+
+                    ' expected='+str(expected)+' candidates='+str(native_materials.get(destination,[])))
+            verified.append(dict(source_material=source_slot,source_shader=m['source_shader'],target=destination,
                 native_material_info_indices=matches,expected=expected))
         rows.append(dict(bsp=bsp['destination'],definitions=len(light['definitions']),instances=len(light['instances']),emissive=verified))
     report['lighting_field_readback']=dict(status='VERIFIED_BEFORE_FAUX',bsps=rows)

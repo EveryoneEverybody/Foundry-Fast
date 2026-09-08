@@ -244,6 +244,8 @@ class ReachStager:
                             socket.default_value = parameter['value'][3]
                         elif channel == 'color_value':
                             value = parameter['value']
+                            if authoring is not None:
+                                value=[*(utils.srgb_to_linear(v) for v in value[:3]),value[3]]
                             socket.default_value = value[:3] if socket.type == 'VECTOR' else value
                         else:
                             socket.default_value = parameter['value']

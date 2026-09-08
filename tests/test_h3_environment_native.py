@@ -9,10 +9,60 @@ import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'blender/addons/io_scene_foundry/h3_import'))
 from port_environment import native_contracts, snapshot, breakable_geometry, native_validation, native_topology
 from port_environment.paths import OutputPaths, Ownership
+from port_environment import native_cache
+from port_environment.native_world import match_triangles
+from port_environment.validation import native_xml_references
 from test_h3_environment_remaining_rules import glass_fixture
 
 
 class NativeContracts(unittest.TestCase):
+    def test_native_xml_streaming_preserves_exact_sentinels_and_rejects_entities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'native.xml'
+            data=b'<tag>\n<field value="levels\\generated\\bsp" type="tag reference"/>\n<field value="<unavailable>" type="pageable resource"/>\n<field value=",\xff\xff\xff\xff" type="tag reference"/>\n</tag>'
+            path.write_bytes(data)
+            for chunk in (1,7,64,1024):
+                self.assertEqual(native_xml_references(path,chunk),{'levels/generated/bsp'})
+            for bad in (b'<!DOCTYPE tag [<!ENTITY x "y">]><tag/>',b'<other/>',b'<tag>'):
+                path.write_bytes(bad)
+                with self.assertRaises(Exception):native_xml_references(path,7)
+
+    def test_native_boundary_matching_allows_roundoff_but_preserves_winding(self):
+        triangle=[[.00049,0,0],[1,0,0],[0,1,0]]
+        native=[[1,0,0],[0,1,0],[.00051,0,0]]
+        self.assertAlmostEqual(match_triangles([triangle],[native]),.00002)
+        with self.assertRaisesRegex(ValueError,'winding'):match_triangles([triangle],[native[::-1]])
+        with self.assertRaisesRegex(ValueError,'count'):match_triangles([triangle],[])
+        native[2][0]=.01
+        with self.assertRaisesRegex(ValueError,'geometry'):match_triangles([triangle],[native])
+        native[2][0]=float('nan')
+        with self.assertRaisesRegex(ValueError,'nonfinite'):match_triangles([triangle],[native])
+
+    def test_bitmap_cache_recovers_prior_success_but_rejects_changed_pixels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for kit in ('source','target'):
+                for folder in ('data','tags'):(root/kit/folder).mkdir(parents=True)
+            paths=OutputPaths(root/'source',root/'target','levels/h3_port/synthetic/slice',allow_nested=True)
+            reports=root/'reports';prior=reports/'runs'/'earlier';prior.mkdir(parents=True)
+            name=paths.namespace+'/bitmaps/source'
+            files=[]
+            for kind,suffix in [('data','.tif'),('tags','.bitmap')]:
+                file=paths.destination(kind,'bitmaps/source'+suffix)
+                file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(b'validated source pixels')
+                files.append(dict(path=kind+'/'+name+suffix,sha256=native_cache.digest(file)))
+            plan=dict(plan_sha256='accepted',bitmaps={})
+            config=dict(report_directory=str(reports),snapshot_input=dict(verified_files={'source':'hash'}))
+            receipt=dict(plan_sha256='accepted',source_validation_basis=config['snapshot_input'],generated_files=files,
+                worker=dict(tool_invocations=[dict(command=['tool','reimport-bitmaps-single',name],status='ACCEPTED')],
+                    bitmap_builds=[dict(destination=name+'.tif',pixel_export=native_cache.PIXEL_EXPORT)]))
+            report_name=paths.asset+'_build_report.json'
+            (prior/report_name).write_text(json.dumps(receipt))
+            (reports/report_name).write_text(json.dumps(dict(status='FAILED')))
+            self.assertEqual(set(native_cache.previous_bitmaps(paths,plan,config,{name})),{name})
+            paths.destination('data','bitmaps/source.tif').write_bytes(b'edited')
+            self.assertEqual(native_cache.previous_bitmaps(paths,plan,config,{name}),{})
+
     def test_two_sided_collision_requires_reverse_ring_and_equal_semantics(self):
         record=dict(vertices=[dict(position=p) for p in ([0,0,0],[100,0,0],[100,100,0],[0,100,0])],
             triangles=[dict(vertices=t,material=0) for t in ([0,1,2],[0,2,3],[3,2,1],[3,1,0])])
@@ -62,6 +112,20 @@ class NativeContracts(unittest.TestCase):
         for actual in (0,float('nan'),float('inf')):
             with self.assertRaises(ValueError):native_validation.close(actual,.8,'power')
         with self.assertRaises(ValueError):native_validation.close([1,2],[1,2,3],'origin')
+        with self.assertRaises(ValueError):native_validation.close(.8,float('nan'),'source power')
+
+    def test_unexposed_parameters_have_bounded_semantics_not_fallbacks(self):
+        contract=dict(options=dict(material_model='two_lobe_phong'),approximation=dict(source='glass'))
+        for name,value in [('bump_detail_coefficient',1),('order3_area_specular',False),
+            ('analytical_anti_shadow_control',.15),('fresnel_coefficient',.01),('fresnel_curve_bias',0)]:
+            result=native_contracts.unexposed_parameter(dict(name=name,value=value),contract)
+            self.assertTrue(result['evidence'])
+        tint=dict(name='specular_tint',type='color',value=[.3,.4,.5,1])
+        result=native_contracts.unexposed_parameter(tint,contract)
+        self.assertEqual(set(result['target_parameters']),{'normal_specular_tint','glancing_specular_tint'})
+        self.assertTrue(all(p['value']==tint['value'] for p in result['target_parameters'].values()))
+        for name,value in [('bump_detail_coefficient',.5),('order3_area_specular',True),('opacity',.5),('visibility',0)]:
+            with self.assertRaises(ValueError):native_contracts.unexposed_parameter(dict(name=name,value=value),contract)
 
     def test_brdf_approximation_preserves_alpha_and_texture_identity(self):
         row=dict(source_categories=[dict(category='material_model',option='glass'),

@@ -34,6 +34,31 @@ def collision_face(flags):
                 two_sided=bool(flags & 1), ladder=bool(flags & 4))
 
 
+def unexposed_parameter(parameter, contract):
+    """Bounded target BRDF differences, never a generic missing-input fallback."""
+    name=parameter['name'];value=parameter.get('value')
+    if name=='bump_detail_coefficient' and value==1:
+        return dict(resolution_class='NATIVE_TRANSFORM',target_parameters={},fidelity_loss=None,
+            evidence='Reach templated/bump_mapping.hlsl_include calc_bumpmap_detail_ps adds detail.xy with unit coefficient')
+    if name=='order3_area_specular' and value is False:
+        return dict(resolution_class='NATIVE_TRANSFORM',target_parameters={},fidelity_loss=None,
+            evidence='Source optional third-order area-specular path is disabled; Reach uses its native area-light BRDF')
+    if name=='analytical_anti_shadow_control':
+        return dict(resolution_class='OPTIONAL_MVP_OMISSION',target_parameters={},
+            evidence='Reach material_two_lobe_phong_option lacks the H3 analytical anti-shadow control; native light definitions and source specular contributions remain authored',
+            fidelity_loss='H3 analytical specular anti-shadow adjustment is replaced by Reach native shadow response')
+    if name=='specular_tint' and contract['options'].get('material_model')=='two_lobe_phong':
+        return dict(resolution_class='NATIVE_TRANSFORM',
+            target_parameters={k:dict(parameter,name=k) for k in ('normal_specular_tint','glancing_specular_tint')},
+            evidence='Reach material_two_lobe_phong_option exposes normal and glancing tint colors; one source tint applies to both',
+            fidelity_loss='The accepted Reach two-lobe BRDF replaces the source single-lobe response')
+    if name in {'fresnel_coefficient','fresnel_curve_bias'} and contract.get('approximation',{}).get('source')=='glass':
+        return dict(resolution_class='OPTIONAL_MVP_OMISSION',target_parameters={},
+            evidence='Accepted glass to Reach two-lobe BRDF approximation retains authored alpha, environment map and specular tint',
+            fidelity_loss='H3 glass-specific Fresnel curve control is replaced by Reach native angular reflection; alpha and collision are unaffected')
+    raise ValueError('Native material has an unclassified unexposed source parameter: '+name)
+
+
 def unified_mesh(render, proof):
     if not proof['all_collision_rings_covered'] or not proof['all_render_faces_covered']:
         raise ValueError('Incomplete unified breakable proof')

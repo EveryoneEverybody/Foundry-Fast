@@ -5,8 +5,18 @@ from .paths import digest
 from .native_bitmaps import PIXEL_EXPORT
 
 
-def previous_bitmaps(paths, plan, config):
-    report=Path(config['report_directory'])/(paths.asset+'_build_report.json')
+def previous_bitmaps(paths,plan,config,identities=None):
+    directory=Path(config['report_directory'])
+    latest=directory/(paths.asset+'_build_report.json')
+    candidates=[latest,*sorted((directory/'runs').glob('*/'+latest.name),reverse=True)]
+    result={}
+    for report in candidates:
+        result.update(_from_report(paths,plan,config,report,set(result)))
+        if identities is not None and set(identities)<=set(result):break
+    return result
+
+
+def _from_report(paths, plan, config, report,skip):
     if not report.is_file() or not config.get('snapshot_input'):
         return {}
     previous=json.loads(report.read_text(encoding='utf-8'))
@@ -21,6 +31,7 @@ def previous_bitmaps(paths, plan, config):
     bitmap_rows={str(Path(r['destination']).with_suffix('')).replace('\\','/'):r for r in previous.get('worker',{}).get('bitmap_builds',[])}
     cube_sources={key.rsplit('#',1)[0] for key,spec in plan['bitmaps'].items() if spec.get('source_layout')}
     for name in accepted:
+        if name in skip:continue
         if not name.startswith(paths.namespace+'/'):
             continue
         row=bitmap_rows.get(name,{})

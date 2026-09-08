@@ -127,6 +127,11 @@ def finish_stage_timings(report):
         if rows:
             report['stage_timings'][name] = dict(status='SOURCE_EXTRACTED', seconds=sum(r['seconds'] for r in rows))
     worker = report.get('worker', {})
+    for name,seconds in worker.get('native_stage_seconds',{}).items():
+        report['stage_timings'][name]=dict(status='NATIVE_AUTHORING_MEASURED',seconds=seconds)
+    if report.get('source_validation_basis',{}).get('verified_files'):
+        report['stage_timings']['H3 source decode']=dict(status='ACCEPTED_SNAPSHOT_REUSED',seconds=0,
+            note='No live H3 decode; preserved JSON and pixel inputs are hash-verified')
     for name, faux in [('Tool', False), ('Faux', True)]:
         rows = [r for r in worker.get('tool_invocations', []) if len(r.get('command', [])) > 1
                 and r['command'][1].startswith('faux') == faux]
@@ -134,6 +139,15 @@ def finish_stage_timings(report):
             report['stage_timings'][name] = dict(
                 status='PROCESS_EXIT_ZERO' if all(r.get('status') == 'ACCEPTED' for r in rows) else 'FAILED_OR_INCOMPLETE',
                 seconds=sum(r.get('seconds', 0) for r in rows))
+    if worker.get('export_intervals'):
+        imports=[r for r in worker.get('tool_invocations',[]) if len(r.get('command',[]))>1 and r['command'][1]=='import']
+        report['stage_timings']['GR2/sidecar']=dict(status='MEASURED_EXCLUDING_TOOL_IMPORT',
+            seconds=max(0,sum(r['seconds'] for r in worker['export_intervals'])-sum(r.get('seconds',0) for r in imports)),
+            note='Includes blend save and Foundry export/postprocessing; synchronous Tool import measured separately')
+    phases=worker.get('profile',{}).get('timings',{})
+    for name,key in [('native validation','native Reach tag validation'),('lighting input validation','native lighting input validation before Faux')]:
+        if key in phases:
+            report['stage_timings'][name]=dict(status='MEASURED',seconds=phases[key]['inclusive_seconds'])
     readback = worker.get('lighting_input_readback')
     if readback:
         counts = report['lighting_inputs']
@@ -162,11 +176,27 @@ def file_provenance(path, plan, worker):
         if name.startswith(sky['destination'].rsplit('/',1)[0]+'/'):
             sources = [sky['source_scenery'],sky['source_model'],sky['source_render_model']]
             strategy = 'H3 source sky -> normal Foundry sky/model export -> Reach Tool'
+    for bsp in plan_bsps(plan):
+        if name.rsplit('.',1)[0]==bsp['destination'].rsplit('.',1)[0]:
+            sources=[plan['source']['scenario'],bsp['source_tag']]
+            if name.endswith('.structure_design') and bsp.get('structure_design'):
+                sources.append(bsp['structure_design']['source_tag'])
+                strategy='H3 authored boundary triangles -> Foundry boundary surfaces -> Reach Tool design and MOPP'
     if 'lightmap' in name or name.endswith('.probestore'):
-        sources += [plan['lighting']['source_tag'], *(s['source_render_model'] for s in plan_skies(plan))]
+        sources += [l['source_tag'] for l in plan.get('lighting_by_bsp',[plan['lighting']])]
+        sources += [s['source_render_model'] for s in plan_skies(plan)]
         strategy = 'Reach Faux regenerates lighting from H3-derived geometry and sky samples'
+    target_evidence=[]
+    if name.startswith('shaders/h3_port/'):
+        entries=[e for e in worker.get('native_template_authoring',[]) if
+            name.rsplit('.',1)[0] in {e['definition'].replace('\\','/'),e['template'].replace('\\','/').rsplit('.',1)[0]}]
+        consumers={e['shader'].replace('\\','/') for e in entries}
+        sources=[m['source_shader'] for m in plan['materials'] if m['destination'] in consumers] or sources
+        target_evidence=[dict(path=e.get('source_definition',e['definition']),sha256=e.get('source_definition_sha256',e['definition_sha256'])) for e in entries]
+        strategy='Unchanged Reach shader infrastructure in engine-required owned shaders namespace; native Tool template compilation for H3-derived materials'
     return dict(source_paths=sources, strategy=strategy, classification='GENERATED',
-                source_hashes={p:plan['source']['hashes'][p] for p in sources})
+                source_hashes={p:plan['source']['hashes'][p] for p in sources},target_evidence=target_evidence,
+                selected_zone_set=plan.get('selection'),mapping_catalog='source-semantic-resolution.json' if plan.get('source_semantic_resolution') else 'mappings.json')
 
 
 def cleanup_dependencies(run):
@@ -244,7 +274,7 @@ def build(args):
             kit_sources += [paths.reach/'tags/shaders/templated'/n for n in ('foliage.hlsl_include',
                 'alpha_test.hlsl_include','terrain.hlsl_include','terrain_new.hlsl_include')]
             report['semantic_kit_source_evidence'] = {str(p):digest(p) for p in kit_sources if p.is_file()}
-            code = [*Path(__file__).parent.glob('*.py'), Path(__file__).with_name('mappings.json'),
+            code = [*addon.rglob('*.py'), Path(__file__).with_name('mappings.json'),
                     Path(__file__).with_name('semantic_catalog.json'),
                     addon/'tools/scenario/lightmap.py', addon/'blender_manifest.toml']
             report['compiler_source_hashes'] = {p.relative_to(addon).as_posix():digest(p) for p in code}

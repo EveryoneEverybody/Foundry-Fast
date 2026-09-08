@@ -1,6 +1,45 @@
 """Conservative diagnostics at the official target Tool boundary."""
 import re
 import math
+from xml.parsers import expat
+
+
+def native_xml_references(path,chunk_size=1024*1024):
+    """Validate large Tool exports in bounded memory and collect reference labels.
+
+    The small paired fixtures retain their separate 32 MiB limit. Real Faux
+    lightprobe arrays can expand past a GiB of XML, mostly individual fields.
+    """
+    parser=expat.ParserCreate();references=set();root_seen=False
+    def start(name,attributes):
+        nonlocal root_seen
+        if not root_seen:
+            if name!='tag':raise ValueError('Expected a Tool/Foundation tag XML export')
+            root_seen=True
+        if name=='field' and attributes.get('type')=='tag reference':
+            value=attributes.get('value','').split(',',1)[0].replace('\\','/')
+            if value:references.add(value)
+    def declaration(*args):raise ValueError('Unsupported XML entity or doctype declaration')
+    parser.StartElementHandler=start
+    parser.StartDoctypeDeclHandler=declaration
+    parser.EntityDeclHandler=declaration
+    def parse(content,final=False):
+        # Same exact Tool sentinels as the paired-fixture parser, with complete
+        # lines retained across chunks so substitutions cannot be split.
+        content=content.replace(b',\xff\xff\xff\xff" type="tag reference"',b',NULL" type="tag reference"')
+        content=content.replace(b'value="<unavailable>" type="pageable resource"',b'value="&lt;unavailable&gt;" type="pageable resource"')
+        parser.Parse(content,final)
+    with open(path,'rb') as stream:
+        pending=b''
+        while chunk:=stream.read(chunk_size):
+            pending+=chunk
+            end=pending.rfind(b'\n')+1
+            if end:
+                parse(pending[:end]);pending=pending[end:]
+            if len(pending)>32*1024*1024:raise ValueError('Native XML field exceeds streaming record limit')
+        parse(pending,True)
+    if not root_seen:raise ValueError('Empty native XML')
+    return references
 
 NATIVE_TAG_EXTENSIONS = {'.scenario', '.scenario_structure_bsp', '.scenario_structure_lighting_info',
     '.structure_design', '.structure_seams', '.scenery', '.model', '.render_model', '.shader', '.shader_terrain', '.shader_foliage', '.bitmap',
