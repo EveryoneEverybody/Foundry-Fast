@@ -2,7 +2,7 @@
 
 The shared `port_environment` compiler can lower the accepted H3 `040_voi / intro_faa` snapshot into native Reach authoring. It builds BSP000 and BSP010, their two structure designs, the H3 sky, materials, collision, BSP instances and authored static lighting. It creates one Reach zone set and the `teleport_factorya_player0` start. Scenario objects, AI, HSC, effects and mission logic remain outside this milestone.
 
-Runtime acceptance is **PENDING NATE**. A successful build means native import, lighting and reference checks passed; only Tag Test can confirm the resulting experience. The separate 1.9.48 `proof_box` output remains the runtime-proven regression fixture.
+Prototype 1.9.49 is **runtime-accepted by Nate for core BSP conversion**, including collision, ladders, breakable glass, materials and sunlight. Visible sky rendering, BSP010 tunnel illumination and runtime seam/leaky/duplicate-triangle diagnostics remain under a narrow stabilization pass. Missing Keyship/portal content is being classified by source ownership; this does not authorize general scenario-object conversion. The separate 1.9.48 `proof_box` output remains the runtime-proven regression fixture. Later stabilization changes require their own runtime check.
 
 ## Build the accepted original source snapshot
 
