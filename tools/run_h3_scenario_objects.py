@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--limit',type=int)
     parser.add_argument('--integrate-inventory')
     parser.add_argument('--compiled-report')
+    parser.add_argument('--defer-zone-switches',action='store_true',help='Keep source switches in IR when the native kit cannot persist the table; retain static volumes')
     parser.add_argument('--reuse-compiled-from',help='Completed same-plan receipt whose entire output snapshot still matches')
     parser.add_argument('--retry-source',action='append',help='Retry only these source identities; retain every other prior result')
     args=parser.parse_args()
@@ -55,7 +56,7 @@ def main():
                 reuse_receipt_sha256=digest(args.reuse_compiled_from),reuse_verified_output_files=verified_outputs,retry_sources=args.retry_source)
         if args.integrate_inventory:
             if not args.compiled_report:raise ValueError('Integration requires a completed native object receipt')
-            config.update(inventory=str(Path(args.integrate_inventory).resolve()),compiled_report=str(Path(args.compiled_report).resolve()))
+            config.update(inventory=str(Path(args.integrate_inventory).resolve()),compiled_report=str(Path(args.compiled_report).resolve()),defer_zone_switches=args.defer_zone_switches)
         atomic_json(run/'config.json',config)
         script='placement_worker.py' if args.integrate_inventory else 'object_worker.py'
         report['command']=[str(Path(args.blender).resolve(strict=True)),'--background','--factory-startup',

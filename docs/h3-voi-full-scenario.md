@@ -1,108 +1,131 @@
 # Full 040_voi native scenario milestone
 
-The scope now includes all authored scenario BSPs and zone sets, followed by
-scenery, crates, device machines and device controls through shared object and
-placement representations. Native output is isolated under
-`levels/h3_port/040_voi/full_scenario`. The accepted Factory A environment and
-all 50 proof_box files remain protected regression fixtures. No push or release
-is authorized for this milestone.
+The isolated full-scenario target contains all nine authored BSP references,
+eight structure designs, ten seams, one sky and nineteen source zone-set masks,
+plus 603 native placements from 63 compiled object dependencies. It is installed
+at `HREK/tags/levels/h3_port/040_voi/full_scenario/full_scenario.scenario`.
+Overall structural and runtime acceptance remain incomplete.
+
+The authoritative local handoff is
+`D:/HaloRE/PortCensus/voi_full_scenario_20260908/morning-report.md`, with exact
+commits, hashes, source/native identities and blockers in `morning-report.json`.
+No push, release or feed update was performed.
 
 Factory A lighting fidelity: **DEFERRED / technically responsive material-power
 path but no meaningful visible runtime improvement from diagnostic Power25.**
-Nate reports no perceptible difference in the clean Power25 runtime comparison.
-No multiplier is accepted. Further attenuation, brightness and Low-bake
-experiments are outside this session. At Nate's subsequent request, the four
-diagnostic BSP010 lighting files were restored to their baseline hashes. The
-current warm/cool shader files and all 50 proof_box hashes were verified after
-that switch (`restore-baseline-result.json`).
+The four diagnostic BSP010 lighting files were restored to baseline. Nate's
+warm self illumination 3 and cool 1 shader bytes are preserved. All 986 Factory A
+files, 50 proof_box files, and eight explicitly protected files match the
+post-restoration snapshot, including the experimental H3EK
+`levels/solo/030_outskirts/shaders/outtree_bark.shader`. The accepted colored sky
+and six breakable office-glass placements remain protected fixtures.
 
-Nate's latest user-owned shader settings are warm self illumination 3 and cool
-1. Protect the current installed bytes instead of restoring an earlier shader
-manifest. The installed H3EK experimental `outtree_bark.shader` is also protected;
-the preserved original source recipe remains authoritative for conversion.
+## Native source accounting
 
-`scenario_ir.py` separates complete source accounting from native generation.
-All authored masks retain source and target indices. A decode union includes
-every BSP but never becomes a synthetic all-active target zone. In particular,
-the H3 zone named `all` does not imply every scenario BSP is active.
+Counts are source / translated / deferred. Distinct source palette indices
+remain distinct even when they refer to the same source tag.
 
-Machine-readable evidence starts at
-`D:\HaloRE\PortCensus\voi_full_scenario_20260908`. Runtime status remains
-`NOT_TESTED` until Nate tests the new target in Tag Test. AI, units, vehicles,
-HSC, character animation and vehicle-specific physics remain deferred.
+| Family | Palettes | Placements |
+|---|---:|---:|
+| Scenery | 43 / 20 / 23 | 203 / 76 / 127 |
+| Crates | 75 / 33 / 42 | 1029 / 488 / 541 |
+| Machines | 15 / 7 / 8 | 70 / 21 / 49 |
+| Controls | 4 / 3 / 1 | 18 / 18 / 0 |
 
-The complete source plan now resolves nine BSPs, eight structure designs,
-nineteen authored zones and ten seams. The zone named `all` retains mask 255;
-BSP008 belongs to specific later zones. No synthetic mask-511 zone is created.
-Source vertex indices preserve seam topology across bounded XML/compile
-coordinate differences. Native no-way portal authoring preserves visibility
-barriers. One mixed glass/frame definition has a verified material partition:
-both parts retain the source transform, with unified glass and solid frame
-collision authored separately. Six invalid source lighting-row indices retain
-their embedded properties and explicit deferred lighting status.
+The dependency census contains 136 unique roots: 63 native compiled, 45 deferred
+by source planning, and 28 deferred by native validation. Absent source palette
+indices account for six scenery and nine crate placements within the deferred
+counts. Every omitted dependency and placement retains its reason in the IR.
 
-Forty-two focused Python checks passed at this checkpoint (scenario translation,
-campaign selection, glass/seam contracts). Source-plan acceptance does not imply
-native Tool acceptance or runtime success. The first complete native build is
-the next validation stage.
+All 115 source object names, 13 device groups (including duplicate names), four
+player starts and 168 static trigger volumes round-trip through native tags.
+Eighteen of 22 source control/machine relationships survive: controls 0 and 6
+share position group 2 with source machine 41, becoming native controls 0/6 and
+machine 13. The arms-door graph has 13 nodes and 100 frames at 30 fps from 101
+source JMA samples. Interaction, motion and physical response remain untested.
 
-The shared object decoder has inspected 136 distinct scenery/crate/machine/
-control dependencies. The current source plan admits 91: 28 scenery, 50 crates,
-10 machines and 3 controls. Remaining objects retain exact missing-dependency,
-material-function, physics or source-group blockers. Device animations are
-decoded through the existing H3 animation helper into normal JMA authoring;
-native graph and button/door validation remain pending at this checkpoint.
-No unit or vehicle animation path is introduced.
+The authored `all` zone retains mask 255. Later authored zones selectively
+include BSP008; no synthetic mask 511 is introduced. All fifteen designer-zone
+tables preserve supported palette memberships. Source PVS/audibility and five
+cinematic zones remain evidence; native PVS/audibility indices are -1.
 
-`run_h3_scenario_objects.py` shares the environment's exact-file ownership
-manifest and target lock. Source metadata, material staging, object dependency
-authoring and scenario placements are separate reusable layers. Native enums
-and flags match by name, since H3 and Reach bit orders differ. Eight object
-identity/type tests and the 26 scenario/remaining-rule checks passed locally.
-Native validation will decide which planned objects enter the scenario.
+Two object-relative triggers are deferred. Reach reopened zero automatic
+zone-switch records after authoring all thirteen source records. The runner's
+explicit `--defer-zone-switches` mode retains every source switch and remapped
+static-trigger identity in its report, leaving the native table empty. Normal
+validation remains strict unless that mode is selected. Automatic zone
+transitions are not claimed.
 
-The placement adapter explicitly records a bind-pose approximation for packed
-H3 stored poses (404 source crate placements); no packed pose stream is copied.
-Unsupported parents close over their dependent placements instead of silently
-detaching them. Source device-group indices and duplicate group names survive.
-Emission animation on otherwise supported object materials is staticized at
-the pinned source state; BSP lighting is unaffected.
+## Shared authoring and validation
 
-Native testing exposed and corrected Reach-specific API boundaries: ordinary
-flags use `RawValue`/`SetBit`, while block membership uses `IsSet`; Reach lacks
-the `GameRenderGeometry` helper exposed by newer kit APIs. Normal Foundry
-animation GR2 names may contain spaces, so only data-path suffixes permit them
-while retaining Windows alias and traversal rejection.
+`scenario_ir.py` retains complete source identities separately from native
+generation. `object_ir.py` represents shared non-unit dependencies. The worker
+reconstructs decoded authoring through normal Foundry, GR2/sidecars and Reach
+Tool. Flags and enums match by name. Native variant regions, permutations and
+probabilities are verified after reopening.
 
-The Voi switch passed native dependency readback and Tool XML export. The
-arms door generated native render/collision/physics and a 13-node graph, but
-its first animation import was rejected by timing validation: the Blender
-scene's default 24 fps stretched source motion. The worker now preserves the
-source 30 fps and validates codec-frame count separately from the extra
-JMA reference/end frame. Reimport is required before the door is accepted.
-The checked stock Reach crate and door physics tags also store zero in loose
-mass fields; this is not evidence of runtime effective mass. Physical behavior
-remains untested. Ten focused object checks and 22 compiler checks passed.
+Physics mesh region/permutation identities enter the normal export. Ambiguous
+shape/body associations are deferred. Native loose mass, motion, damping,
+inertia-scale and material fields match by node/region/permutation identity.
+Tool rebuilds shapes and resources; effective runtime mass and collision remain
+unverified. No H3 runtime resources are copied.
 
-The corrected door reimport now passes: 13 native nodes and 100 codec frames
-from 101 source JMA samples at 30 fps. The switch and door both pass native
-model-chain readback and Tool XML export. Loose physics authoring now matches
-rigid bodies by node/region/permutation identity and preserves named motion,
-size, damping and inertia-scale settings plus source material identities.
+Of 404 source crate placements with packed stored poses, 217 translated
+placements use source bind pose (`STATICIZED_MVP`). Object functions, damage
+states, attached effects/sounds and non-device animation remain deferred. The
+native test profile uses Reach assault rifle, magnum and sprint defaults;
+source H3 gameplay/profile data remains in the IR.
 
-All nine BSP references, nineteen source zone masks, eight designs and ten
-seam owner/geometry relationships have native readback evidence. Global seam
-front ownership follows the original collision-cap normals. An owned saved
-scene can be re-exported after that metadata repair without reconstructing
-the source geometry. Native structural acceptance is still blocked by 76
-Tool diagnostics (33 open edges, 31 degenerate triangles and 12 overlaps)
-and one instance scale mismatch (three matrix components). These remain
-explicit failures; collision is not removed and tolerances are not widened.
-Faux and live runtime acceptance have not passed for the full target.
+`run_h3_scenario_objects.py` shares the environment target lock and exact-hash
+ownership manifest. Material failures are isolated per object. Completed
+same-plan receipts can reuse compiled objects only after output hashes and
+complete source accounting match. Explicit retries retain the other results.
+Normal environment material validation stays strict.
 
-Object batches defer failed material dependencies per asset so unrelated
-native objects can continue. The Reach material-model adapter does not admit
-the H3 MCC statue's `cook_torrance_pbr_maps`; it is deferred rather than
-silently using the node group's default BRDF. Thirty-nine focused checks
-passed after the seam/physics changes. Full object/placement results follow
-in the final native delivery report.
+`audit_h3_native_dependencies.py` reads generated references reachable from the
+scenario. Stock target defaults must exist and are reported separately; they
+are not recursively translated. Imposter placeholders are allowed only for the
+exact owning asset under a verified `never` policy or zero instances.
+
+- 80 focused tests passed in five isolated processes. The prototype workflow
+  now includes the native-object suite; no CI run was triggered.
+- All 63 native object chains reopen and export through Reach Tool XML.
+- The 603-placement scenario passes identity, transform, group, start,
+  designer-zone and streamed Tool XML validation, with explicit switch deferral.
+- The dependency audit opens 1,315 reachable generated tags and checks 3,836
+  existing reference edges. One required dependency is missing:
+  `full_scenario_faux_lightmap.scenario_lightmap`. Seventy-three unused native
+  imposter references are classified separately.
+- The environment import exits 0, but strict geometry validation fails on 76
+  diagnostics: 33 open edges, 31 degenerate triangles and 12 overlaps. Source
+  collision was not deleted to suppress them.
+- BSP7 instance 974 (`?+rocks_gun_single11`) has one scale mismatch, affecting
+  three basis-vector checks: source 1.0001447200775146 becomes native 1.0.
+  Tolerances were not widened. Final BSP/design/seam hashes match this checkpoint.
+
+The 28 native deferrals comprise eleven ambiguous physics associations, four
+body-identity mismatches, six insufficient/invalid physics shapes, four roots
+with unsupported first-person shader misc semantics, two scenery assets with
+unverified cubemap readback, and one unsupported MCC Moa PBR asset. Source-plan
+blockers retain missing-tag, material-function/group/indexed-bitmap and bounded
+physics-adapter reasons.
+
+Sound scenery, effect scenery and light volumes were inventoried and deferred.
+No unit, biped, vehicle, AI, squad, HSC, character-animation or vehicle-physics
+translation was added. The handoff includes the complete remaining-family census.
+
+## Next acceptance step
+
+The installed full target is **not yet verified runnable**. Resolve the
+source-grounded BSP diagnostics and instance-scale round-trip, then generate
+the missing native lightmap using the cheapest supported `direct_only` path.
+Full-target Faux has not run; Factory A lighting remains deferred.
+
+After dependency acceptance, use this Tag Test console command:
+
+```text
+game_start levels\h3_port\040_voi\full_scenario\full_scenario
+```
+
+Test a source Voi switch/arms-door pair and cinderblock physics, then source zone
+visibility and traversal. Tool/ManagedBlam checks do not establish runtime acceptance.

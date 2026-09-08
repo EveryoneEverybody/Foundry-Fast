@@ -92,6 +92,30 @@ def copy(rows,target,names):
     return out
 
 
+def verify_xml(rows,target,names):
+    """Read authoring values back after reopening; never mutate during validation."""
+    from .native_validation import close
+    for name in names:
+        row=first(rows,name)
+        if row is None:continue
+        field=native_object_tags.select(target,name);kind=row['type'];expected=row['value']
+        if 'block index' in kind:
+            actual=int(field.Value);expected=int(expected.rsplit(',',1)[-1])
+        elif 'block flags' in kind:actual=native_zones.mask(field);expected=int(expected)
+        elif 'flags' in kind:
+            actual=sorted(native_object_tags.normalized(i.FlagName) for i in field.Items if field.TestBit(i.FlagName))
+            expected=sorted(native_object_tags.normalized(n) for n in row.get('set_flags',[]))
+        elif 'enum' in kind:
+            actual=native_object_tags.normalized(field.Items[field.Value].EnumName)
+            expected=native_object_tags.normalized(expected)
+        elif kind in {'string','string id','long string'}:actual=field.GetStringData()
+        else:
+            expected=[float(v) for v in expected.split(',')] if ',' in expected else float(expected)
+            actual=list(field.Data) if isinstance(expected,list) else field.Data
+            close(actual,expected,'scenario '+name);continue
+        if actual!=expected:raise ValueError('Native scenario field differs: '+name)
+
+
 def object_element(element,row):
     s=element.SelectField;records=row['source_records']
     s('type').Value=row['target_palette_index'];s('name').Value=row['source_object_name_index']
@@ -129,7 +153,7 @@ def object_element(element,row):
     return dict(source_index=row['source_index'],target_index=row['target_index'],status='AUTHORED')
 
 
-def configure(tag,translation,environment):
+def configure(tag,translation,environment,*,defer_zone_switches=False):
     s=tag.tag.SelectField
     report=dict(families={},runtime_status='NOT_TESTED',designer_zones=[])
     names=s('object names');names.RemoveAllElements()
@@ -165,7 +189,7 @@ def configure(tag,translation,environment):
             if not family:
                 if source['count']:z['deferred'].append(source)
                 continue
-            native=e.SelectField(source['name']);native.RemoveAllElements()
+            native=e.SelectField('Block:'+source['name']);native.RemoveAllElements()
             mapping={r['source_index']:r['target_index'] for r in translation['families'][family]['palette'] if r['native_status']=='NATIVE_COMPILED'}
             for record in source['elements']:
                 index=int(first(record,'palette index')['value'].rsplit(',',1)[-1])
@@ -179,12 +203,12 @@ def configure(tag,translation,environment):
         e=starts.AddElement();copy(row,e,('position','facing','pitch'));e.SelectField('editor folder').Value=-1
     report['starts']=dict(count=starts.Elements.Count,source=translation['starting_locations'],
         target_profile='Existing native test-player scaffold; H3 player type and weapon gameplay dependencies deferred')
-    report['zone_switch_authoring']=zone_switches(tag,translation)
+    report['zone_switch_authoring']=zone_switches(tag,translation,defer_switches=defer_zone_switches)
     tag.tag_has_changes=True;tag.tag.Save()
     return report
 
 
-def zone_switches(tag,translation):
+def zone_switches(tag,translation,*,defer_switches=False):
     """Preserve static authored boxes and exact zone-switch index relations."""
     volumes=tag.tag.SelectField('trigger volumes');volumes.RemoveAllElements()
     mapping={};report=dict(volumes=[],deferred_volumes=[],switches=[],deferred_switches=[])
@@ -203,6 +227,11 @@ def zone_switches(tag,translation):
     block=tag.tag.SelectField('zone set switch trigger volumes');block.RemoveAllElements()
     for index,row in enumerate(translation['zone_switch_triggers']):
         source=int(first(row,'trigger volume')['value'].rsplit(',',1)[-1])
+        if defer_switches:
+            report['deferred_switches'].append(dict(source_index=index,source_records=row,
+                source_trigger=source,target_trigger=mapping.get(source),classification='RUNTIME_LATER',
+                reason='Native persistence unverified: this Reach kit reopened an empty switch table after authoring all source records'))
+            continue
         if source not in mapping:
             report['deferred_switches'].append(dict(source_index=index,reason='Trigger volume deferred'));continue
         e=block.AddElement();copy(row,e,('flags','begin zone set','commit zone set'))
@@ -212,10 +241,16 @@ def zone_switches(tag,translation):
     return report
 
 
-def validate(tag,translation,environment):
+def validate(tag,translation,environment,*,defer_zone_switches=False):
     s=tag.tag.SelectField;result=dict(zone_sets=native_zones.readback(tag,environment),families={})
     for family in SUPPORTED:
         group=translation['families'][family];block=s(family)
+        palette=s(scenario_ir.FAMILIES[family][0]).Elements
+        expected_palette=[r for r in group['palette'] if r['native_status']=='NATIVE_COMPILED']
+        if palette.Count!=len(expected_palette):raise ValueError('Native palette count differs: '+family)
+        for e,row in zip(palette,expected_palette):
+            path=e.SelectField('name').Path
+            if path is None or str(path.RelativePathWithExtension).replace('\\','/')!=row['target_tag']:raise ValueError('Native palette dependency identity differs')
         if block.Elements.Count!=group['translated_instance_count']:raise ValueError('Native placement count differs: '+family)
         for row in group['placements']:
             if row['native_status']!='READY':continue
@@ -229,8 +264,40 @@ def validate(tag,translation,environment):
             if family in {'controls','machines'}:
                 for name,value in row['device_groups'].items():
                     if int(e.SelectField('device data[0]/'+name).Value)!=value:raise ValueError('Native device relationship differs')
+            verify_xml(section(row['source_records'],'parent id'),d.SelectField('parent id').Elements[0],('parent object','parent marker','connection marker'))
+            verify_xml(row['source_records'],e.SelectField('permutation data').Elements[0],('variant name',))
         result['families'][family]=dict(palette=s(scenario_ir.FAMILIES[family][0]).Elements.Count,placements=block.Elements.Count)
     if s('player starting locations').Elements.Count!=len(translation['starting_locations']):raise ValueError('Native start count differs')
+    for e,row in zip(s('player starting locations').Elements,translation['starting_locations']):verify_xml(row,e,('position','facing','pitch'))
     result['device_groups']=s('device groups').Elements.Count;result['object_names']=s('object names').Elements.Count
+    if result['device_groups']!=len(translation['device_groups']) or result['object_names']!=len(translation['object_names']):raise ValueError('Native name/group count differs')
+    for e,row in zip(s('device groups').Elements,translation['device_groups']):verify_xml(row['source_records'],e,('name','initial value','flags'))
+    for e,row in zip(s('object names').Elements,translation['object_names']):
+        if e.SelectField('name').GetStringData()!=row['name']:raise ValueError('Native object name identity differs')
+    volumes=[(i,r) for i,r in enumerate(translation['trigger_volumes']) if int(first(r,'object name')['value'].rsplit(',',1)[-1])<0]
+    if s('trigger volumes').Elements.Count!=len(volumes):raise ValueError('Native static trigger count differs')
+    mapping={source:index for index,(source,_) in enumerate(volumes)}
+    for e,(_,row) in zip(s('trigger volumes').Elements,volumes):verify_xml(row,e,('name','node name','forward','up','position','extents'))
+    switches=[r for r in translation['zone_switch_triggers'] if int(first(r,'trigger volume')['value'].rsplit(',',1)[-1]) in mapping]
+    if defer_zone_switches:
+        result['deferred_zone_switch_triggers']=len(switches);switches=[]
+    if s('zone set switch trigger volumes').Elements.Count!=len(switches):raise ValueError('Native zone switch count differs')
+    for e,row in zip(s('zone set switch trigger volumes').Elements,switches):
+        verify_xml(row,e,('flags','begin zone set','commit zone set'))
+        if int(e.SelectField('trigger volume').Value)!=mapping[int(first(row,'trigger volume')['value'].rsplit(',',1)[-1])]:raise ValueError('Native zone switch trigger identity differs')
+    result['static_trigger_volumes']=len(volumes);result['zone_switch_triggers']=len(switches)
+    for zone in environment['selection']['designer_zones']:
+        e=s('designer zones').Elements[zone['target_index']]
+        for source in zone['source_records']:
+            if source['kind']!='block':continue
+            family=next((f for f in SUPPORTED if KINDS[f]==source['name']),None)
+            if family is None:continue
+            mapping={r['source_index']:r['target_index'] for r in translation['families'][family]['palette'] if r['native_status']=='NATIVE_COMPILED'}
+            indices=[int(first(r,'palette index')['value'].rsplit(',',1)[-1]) for r in source['elements']]
+            expected=[mapping[i] for i in indices if i in mapping]
+            actual=[int(r.SelectField('palette index').Value) for r in e.SelectField('Block:'+source['name']).Elements]
+            if actual!=expected:raise ValueError('Native designer-zone palette membership differs: '+zone['name']+'/'+family)
+    result['designer_zone_palette_membership']='VERIFIED'
     result['status']='NATIVE_PLACEMENT_READBACK_VERIFIED';result['runtime_status']='NOT_TESTED'
+    if defer_zone_switches:result['zone_switch_persistence']='DEFERRED; source records retained in the translation and authoring report'
     return result
