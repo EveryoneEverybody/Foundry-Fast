@@ -4,11 +4,19 @@ The isolated full-scenario target contains all nine authored BSP references,
 eight structure designs, ten seams, one sky and nineteen source zone-set masks,
 plus 603 native placements from 63 compiled object dependencies. It is installed
 at `HREK/tags/levels/h3_port/040_voi/full_scenario/full_scenario.scenario`.
-Overall structural and runtime acceptance remain incomplete.
+Status as of Nate's 2026-09-08 manual test: **PARTIAL RUNTIME ACCEPTANCE**.
+The full native scenario launches; substantial environment geometry is lit and
+the converted H3 sky renders. Individual object behavior, all nine BSPs, zone
+transitions and physics remain unaccepted until tested. Shiny/overexposed
+surfaces, localized open-edge defects and dark distant portal cliffs remain.
 
-The authoritative local handoff is
+The historical overnight handoff is
 `D:/HaloRE/PortCensus/voi_full_scenario_20260908/morning-report.md`, with exact
 commits, hashes, source/native identities and blockers in `morning-report.json`.
+Its `NOT_TESTED` and not-yet-runnable statements predate Nate's manual launch
+and are superseded by the runtime status above. Keep its native inventories
+and immutable receipts as evidence. Current runtime fixture preparation is
+documented in [h3-voi-runtime-validation.md](h3-voi-runtime-validation.md).
 No push, release or feed update was performed.
 
 Factory A lighting fidelity: **DEFERRED / technically responsive material-power
@@ -116,12 +124,13 @@ translation was added. The handoff includes the complete remaining-family census
 
 ## Next acceptance step
 
-The installed full target is **not yet verified runnable**. Resolve the
-source-grounded BSP diagnostics and instance-scale round-trip, then generate
-the missing native lightmap using the cheapest supported `direct_only` path.
-Full-target Faux has not run; Factory A lighting remains deferred.
+The installed full target has a manually confirmed launch. Lighting is
+**DEFERRED / sufficiently functional for continued scenario and object work**.
+Power25 is not an accepted conversion multiplier. The missing Faux dependency
+and strict geometry diagnostics remain recorded; they are no longer assumed
+to prevent launch. Do not restart lightmapping as an object-validation gate.
 
-After dependency acceptance, use this Tag Test console command:
+Use this Tag Test console command:
 
 ```text
 game_start levels\h3_port\040_voi\full_scenario\full_scenario
