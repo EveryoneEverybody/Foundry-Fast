@@ -2,6 +2,10 @@
 
 The completed 10× test changed all three BSP010 definition powers and passed independent native readback, but **all six lightmap pixel payloads and the reported photon totals are identical to the low baseline**. There is no measured baked response to this power change. The baseline is restored; the diagnostic remains captured for investigation. The converter's intensity mapping is unchanged.
 
+This test concerns generic-light intensity only. The separate [material Lightmap
+Power audit](h3-voi-emissive-power-audit.md) traces surface emission and records
+its own controlled bake; the result here does not test material power.
+
 Nate reports that the low bake only modestly improved the dark interior. The newer runtime screenshots show the sky/clouds rendering and interior strips glowing, while the surrounding room remains dark. This does not establish whether generic-light power, omitted scenario lights, surface emission, or another target behavior dominates the remaining difference.
 
 The audit begins from `86ed2a45a13f3e17957738f187042a1182838210` on `feature/h3-scenario-inspection`. Its working tree was clean. Prototype 1.9.49 remains runtime-accepted for core BSP conversion; collision, ladders, glass, materials, sunlight and the 1.9.48 proof_box fixture remain regressions. No source converter or source recipe is changed in this pass.

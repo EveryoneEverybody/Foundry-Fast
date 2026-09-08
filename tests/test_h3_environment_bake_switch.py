@@ -51,5 +51,20 @@ class ComparisonSwitch(unittest.TestCase):
             (p.reach/key).rename(p.reach/bad)
             with self.assertRaisesRegex(ValueError,'geometry'):switch(r,'scale10')
 
+    def test_sun_control_exception_is_one_explicit_owned_sky_input(self):
+        with tempfile.TemporaryDirectory() as d:
+            p,key,r=self.make(d)
+            sky='tags/'+p.namespace+'/sky/control.render_model'
+            for state in r['variants'].values():
+                source=Path(state['capture_root'])/key
+                dest=Path(state['capture_root'])/sky; dest.parent.mkdir(parents=True)
+                source.rename(dest); state['files']={sky:state['files'][key]}
+            target=p.reach/sky; target.parent.mkdir(parents=True); (p.reach/key).rename(target)
+            r['diagnostic_lighting_key']=sky
+            with self.assertRaisesRegex(ValueError,'geometry'):switch(r,'scale10')
+            r.update(sun_control_key=sky,sun_control_kind='ANALYTIC_SUN_INPUT')
+            switch(r,'scale10'); switch(r,'baseline')
+            self.assertEqual(target.read_bytes(),b'baseline')
+
 
 if __name__=='__main__':unittest.main()

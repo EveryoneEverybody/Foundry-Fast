@@ -168,6 +168,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .cache/blender-5.2.1-windows-x64/blender.exe --background --factory-startup --python-exit-code 1 --python tests/blender_h3_environment_smoke.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .cache/blender-5.2.1-windows-x64/blender.exe --background --factory-startup --python-exit-code 1 --python tests/blender_h3_environment_emissive_smoke.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   package:
     needs: [inspect, blender, operator]

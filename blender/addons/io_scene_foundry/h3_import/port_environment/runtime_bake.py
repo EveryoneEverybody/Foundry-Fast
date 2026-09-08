@@ -45,7 +45,7 @@ def intensity_view(plan, source_bsp_index, factor):
 def main(config):
     addon = Path(config['addon']).resolve()
     sys.path[:0] = [str(addon.parent), str(addon/'h3_import')]
-    from port_environment import snapshot, worker, native_world, fixtures, lighting_audit
+    from port_environment import snapshot, worker, native_world, fixtures, lighting_audit, emissive_diagnostic, sun_diagnostic
     from port_environment.paths import OutputPaths, Ownership, digest, atomic_json, build_lock
     from port_environment.validation import lighting_evidence
     quality = config.get('quality', 'low')
@@ -64,7 +64,11 @@ def main(config):
     preserved = config.get('preserved_external_files', {})
     require_parent(before, parent['files'], preserved)
     plan, _, receipt = snapshot.load(config['accepted_plan'], paths, config['scenario'], config['zone_set'])
-    diagnostic = config.get('intensity_diagnostic')
+    material_diagnostic = config.get('material_power_diagnostic')
+    sun_control = config.get('sun_diagnostic')
+    if sum(bool(config.get(k)) for k in ('material_power_diagnostic', 'intensity_diagnostic', 'sun_diagnostic')) > 1:
+        raise ValueError('Change only one semantic class per diagnostic')
+    diagnostic = config.get('intensity_diagnostic') or material_diagnostic or sun_control
     diagnostic_index = None
     diagnostic_path = None
     comparison_plan = plan
@@ -76,11 +80,21 @@ def main(config):
                 audit['static_lights']['status'] != 'STRUCTURAL_MATCH' or
                 audit['provenance']['accepted_plan_sha256'] != digest(config['accepted_plan'])):
             raise ValueError('Diagnostic requires a pinned passing source/authored/native audit')
-        comparison_plan, diagnostic_index = intensity_view(plan, diagnostic['source_bsp_index'], float(diagnostic['factor']))
-        if audit['provenance']['config']['bsp_index'] != diagnostic_index:
+        if sun_control:
+            comparison_plan, diagnostic_path, sun_values = sun_diagnostic.sun_view(
+                plan, diagnostic['sky_index'], float(diagnostic['factor']))
+        elif material_diagnostic:
+            baseline_report = json.loads(Path(diagnostic['baseline_report']).read_text())
+            comparison_plan, diagnostic_index, material_indices, material_bindings = emissive_diagnostic.material_power_view(
+                plan, diagnostic['source_bsp_index'], diagnostic['source_material_slots'], float(diagnostic['power']),
+                baseline_report['lighting_field_readback'])
+        else:
+            comparison_plan, diagnostic_index = intensity_view(plan, diagnostic['source_bsp_index'], float(diagnostic['factor']))
+        if not sun_control and audit['provenance']['config']['bsp_index'] != diagnostic_index:
             raise ValueError('Audit describes a different BSP')
-        bsp = plan['bsps'][diagnostic_index]
-        diagnostic_path = bsp['destination'].rsplit('.', 1)[0]+'.scenario_structure_lighting_info'
+        if not sun_control:
+            bsp = plan['bsps'][diagnostic_index]
+            diagnostic_path = bsp['destination'].rsplit('.', 1)[0]+'.scenario_structure_lighting_info'
         if digest(paths.owned_tag(diagnostic_path)) != diagnostic['native_tag_sha256']:
             raise ValueError('Audited native lighting changed')
         baseline_xml = Path(audit['provenance']['config']['native_lighting_xml'])
@@ -104,7 +118,9 @@ def main(config):
         source_snapshot=receipt, runtime_status='PENDING_NATE', tool_invocations=[],
         geometry_reconstructed=False, lighting_converter_changed=False,
         preserved_external_files=preserved)
-    report['intensity_diagnostic'] = diagnostic
+    report['intensity_diagnostic'] = config.get('intensity_diagnostic')
+    report['material_power_diagnostic'] = material_diagnostic
+    report['sun_diagnostic'] = sun_control
     report['lighting_bsp'] = lighting_bsp
     def flush():
         atomic_json(run/'runtime-bake-report.json', report)
@@ -164,20 +180,41 @@ def main(config):
             native_world.validate(plan, report)
             report['world_before'] = report.pop('native_world_readback')
             if diagnostic:
-                # The only authored mutation: existing owned definition power.
+                # The only authored mutation: the selected native power field.
                 # Do not rebuild rows, change presets, or alter source recipes.
+                if sun_control:
+                    baseline_xml = run/'baseline-sky.xml'
+                    utils.run_tool(['export-tag-to-xml', str(paths.owned_tag(diagnostic_path)), str(baseline_xml)], force_tool_fast=True)
+                    journal.finish(wait=True)
                 with Tag(path=diagnostic_path, tag_must_exist=True) as tag:
                     if Path(str(tag.tag_path.Filename)).resolve() != paths.owned_tag(diagnostic_path):
                         raise ValueError('Diagnostic tag resolved to another project')
-                    definitions = tag.tag.SelectField('Block:generic light definitions').Elements
-                    expected = comparison_plan['lighting_by_bsp'][diagnostic_index]['definitions']
-                    if definitions.Count != len(expected):
-                        raise ValueError('Diagnostic definition count changed')
-                    for e, d in zip(definitions, expected):
-                        e.SelectField('intensity').Data = d['intensity']
+                    if sun_control:
+                        sun = tag.tag.SelectField('Array:sun').Elements
+                        if sun.Count != 6:
+                            raise ValueError('Unexpected native analytic sun array')
+                        for index, value in enumerate(sun_values, start=3):
+                            sun[index].Fields[0].Data = value
+                    elif material_diagnostic:
+                        materials = tag.tag.SelectField('Block:material info').Elements
+                        for index in material_indices:
+                            materials[index].SelectField('emissive power').Data = float(diagnostic['power'])
+                    else:
+                        definitions = tag.tag.SelectField('Block:generic light definitions').Elements
+                        expected = comparison_plan['lighting_by_bsp'][diagnostic_index]['definitions']
+                        if definitions.Count != len(expected):
+                            raise ValueError('Diagnostic definition count changed')
+                        for e, d in zip(definitions, expected):
+                            e.SelectField('intensity').Data = d['intensity']
                     tag.tag_has_changes = True
-                report['diagnostic_definition_powers'] = [dict(index=i, source=d['intensity'], diagnostic=expected[i]['intensity'])
-                    for i, d in enumerate(plan['lighting_by_bsp'][diagnostic_index]['definitions'])]
+                if sun_control:
+                    report['sun_control_values'] = sun_values
+                elif material_diagnostic:
+                    report['diagnostic_material_bindings'] = material_bindings
+                    report['authoring_equivalence'] = 'Existing Tool-compiled material info.emissive power; no geometry reimport or generic-light edit'
+                else:
+                    report['diagnostic_definition_powers'] = [dict(index=i, source=d['intensity'], diagnostic=expected[i]['intensity'])
+                        for i, d in enumerate(plan['lighting_by_bsp'][diagnostic_index]['definitions'])]
                 report['diagnostic_mutated_tag'] = diagnostic_path
                 report['diagnostic_is_converter_fix'] = False
             if diagnostic:
@@ -187,9 +224,19 @@ def main(config):
                 native_xml = run/'diagnostic-lighting-before-faux.xml'
                 utils.run_tool(['export-tag-to-xml', str(paths.owned_tag(diagnostic_path)), str(native_xml)], force_tool_fast=True)
                 journal.finish(wait=True)
-                actual = fixtures.lighting_semantics(fixtures.parse(native_xml.read_bytes()))
-                lighting_audit.assert_intensity_delta(baseline_lighting, actual, float(diagnostic['factor']))
-                report['intensity_only_readback'] = dict(status='VERIFIED_BEFORE_FAUX', native_xml=str(native_xml), sha256=digest(native_xml))
+                if sun_control:
+                    report['sun_only_readback'] = sun_diagnostic.assert_sun_delta(
+                        baseline_xml.read_bytes(), native_xml.read_bytes(), float(diagnostic['factor']))
+                    report['sun_only_readback'].update(native_xml=str(native_xml), sha256=digest(native_xml))
+                    native_world.validate(comparison_plan, report)
+                elif material_diagnostic:
+                    report['material_power_only_readback'] = emissive_diagnostic.assert_material_power_delta(
+                        baseline_xml.read_bytes(), native_xml.read_bytes(), material_indices, float(diagnostic['power']))
+                    report['material_power_only_readback'].update(native_xml=str(native_xml), sha256=digest(native_xml))
+                else:
+                    actual = fixtures.lighting_semantics(fixtures.parse(native_xml.read_bytes()))
+                    lighting_audit.assert_intensity_delta(baseline_lighting, actual, float(diagnostic['factor']))
+                    report['intensity_only_readback'] = dict(status='VERIFIED_BEFORE_FAUX', native_xml=str(native_xml), sha256=digest(native_xml))
             ownership.save('BUILDING', parent['files'], run.name)
             report['status'] = 'BAKING'; flush()
             result = run_lightmapper(False, paths.scenario.replace('/', '\\'), lightmap_quality=quality,
@@ -205,7 +252,17 @@ def main(config):
             if report['lighting_evidence']['errors']:
                 raise RuntimeError('Faux log validation failed: '+str(report['lighting_evidence']['errors']))
             worker.validate_lighting_inputs(comparison_plan, report)
-            native_world.validate(plan, report)
+            if material_diagnostic or sun_control:
+                native_xml = run/'diagnostic-lighting-after-faux.xml'
+                utils.run_tool(['export-tag-to-xml', str(paths.owned_tag(diagnostic_path)), str(native_xml)], force_tool_fast=True)
+                journal.finish(wait=True)
+                if sun_control:
+                    report['sun_after_faux'] = sun_diagnostic.assert_sun_delta(
+                        baseline_xml.read_bytes(), native_xml.read_bytes(), float(diagnostic['factor']))
+                else:
+                    report['material_power_after_faux'] = emissive_diagnostic.assert_material_power_delta(
+                        baseline_xml.read_bytes(), native_xml.read_bytes(), material_indices, float(diagnostic['power']))
+            native_world.validate(comparison_plan if sun_control else plan, report)
             after = paths.snapshot()
             if any(after.get(k) != sha for k, sha in preserved.items()):
                 raise ValueError('A preserved external file changed during the bake')
@@ -227,10 +284,24 @@ def main(config):
                 seconds=time.perf_counter()-start, after=paths.snapshot())
             raise
         finally:
-            journal.finish(wait=True)
-            if (blob/'logs').exists():
-                shutil.copytree(blob/'logs', run/'faux-logs')
+            # Persist the bake outcome before any cleanup that can itself fail.
+            # A rejected restoration must not leave a finished run marked BAKING.
             flush()
+            try:
+                journal.finish(wait=True)
+                flush()
+                if (blob/'logs').exists():
+                    shutil.copytree(blob/'logs', run/'faux-logs')
+                if material_diagnostic or sun_control:
+                    from port_environment.diagnostic_capture import capture_compare_restore
+                    report['comparison'] = capture_compare_restore(paths, run, before, diagnostic_path, config, blob)
+                    ownership.save('GENERATED', parent['files'], run.name+'-baseline-restored')
+            except Exception as exc:
+                report.update(status='FAILED_CLEANUP', cleanup_failure=str(exc),
+                              cleanup_traceback=traceback.format_exc())
+                raise
+            finally:
+                flush()
     print('BAKE_COMPARISON_COMPLETE', run)
 
 

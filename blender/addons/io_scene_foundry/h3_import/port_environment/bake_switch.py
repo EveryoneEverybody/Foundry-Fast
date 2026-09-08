@@ -29,6 +29,10 @@ def switch(receipt, variant, *, dry_run=False):
             allowed.add('.bitmap')
         if key == receipt['diagnostic_lighting_key']:
             allowed.add('.scenario_structure_lighting_info')
+        if (key == receipt.get('sun_control_key') == receipt['diagnostic_lighting_key']
+                and receipt.get('sun_control_kind') == 'ANALYTIC_SUN_INPUT'
+                and key.startswith('tags/'+paths.namespace+'/sky/')):
+            allowed.add('.render_model')
         if target.suffix not in allowed:
             raise ValueError('Comparison cannot change BSP geometry, collision, shaders or sky')
         root = Path(states[variant]['capture_root']).resolve(strict=True)
