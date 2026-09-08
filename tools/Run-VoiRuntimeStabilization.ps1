@@ -23,5 +23,9 @@ if ($result -ne 0) { throw "Stabilization failed (exit $result). Review $logPath
 $reportName = if ($Action -eq 'Sky') { 'runtime-sky-report.json' } else { 'runtime-bake-report.json' }
 $report = Get-Content -Raw -LiteralPath (Join-Path $runPath $reportName) | ConvertFrom-Json
 if ($report.status -ne 'GENERATED_PENDING_RUNTIME') { throw "Unexpected result: $($report.status)" }
+if ($report.intensity_diagnostic) {
+    Write-Host "Diagnostic only: BSP $($report.intensity_diagnostic.source_bsp_index) static power x$($report.intensity_diagnostic.factor). This is not a converter correction."
+    Write-Host "Baseline tags are preserved under $runPath\before."
+}
 Write-Host 'Ready for Nate to check in Tag Test. Runtime acceptance remains pending.'
 Write-Host 'game_start levels\h3_port\040_voi\factory_a_env\factory_a_env'

@@ -5,6 +5,7 @@ before invoking normal Foundry Faux, then validate source relationships again.
 Run inside background Blender with a JSON config after --.
 """
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -22,10 +23,29 @@ def require_parent(actual, owned, preserved):
         raise ValueError('Current outputs differ from the parent manifest and preserved additions')
 
 
+def intensity_view(plan, source_bsp_index, factor):
+    """Ephemeral diagnostic override; the accepted source plan stays immutable."""
+    if not math.isfinite(factor) or not 1 < factor <= 100:
+        raise ValueError('Diagnostic scale must be finite, greater than 1 and at most 100')
+    matches = [i for i, b in enumerate(plan['bsps']) if b['source_index'] == source_bsp_index]
+    if len(matches) != 1:
+        raise ValueError('Diagnostic BSP must identify one accepted source BSP')
+    index = matches[0]
+    light = plan['lighting_by_bsp'][index]
+    if not light['definitions'] or not light['instances']:
+        raise ValueError('Diagnostic requires existing authored lights')
+    definitions = [dict(d, intensity=d['intensity']*factor) for d in light['definitions']]
+    if any(not math.isfinite(d['intensity']) or d['intensity'] <= 0 for d in definitions):
+        raise ValueError('Diagnostic requires finite positive source power')
+    view = dict(plan, lighting_by_bsp=list(plan['lighting_by_bsp']))
+    view['lighting_by_bsp'][index] = dict(light, definitions=definitions)
+    return view, index
+
+
 def main(config):
     addon = Path(config['addon']).resolve()
     sys.path[:0] = [str(addon.parent), str(addon/'h3_import')]
-    from port_environment import snapshot, worker, native_world
+    from port_environment import snapshot, worker, native_world, fixtures, lighting_audit
     from port_environment.paths import OutputPaths, Ownership, digest, atomic_json, build_lock
     from port_environment.validation import lighting_evidence
     quality = config.get('quality', 'low')
@@ -44,12 +64,48 @@ def main(config):
     preserved = config.get('preserved_external_files', {})
     require_parent(before, parent['files'], preserved)
     plan, _, receipt = snapshot.load(config['accepted_plan'], paths, config['scenario'], config['zone_set'])
+    diagnostic = config.get('intensity_diagnostic')
+    diagnostic_index = None
+    diagnostic_path = None
+    comparison_plan = plan
+    lighting_bsp = 'all'
+    if diagnostic:
+        audit_path = Path(diagnostic['audit_report'])
+        audit = json.loads(audit_path.read_text())
+        if (digest(audit_path) != diagnostic['audit_sha256'] or
+                audit['static_lights']['status'] != 'STRUCTURAL_MATCH' or
+                audit['provenance']['accepted_plan_sha256'] != digest(config['accepted_plan'])):
+            raise ValueError('Diagnostic requires a pinned passing source/authored/native audit')
+        comparison_plan, diagnostic_index = intensity_view(plan, diagnostic['source_bsp_index'], float(diagnostic['factor']))
+        if audit['provenance']['config']['bsp_index'] != diagnostic_index:
+            raise ValueError('Audit describes a different BSP')
+        bsp = plan['bsps'][diagnostic_index]
+        diagnostic_path = bsp['destination'].rsplit('.', 1)[0]+'.scenario_structure_lighting_info'
+        if digest(paths.owned_tag(diagnostic_path)) != diagnostic['native_tag_sha256']:
+            raise ValueError('Audited native lighting changed')
+        baseline_xml = Path(audit['provenance']['config']['native_lighting_xml'])
+        if digest(baseline_xml) != audit['provenance']['native_lighting_xml_sha256']:
+            raise ValueError('Audited native XML changed')
+        baseline_lighting = fixtures.lighting_semantics(fixtures.parse(baseline_xml.read_bytes()))
+        parent_report_path = Path(diagnostic['baseline_report'])
+        baseline_report = json.loads(parent_report_path.read_text())
+        if (digest(parent_report_path) != diagnostic['baseline_report_sha256'] or
+                baseline_report['quality'] != quality or baseline_report['after'] != before or
+                baseline_report.get('lighting_bsp', 'all') != 'all'):
+            raise ValueError('Diagnostic baseline quality, scope or outputs differ')
+        merge = [r['command'] for r in baseline_report['tool_invocations'] if r['command'][1] == 'faux_farm_dillum_merge']
+        if len(merge) != 1 or int(merge[0][3]) != int(config.get('threads', 1)):
+            raise ValueError('Diagnostic worker count differs from baseline')
+        # Match the parent all-BSP low bake. Changing BSP scope also changes
+        # photon allocation/transport and would confound an intensity-only test.
     run.mkdir(parents=True)
     report = dict(format='foundry.h3-environment.runtime-bake', version=1, status='PRESERVING',
         quality=quality, parent_manifest=str(config['parent_manifest']), before=before,
         source_snapshot=receipt, runtime_status='PENDING_NATE', tool_invocations=[],
         geometry_reconstructed=False, lighting_converter_changed=False,
         preserved_external_files=preserved)
+    report['intensity_diagnostic'] = diagnostic
+    report['lighting_bsp'] = lighting_bsp
     def flush():
         atomic_json(run/'runtime-bake-report.json', report)
     flush()
@@ -78,7 +134,8 @@ def main(config):
     project.tags_directory = str(paths.roots['tags']); project.data_directory = str(paths.roots['data'])
     project.corinth = False
     worker.setup_scene(paths.asset, 'scenario', paths.scenario+'.sidecar.xml', 'default', project.name)
-    os.chdir(paths.reach); managed_blam.mb_init(); worker.protect_tag_writes(paths, read_only=True)
+    os.chdir(paths.reach); managed_blam.mb_init()
+    worker.protect_tag_writes(paths, read_only=not bool(diagnostic))
     # Record the actual installed preset, not guessed quality settings.
     with Tag(path='globals/lightmapper_globals.lightmapper_globals', tag_must_exist=True) as tag:
         presets = tag.tag.SelectField('Block:quality settings').Elements
@@ -87,7 +144,9 @@ def main(config):
             raise ValueError('Installed Reach preset is absent or ambiguous')
         report['preset'] = {str(f.DisplayName): f.Data for f in matches[0].Fields if hasattr(f, 'Data')}
     report['preset_source_sha256'] = digest(paths.reach/'tags/globals/lightmapper_globals.lightmapper_globals')
-    blob = paths.reach/'faux'/str(calc_job_id(paths.scenario.replace('/', '\\'), 'all'))
+    if diagnostic and report['preset_source_sha256'] != baseline_report['preset_source_sha256']:
+        raise ValueError('Diagnostic lightmapper preset changed')
+    blob = paths.reach/'faux'/str(calc_job_id(paths.scenario.replace('/', '\\'), lighting_bsp))
     if (blob/'logs').exists():
         shutil.copytree(blob/'logs', run/'previous-faux-logs')
     journal = worker.ToolJournal(paths, run, report, flush, lighting_qualities=(quality,))
@@ -104,10 +163,38 @@ def main(config):
             worker.validate_lighting_inputs(plan, report)
             native_world.validate(plan, report)
             report['world_before'] = report.pop('native_world_readback')
+            if diagnostic:
+                # The only authored mutation: existing owned definition power.
+                # Do not rebuild rows, change presets, or alter source recipes.
+                with Tag(path=diagnostic_path, tag_must_exist=True) as tag:
+                    if Path(str(tag.tag_path.Filename)).resolve() != paths.owned_tag(diagnostic_path):
+                        raise ValueError('Diagnostic tag resolved to another project')
+                    definitions = tag.tag.SelectField('Block:generic light definitions').Elements
+                    expected = comparison_plan['lighting_by_bsp'][diagnostic_index]['definitions']
+                    if definitions.Count != len(expected):
+                        raise ValueError('Diagnostic definition count changed')
+                    for e, d in zip(definitions, expected):
+                        e.SelectField('intensity').Data = d['intensity']
+                    tag.tag_has_changes = True
+                report['diagnostic_definition_powers'] = [dict(index=i, source=d['intensity'], diagnostic=expected[i]['intensity'])
+                    for i, d in enumerate(plan['lighting_by_bsp'][diagnostic_index]['definitions'])]
+                report['diagnostic_mutated_tag'] = diagnostic_path
+                report['diagnostic_is_converter_fix'] = False
+            if diagnostic:
+                worker.protect_tag_writes(paths, read_only=True)
+            worker.validate_lighting_inputs(comparison_plan, report)
+            if diagnostic:
+                native_xml = run/'diagnostic-lighting-before-faux.xml'
+                utils.run_tool(['export-tag-to-xml', str(paths.owned_tag(diagnostic_path)), str(native_xml)], force_tool_fast=True)
+                journal.finish(wait=True)
+                actual = fixtures.lighting_semantics(fixtures.parse(native_xml.read_bytes()))
+                lighting_audit.assert_intensity_delta(baseline_lighting, actual, float(diagnostic['factor']))
+                report['intensity_only_readback'] = dict(status='VERIFIED_BEFORE_FAUX', native_xml=str(native_xml), sha256=digest(native_xml))
             ownership.save('BUILDING', parent['files'], run.name)
             report['status'] = 'BAKING'; flush()
             result = run_lightmapper(False, paths.scenario.replace('/', '\\'), lightmap_quality=quality,
-                cpu_threads=int(config.get('threads', 1)), structure_bsps=[b['region'] for b in plan['bsps']])
+                cpu_threads=int(config.get('threads', 1)), structure_bsps=[b['region'] for b in plan['bsps']],
+                lightmap_all_bsps=lighting_bsp == 'all', lightmap_specific_bsp=lighting_bsp)
             journal.finish(wait=True)
             if result.lightmap_failed:
                 raise RuntimeError(result.lightmap_message)
@@ -117,7 +204,7 @@ def main(config):
             report['lighting_evidence'] = lighting_evidence(logs)
             if report['lighting_evidence']['errors']:
                 raise RuntimeError('Faux log validation failed: '+str(report['lighting_evidence']['errors']))
-            worker.validate_lighting_inputs(plan, report)
+            worker.validate_lighting_inputs(comparison_plan, report)
             native_world.validate(plan, report)
             after = paths.snapshot()
             if any(after.get(k) != sha for k, sha in preserved.items()):
@@ -126,9 +213,12 @@ def main(config):
                 for k in sorted(before.keys() | after.keys()) if before.get(k) != after.get(k)}
             allowed_extensions = {'.scenario', '.scenario_structure_bsp', '.scenario_lightmap',
                 '.scenario_lightmap_bsp_data', '.scenario_faux_data', '.probestore', '.bitmap'}
-            if any(not k.startswith('tags/'+paths.namespace+'/') or Path(k).suffix not in allowed_extensions
+            if any(not k.startswith('tags/'+paths.namespace+'/') or
+                    (Path(k).suffix not in allowed_extensions and k != 'tags/'+str(diagnostic_path))
                     or (Path(k).suffix == '.bitmap' and not ('lightmap' in k or '/faux/' in k)) for k in changed):
                 raise ValueError('Faux changed a non-lighting resource; inspect the preserved backup')
+            if diagnostic and any(before.get('tags/'+b['destination']) != after.get('tags/'+b['destination']) for b in plan['bsps']):
+                raise ValueError('Diagnostic unexpectedly changed BSP geometry tags; inspect backup')
             report.update(status='GENERATED_PENDING_RUNTIME', after=after, changed_files=changed,
                 seconds=time.perf_counter()-start, unchanged_outputs=len(before)-sum(k in before for k in changed))
             ownership.save('GENERATED', {k: v for k, v in after.items() if k not in preserved}, run.name)
