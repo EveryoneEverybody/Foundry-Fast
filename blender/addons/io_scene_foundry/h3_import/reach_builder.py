@@ -154,7 +154,7 @@ class ReachStager:
                 categories = {k:dict(option=v) for k,v in authoring['options'].items()}
                 parameters = authoring['parameters']
                 group_name = authoring['target_node']
-                if group_name not in {GROUP_NAME, 'foundry_reach.shader_terrain', 'foundry_reach.shader_foliage'}:
+                if group_name not in {GROUP_NAME, 'foundry_reach.shader_terrain', 'foundry_reach.shader_foliage', 'foundry_reach.shader_decal'}:
                     raise ValueError('Unimplemented accepted native material group: '+group_name)
             material = self.remember(bpy.data.materials, bpy.data.materials.new(stage_name(record['source'])))
             material.use_nodes = True
@@ -191,6 +191,10 @@ class ReachStager:
                     report['diagnostics'].append(f'{name}={option}: {status}; source selection retained in the manifest')
             tree.interface_update(bpy.context)
             if authoring is not None:
+                if group_name=='foundry_reach.shader_decal':
+                    # Hidden decal options are written by exact native RMD
+                    # name and verified in the native completion stage.
+                    selected.update(authoring['options'])
                 parallax = authoring['options'].get('parallax', 'off')
                 if parallax != 'off':
                     from ..managed_blam.shader import Parallax

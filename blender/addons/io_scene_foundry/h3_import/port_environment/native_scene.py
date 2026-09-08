@@ -153,6 +153,18 @@ def construct(scene, plan, config, mats, report, mesh_object):
         elapsed('accepted geometry JSON verification',began)
         began=time.perf_counter()
         material_rows = deepcopy(bsp['materials'])
+        # Embedded instance collision can reference a shader that has no root
+        # BSP surfaces. Keep the original render slots, then append that exact
+        # source identity from the already validated shared material plan.
+        known = {m.get('source_shader') for m in material_rows}
+        for source in bsp['authoring']['collision_materials']:
+            ref = source.get('render method')
+            if not ref:
+                continue
+            identity = (ref['path']+'.'+ref['extension']).replace('\\','/')
+            if identity not in known and identity in mats:
+                material_rows.append(dict(source_shader=identity, source_collision_material=source['source_index']))
+                known.add(identity)
         material_rows.append(dict(name='collision_default',source_shader=None))
         # An untextured collision shell has no source shader. This is a special
         # collision material definition, never visible replacement geometry.

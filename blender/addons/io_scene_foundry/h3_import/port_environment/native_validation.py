@@ -100,7 +100,9 @@ def bitmaps(plan,paths,report,config):
             result=dict(source=source,target=target,type=kind,width=width,height=height,processed_bytes=size)
             if cube:
                 expected=spec['dimensions']
-                if [width,height,6]!=expected:raise ValueError('Native cube dimensions changed')
+                dimensions_changed=[width,height,6]!=expected
+                if width<=0 or width!=height or width>expected[0]:
+                    raise ValueError('Native cube dimensions changed outside a possible constant-image compaction: '+target)
                 # The retail MCC vertical-resource swizzle is not the loose
                 # EK processed-data layout. Let Reach's own bitmap API decode
                 # its imported payload, then inspect the native authoring atlas.
@@ -132,8 +134,13 @@ def bitmaps(plan,paths,report,config):
                 atlas=pixels.reshape(original.size[1],original.size[0],4)[::-1]
                 comparisons=[]
                 for name,(x,y) in zip(('R','L','U','D','F','B'),spec['source_layout']['cells']):
-                    reference=atlas[y*height:(y+1)*height,x*width:(x+1)*width,:3]
+                    source_width,source_height=expected[:2]
+                    reference=atlas[y*source_height:(y+1)*source_height,x*source_width:(x+1)*source_width,:3]
                     actual=faces[name][:,:,:3]/255
+                    if dimensions_changed:
+                        if not np.all(reference==reference[0,0]):
+                            raise ValueError('Native cube resized a nonconstant source face: '+target+' '+name)
+                        reference=reference[0,0]
                     error=float(np.abs(reference-actual).mean())
                     comparisons.append(dict(face=name,mean_absolute_error=error))
                 if any(r['mean_absolute_error']>.04 for r in comparisons):
@@ -148,6 +155,10 @@ def bitmaps(plan,paths,report,config):
                     bpy.data.images.remove(data_image)
                 bpy.data.images.remove(original)
                 result['face_readback']=comparisons
+                if dimensions_changed:
+                    result['dimension_transform']=dict(source=expected,target=[width,height,6],
+                        status='VERIFIED_CONSTANT_FACE_COMPACTION',
+                        proof='Every pixel of each source face is equal; all six native faces retain that color')
                 rows.append(result);report['native_bitmap_readback']=rows
                 if any(r['mean_absolute_error']>.04 for r in comparisons):
                     raise ValueError('Native cubemap face/orientation differs from source atlas: '+target+' '+str(comparisons))

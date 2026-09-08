@@ -45,3 +45,25 @@ Forty-two focused Python checks passed at this checkpoint (scenario translation,
 campaign selection, glass/seam contracts). Source-plan acceptance does not imply
 native Tool acceptance or runtime success. The first complete native build is
 the next validation stage.
+
+The shared object decoder has inspected 136 distinct scenery/crate/machine/
+control dependencies. The current source plan admits 91: 28 scenery, 50 crates,
+10 machines and 3 controls. Remaining objects retain exact missing-dependency,
+material-function, physics or source-group blockers. Device animations are
+decoded through the existing H3 animation helper into normal JMA authoring;
+native graph and button/door validation remain pending at this checkpoint.
+No unit or vehicle animation path is introduced.
+
+`run_h3_scenario_objects.py` shares the environment's exact-file ownership
+manifest and target lock. Source metadata, material staging, object dependency
+authoring and scenario placements are separate reusable layers. Native enums
+and flags match by name, since H3 and Reach bit orders differ. Eight object
+identity/type tests and the 26 scenario/remaining-rule checks passed locally.
+Native validation will decide which planned objects enter the scenario.
+
+The placement adapter explicitly records a bind-pose approximation for packed
+H3 stored poses (404 source crate placements); no packed pose stream is copied.
+Unsupported parents close over their dependent placements instead of silently
+detaching them. Source device-group indices and duplicate group names survive.
+Emission animation on otherwise supported object materials is staticized at
+the pinned source state; BSP lighting is unaffected.

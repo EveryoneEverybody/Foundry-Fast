@@ -24,6 +24,16 @@ def complete_tag(material, manifest, report, paths):
         if contract['target_node']=='foundry_reach.shader':
             parallax=contract['options'].get('parallax','off')
             tag.block_options.Elements[8].SelectField('short').SetStringData(str(Parallax[parallax.upper()].value))
+        if contract['target_node']=='foundry_reach.shader_decal':
+            from io_scene_foundry.managed_blam.render_method_definition import RenderMethodDefinitionTag
+            with RenderMethodDefinitionTag(path=tag.definition.Path,tag_must_exist=True) as definition:
+                native={e.Fields[0].GetStringData():e for e in definition.block_categories.Elements}
+                for name,option in contract['options'].items():
+                    if name not in native:raise ValueError('Native decal category absent: '+name)
+                    element=native[name]
+                    choices=[e.Fields[0].GetStringData() for e in element.Fields[1].Elements]
+                    if option not in choices:raise ValueError('Native decal option absent: '+name+'='+option)
+                    tag.block_options.Elements[element.ElementIndex].SelectField('short').Data=choices.index(option)
         for row in staging['parameters']:
             param=contract['parameters'][row['name']]
             if row['status']=='runtime_input':continue
