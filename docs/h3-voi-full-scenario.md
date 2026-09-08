@@ -50,7 +50,11 @@ player starts and 168 static trigger volumes round-trip through native tags.
 Eighteen of 22 source control/machine relationships survive: controls 0 and 6
 share position group 2 with source machine 41, becoming native controls 0/6 and
 machine 13. The arms-door graph has 13 nodes and 100 frames at 30 fps from 101
-source JMA samples. Interaction, motion and physical response remain untested.
+source JMA samples. The runtime continuation observed closed/open poses and a
+console-driven control 0 → machine 41 response through group 2 after repairing
+structure-origin metadata. Player-operated interaction, measured animation
+timing and physical response remain pending; see
+[the runtime findings](h3-voi-runtime-findings.md).
 
 The authored `all` zone retains mask 255. Later authored zones selectively
 include BSP008; no synthetic mask 511 is introduced. All fifteen designer-zone

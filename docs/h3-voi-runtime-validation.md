@@ -36,7 +36,7 @@ The first selected fixtures are:
 
 | Fixture | Source → native placement | Position in world units | Notes |
 |---|---|---|---|
-| Old generator scenery | 113 → 54 | -68.9394, -8.10452, -1.49765 | BSP6; collision model exists; initial visibility attempt inconclusive |
+| Old generator scenery | 113 → 54 | -68.9394, -8.10452, -1.49765 | BSP6; visible in `ware` after the origin repair; collision pending |
 | Cinderblock crate | 882 → 379 | 24.3655, -99.4547, -1.28459 | Near source crate 881; retained source bind pose, not decoded stored pose |
 | Arms door | 41 → 13 | -4.25, -100.5, -1.5 | `factory_a_entry02`; 13 nodes, 100 frames at 30 fps |
 | Control | 0 → 0 | -4.35, -99.2, 1.1 | `factory_a_entry02_switch`; scale 1.5 |
@@ -90,3 +90,13 @@ no designer-zone palette membership. The door's unplaced-object result after
 an `all` transition is retained as an unresolved runtime transition observation;
 designer-zone exclusions alone do not explain it. Source origin BSP is only a
 location hint, not proof that an object exists in a running zone.
+
+The completed observation report is
+`D:\HaloRE\PortCensus\voi_runtime_validation_20260908\observed-01\runtime-validation.md`.
+It verifies 1,511 installed tags and binds 19 observations to the current
+scenario and fixture hashes: six check-level passes and thirteen pending
+checks. All four complete fixtures remain `RUNTIME_TEST_PENDING`; there is no
+remaining check-level failure asserted from the inconclusive player-positioning
+attempts. The pre-repair door-existence failure is retained in the captures.
+See [h3-voi-runtime-findings.md](h3-voi-runtime-findings.md) for the material,
+geometry, sky and reusable dependency findings from this continuation.
