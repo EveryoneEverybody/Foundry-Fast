@@ -1,1 +1,0 @@
-Implementation note: h3_shader_packet.py is intentionally a first-stage collector. It removes the immediate one-tag-at-a-time XML dumping work. Complete scenario dependency-closure collection is the next stage and should reuse Baboon's ReverseDependencyIndex rather than infer dependencies from directory layout.
