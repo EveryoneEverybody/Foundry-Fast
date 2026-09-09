@@ -1,0 +1,417 @@
+{
+  "source": "environment.plan.json from environment.plan.zip",
+  "plan_sha256": "ce4bc7703b93302eff0f1b60c07be9afe03bfb124a525a7be683cb708ccc5bf4",
+  "source_scenario": "levels/solo/040_voi/040_voi.scenario",
+  "source_zone_set": "intro_faa",
+  "total_unique_material_records": 217,
+  "source_group_counts": {
+    "shader": 209,
+    "shader_foliage": 1,
+    "shader_terrain": 7
+  },
+  "material_model_counts": {
+    "two_lobe_phong": 140,
+    "diffuse_only": 38,
+    "single_lobe_phong": 12,
+    "cook_torrance": 11,
+    "<shader_terrain>": 7,
+    "foliage": 6,
+    "none": 1,
+    "default": 1,
+    "glass": 1
+  },
+  "dynamic_or_nonconstant_function_materials": [
+    {
+      "source_shader": "levels/solo/040_voi/bitmaps/lights/flare_a_red_blinky.shader",
+      "parameters": [
+        "self_illum_intensity"
+      ],
+      "function_types": [
+        3
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/lights/light_sequence_red_a_illum.shader",
+      "parameters": [
+        "base_map",
+        "self_illum_map"
+      ],
+      "function_types": [
+        8
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/lights/metal_doodad_a_illum_cool.shader",
+      "parameters": [
+        "self_illum_intensity"
+      ],
+      "function_types": [
+        3
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/lights/metal_doodad_a_illum_warm.shader",
+      "parameters": [
+        "self_illum_intensity"
+      ],
+      "function_types": [
+        3
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/metals/metal_crane_platform.shader",
+      "parameters": [
+        "self_illum_intensity"
+      ],
+      "function_types": [
+        3
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/metals/metal_crane_upper.shader",
+      "parameters": [
+        "self_illum_intensity"
+      ],
+      "function_types": [
+        3
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/sky/shaders/clouds_fog.shader",
+      "parameters": [
+        "detail_map",
+        "height_map"
+      ],
+      "function_types": [
+        2
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/sky/shaders/clouds_horizon_distant.shader",
+      "parameters": [
+        "detail_map"
+      ],
+      "function_types": [
+        2
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/sky/shaders/clouds_horizon_wrap.shader",
+      "parameters": [
+        "detail_map"
+      ],
+      "function_types": [
+        2
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/sky/shaders/lava.shader",
+      "parameters": [
+        "detail_map2"
+      ],
+      "function_types": [
+        2
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/sky/shaders/smoke_a.shader",
+      "parameters": [
+        "detail_map",
+        "detail_map2"
+      ],
+      "function_types": [
+        2
+      ]
+    },
+    {
+      "source_shader": "levels/solo/040_voi/sky/shaders/smoke_thin.shader",
+      "parameters": [
+        "detail_map",
+        "detail_map2"
+      ],
+      "function_types": [
+        2
+      ]
+    }
+  ],
+  "single_lobe_count": 12,
+  "recommended_single_lobe_regression_fixtures": [
+    {
+      "source_shader": "levels/solo/040_voi/shaders/concrete/asphalt_b_diffuse.shader",
+      "source_categories": {
+        "albedo": "two_detail",
+        "bump_mapping": "standard",
+        "alpha_test": "none",
+        "specular_mask": "specular_mask_from_texture",
+        "material_model": "single_lobe_phong",
+        "environment_mapping": "dynamic",
+        "self_illumination": "off",
+        "blend_mode": "opaque",
+        "parallax": "off",
+        "misc": "first_person_never",
+        "distortion": "off",
+        "soft_fade": "off",
+        "misc_attr_animation": "off"
+      },
+      "source": {
+        "specular_coefficient": 0.5,
+        "analytical_specular_contribution": 1.0,
+        "area_specular_contribution": 0.10000000149011612,
+        "environment_map_specular_contribution": 0.5,
+        "roughness": 0.10000000149011612,
+        "env_roughness_scale": 0.10000000149011612
+      },
+      "expected_reach_migration_core": {
+        "material_model": "two_lobe_phong",
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 0.0004934802494681818,
+        "area_specular_contribution": 0.01591549454634888,
+        "environment_map_specular_contribution": 0.25,
+        "roughness": 0.10000000149011612,
+        "analytical_roughness": 0.10000000149011612,
+        "env_roughness_scale": 0.10000000149011612,
+        "env_roughness_offset": 0.4549999994039535
+      },
+      "usage": {
+        "usage_entries": 38,
+        "bsp_render_entries": 30,
+        "instance_collision_entries": 0,
+        "bsp_collision_entries": 8,
+        "render_triangles": 905,
+        "collision_triangles": 0
+      },
+      "runtime_validation": "VALIDATED_ASPHALT_B"
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/metals/metal_rustbucket_b.shader",
+      "source_categories": {
+        "albedo": "two_detail",
+        "bump_mapping": "detail",
+        "alpha_test": "none",
+        "specular_mask": "specular_mask_from_diffuse",
+        "material_model": "single_lobe_phong",
+        "environment_mapping": "dynamic",
+        "self_illumination": "off",
+        "blend_mode": "opaque",
+        "parallax": "off",
+        "misc": "first_person_never",
+        "distortion": "off",
+        "soft_fade": "off",
+        "misc_attr_animation": "off"
+      },
+      "source": {
+        "specular_coefficient": 2.0,
+        "analytical_specular_contribution": 0.10000000149011612,
+        "area_specular_contribution": 0.10000000149011612,
+        "environment_map_specular_contribution": 0.5,
+        "roughness": 0.05000000074505806,
+        "env_roughness_scale": 0.05000000074505806
+      },
+      "expected_reach_migration_core": {
+        "material_model": "two_lobe_phong",
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 1.2337006420540263e-05,
+        "area_specular_contribution": 0.06366197818539553,
+        "environment_map_specular_contribution": 1.0,
+        "roughness": 0.05000000074505806,
+        "analytical_roughness": 0.05000000074505806,
+        "env_roughness_scale": 0.05000000074505806,
+        "env_roughness_offset": 0.47624999966472387
+      },
+      "usage": {
+        "usage_entries": 676,
+        "bsp_render_entries": 210,
+        "instance_collision_entries": 458,
+        "bsp_collision_entries": 8,
+        "render_triangles": 233152,
+        "collision_triangles": 58888
+      },
+      "runtime_validation": "NOT_RUNTIME_TESTED"
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/metals/metal_d_painted_yellow.shader",
+      "source_categories": {
+        "albedo": "two_detail",
+        "bump_mapping": "detail",
+        "alpha_test": "none",
+        "specular_mask": "specular_mask_from_diffuse",
+        "material_model": "single_lobe_phong",
+        "environment_mapping": "dynamic",
+        "self_illumination": "off",
+        "blend_mode": "opaque",
+        "parallax": "off",
+        "misc": "first_person_never",
+        "distortion": "off",
+        "soft_fade": "off",
+        "misc_attr_animation": "off"
+      },
+      "source": {
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 0.10000000149011612,
+        "area_specular_contribution": 0.10000000149011612,
+        "environment_map_specular_contribution": 0.4000000059604645,
+        "roughness": 0.05000000074505806,
+        "env_roughness_scale": 0.5
+      },
+      "expected_reach_migration_core": {
+        "material_model": "two_lobe_phong",
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 6.168503210270131e-06,
+        "area_specular_contribution": 0.03183098909269776,
+        "environment_map_specular_contribution": 0.4000000059604645,
+        "roughness": 0.05000000074505806,
+        "analytical_roughness": 0.05000000074505806,
+        "env_roughness_scale": 0.5,
+        "env_roughness_offset": 0.4874999998137355
+      },
+      "usage": {
+        "usage_entries": 463,
+        "bsp_render_entries": 154,
+        "instance_collision_entries": 302,
+        "bsp_collision_entries": 7,
+        "render_triangles": 142158,
+        "collision_triangles": 40802
+      },
+      "runtime_validation": "NOT_RUNTIME_TESTED"
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/natural/lb_cliff.shader",
+      "source_categories": {
+        "albedo": "default",
+        "bump_mapping": "standard",
+        "alpha_test": "none",
+        "specular_mask": "no_specular_mask",
+        "material_model": "single_lobe_phong",
+        "environment_mapping": "none",
+        "self_illumination": "off",
+        "blend_mode": "opaque",
+        "parallax": "interpolated",
+        "misc": "first_person_never",
+        "distortion": "off",
+        "soft_fade": "off",
+        "misc_attr_animation": "off"
+      },
+      "source": {
+        "specular_coefficient": 0.20000000298023224,
+        "analytical_specular_contribution": 0.10000000149011612,
+        "area_specular_contribution": 0.10000000149011612,
+        "environment_map_specular_contribution": 0.20000000298023224,
+        "roughness": 0.4000000059604645,
+        "env_roughness_scale": null
+      },
+      "expected_reach_migration_core": {
+        "material_model": "two_lobe_phong",
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 0.005053237905152403,
+        "area_specular_contribution": 0.006366197913403292,
+        "environment_map_specular_contribution": 0.040000001192092904,
+        "roughness": 0.4000000059604645,
+        "analytical_roughness": 0.4000000059604645
+      },
+      "usage": {
+        "usage_entries": 66,
+        "bsp_render_entries": 20,
+        "instance_collision_entries": 42,
+        "bsp_collision_entries": 4,
+        "render_triangles": 10080,
+        "collision_triangles": 3328
+      },
+      "runtime_validation": "NOT_RUNTIME_TESTED"
+    },
+    {
+      "source_shader": "levels/solo/040_voi/shaders/plastic/rubber_wire.shader",
+      "source_categories": {
+        "albedo": "default",
+        "bump_mapping": "off",
+        "alpha_test": "none",
+        "specular_mask": "no_specular_mask",
+        "material_model": "single_lobe_phong",
+        "environment_mapping": "none",
+        "self_illumination": "off",
+        "blend_mode": "opaque",
+        "parallax": "off",
+        "misc": "first_person_never",
+        "distortion": "off",
+        "soft_fade": "off",
+        "misc_attr_animation": "off"
+      },
+      "source": {
+        "specular_coefficient": 0.5,
+        "analytical_specular_contribution": 0.4000000059604645,
+        "area_specular_contribution": 0.15000000596046448,
+        "environment_map_specular_contribution": 0.0,
+        "roughness": 0.0,
+        "env_roughness_scale": null
+      },
+      "expected_reach_migration_core": {
+        "material_model": "two_lobe_phong",
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 0.0,
+        "area_specular_contribution": 0.023873242412421686,
+        "environment_map_specular_contribution": 0.0,
+        "roughness": 0.0,
+        "analytical_roughness": 0.0
+      },
+      "usage": {
+        "usage_entries": 66,
+        "bsp_render_entries": 52,
+        "instance_collision_entries": 11,
+        "bsp_collision_entries": 3,
+        "render_triangles": 50588,
+        "collision_triangles": 978
+      },
+      "runtime_validation": "NOT_RUNTIME_TESTED"
+    },
+    {
+      "source_shader": "levels/solo/020_base/shaders/hb_metal_painted_red.shader",
+      "source_categories": {
+        "albedo": "two_detail",
+        "bump_mapping": "standard",
+        "alpha_test": "none",
+        "specular_mask": "specular_mask_from_diffuse",
+        "material_model": "single_lobe_phong",
+        "environment_mapping": "dynamic",
+        "self_illumination": "off",
+        "blend_mode": "opaque",
+        "parallax": "off",
+        "misc": "first_person_never",
+        "distortion": "off",
+        "soft_fade": "off",
+        "misc_attr_animation": "off"
+      },
+      "source": {
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 0.5,
+        "area_specular_contribution": 0.25,
+        "environment_map_specular_contribution": 0.5,
+        "roughness": 1.0,
+        "env_roughness_scale": 1.0
+      },
+      "expected_reach_migration_core": {
+        "material_model": "two_lobe_phong",
+        "specular_coefficient": 1.0,
+        "analytical_specular_contribution": 4.934802200544679,
+        "area_specular_contribution": 0.07957747154594767,
+        "environment_map_specular_contribution": 0.5,
+        "roughness": 1.0,
+        "analytical_roughness": 1.0,
+        "env_roughness_scale": 1.0,
+        "env_roughness_offset": 0.5
+      },
+      "usage": {
+        "usage_entries": 38,
+        "bsp_render_entries": 8,
+        "instance_collision_entries": 30,
+        "bsp_collision_entries": 0,
+        "render_triangles": 5156,
+        "collision_triangles": 3256
+      },
+      "runtime_validation": "NOT_RUNTIME_TESTED"
+    }
+  ],
+  "notes": [
+    "Counts come from the actual scenario dependency closure in environment.plan.json, not from a physical shader directory.",
+    "The expected single-lobe outputs implement the recovered core Reach migration arithmetic only; they do not invent unresolved tint/option semantics.",
+    "Unknown or unproven material-family rules should fail closed in the production translator."
+  ]
+}

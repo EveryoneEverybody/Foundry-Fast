@@ -289,6 +289,8 @@ class ShaderTag(Tag):
         return e_alpha_test.value == 0 and e_blend_mode.value == 0
     
     def write_tag(self, blender_material, linked_to_blender, material_shader=''):
+        if blender_material.get('h3_reach_staged') or blender_material.get('h3_reach_authoring_plan'):
+            return self._write_h3_semantic_tag(blender_material, linked_to_blender)
         self.blender_material = blender_material
         self.material_shader = material_shader
         self.group_node = self._find_group_node(blender_material)
@@ -302,6 +304,26 @@ class ShaderTag(Tag):
             self.tag.SelectField("Reference:material shader").Path = self._TagPath_from_string(self.material_shader)
             
         return self.tag.Path.RelativePathWithExtension
+
+    def _write_h3_semantic_tag(self, material, linked_to_blender):
+        import json
+        from ..h3_import.material_writer import apply_plan, require_writable
+        try:
+            if not material.get('h3_reach_authoring_plan'):
+                raise ValueError('UNRESOLVED_WRITER_CONTRACT: legacy H3 preview requires semantic restaging before export')
+            plan = require_writable(json.loads(material['h3_reach_authoring_plan']))
+            self.blender_material = material
+            self.group_node = self._find_group_node(material)
+            if not linked_to_blender or self.corinth or not self._group_node_matches(self.group_node):
+                raise ValueError('Semantic H3 authoring requires an ordinary native Reach node group')
+            self.h3_authoring_receipt = apply_plan(self, material, plan)
+            return self.tag.Path.RelativePathWithExtension
+        except Exception:
+            # Tag.__exit__ otherwise saves even on exceptions (including new
+            # tags). A rejected semantic plan must never publish partial state.
+            self.tag_has_changes = False
+            self.always_save = False
+            raise
         
     def _edit_tag(self):
         self.alpha_type = self._alpha_type_from_blender_material()

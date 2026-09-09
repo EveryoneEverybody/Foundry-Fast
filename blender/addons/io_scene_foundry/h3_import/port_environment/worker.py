@@ -303,9 +303,12 @@ def materials(plan, config, paths, report):
         for p in row['source_parameters']:
             if p.get('bitmap') in source_images:
                 source.node_tree.nodes.new('ShaderNodeTexImage').image = source_images[p['bitmap']]
-        from .native_contracts import material as material_contract
-        contract = material_contract(row) if plan['version'] >= 2 else None
-        target = stager.build(source, contract) if contract else stager.build(source)
+        from ..material_translation import H3MaterialRecord, translate
+        semantic_plan = translate(H3MaterialRecord.from_resolved(
+            manifest['shaders'][row['source_shader']], manifest['bitmaps'],
+            {'source_sha256': plan.get('source', {}).get('hashes', {}).get(row['source_shader'])}))
+        contract = semantic_plan.to_dict()
+        target = stager.build(source, semantic_plan)
         if target is None:
             material_errors.append(dict(source=row['source_shader'],reason=stager.results[-1]))
             continue

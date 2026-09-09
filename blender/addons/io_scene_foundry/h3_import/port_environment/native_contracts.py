@@ -30,6 +30,11 @@ def seam_owner_order(seam, bsps):
 
 
 def material(row):
+    """Legacy preview contract only; production uses material_translation.translate.
+
+    Kept for existing preview regression callers. This historical approximation
+    is never accepted by the production ReachStager semantic boundary.
+    """
     result = dict(target_node='foundry_reach.shader',
         options={c['category']:c['option'] for c in row['source_categories']},
         parameters={p['name']:deepcopy(p) for p in row['source_parameters']})

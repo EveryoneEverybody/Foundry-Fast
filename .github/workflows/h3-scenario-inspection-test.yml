@@ -57,6 +57,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s tests -p 'test_h3_import*.py' -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p 'test_h3_material_translation.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test and build extraction helpers
         env:
           H3_LARGE_INVENTORY_OUTPUT: ${{ runner.temp }}/h3-large-inventory

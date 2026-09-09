@@ -10,17 +10,25 @@ def complete_tag(material, manifest, report, paths):
     from io_scene_foundry.tools.shader_builder import REACH_SUFFIX_TO_CLASS
     from io_scene_foundry.managed_blam.shader import Parallax
     contract=json.loads(material['h3_native_authoring'])
+    semantic = contract.get('format') == 'foundry.h3-reach-material-plan'
+    if not semantic and material.get('h3_reach_staged'):
+        raise ValueError('UNRESOLVED_WRITER_CONTRACT: legacy preview cannot enter native completion')
+    if semantic:
+        from ..material_writer import require_writable
+        require_writable(contract)  # Before unlinking or opening any target tag.
     staging=json.loads(material['h3_reach_report'])
     cls,_=REACH_SUFFIX_TO_CLASS[material.nwo.shader_type]
     source=manifest['shaders'][material['h3_source_shader']]
     parameter_plan=[]
     target_path=paths.owned_tag(material.nwo.shader_path)
-    if target_path.exists():
+    if target_path.exists() and not semantic:
         # The outer ownership preflight verified the exact previous hash.
         # Reconstruct from nodes, avoiding inheritance from failed partial tags.
         target_path.unlink()
     with cls(path=material.nwo.shader_path) as tag:
         material.nwo.shader_path=tag.write_tag(material,True)
+        if semantic:
+            parameter_plan.extend(tag.h3_authoring_receipt)
         if contract['target_node']=='foundry_reach.shader':
             parallax=contract['options'].get('parallax','off')
             tag.block_options.Elements[8].SelectField('short').SetStringData(str(Parallax[parallax.upper()].value))
@@ -34,7 +42,7 @@ def complete_tag(material, manifest, report, paths):
                     choices=[e.Fields[0].GetStringData() for e in element.Fields[1].Elements]
                     if option not in choices:raise ValueError('Native decal option absent: '+name+'='+option)
                     tag.block_options.Elements[element.ElementIndex].SelectField('short').Data=choices.index(option)
-        for row in staging['parameters']:
+        for row in (() if semantic else staging['parameters']):
             param=contract['parameters'][row['name']]
             if row['status']=='runtime_input':continue
             if row['status']=='unmapped':
@@ -130,6 +138,11 @@ def validate_material(material,contract,parameters,cls):
             for name,p in decision['target_parameters'].items():
                 if name not in native:raise ValueError('Native shader parameter missing: '+name)
                 element=native[name]
+                if p['type']=='angle_color':
+                    from ..material_writer import verify_angle_color
+                    verify_angle_color(tag,p,element)
+                    count+=1
+                    continue
                 functions={a.SelectField('type').Value:a.SelectField(tag.animated_function).Value
                     for a in element.SelectField(tag.function_parameters).Elements}
                 if p['type']=='bitmap':

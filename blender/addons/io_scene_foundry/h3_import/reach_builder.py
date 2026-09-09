@@ -6,6 +6,8 @@ from .materials import _object_pairs, validate_manifest
 from .reach_materials import (CATEGORIES, GROUP_NAME, normalized,
                              parameter_bindings, stage_name, staged_image_key,
                              staged_image_name, validate_shader)
+from .material_translation import H3MaterialRecord, ReachAuthoringPlan, translate
+from .material_writer import require_source, require_writable
 
 
 def socket_schema(group):
@@ -14,7 +16,7 @@ def socket_schema(group):
 
 
 class ReachStager:
-    def __init__(self, resource_loader=None, alias_loader=None, *, native_cube_sources=False):
+    def __init__(self, resource_loader=None, alias_loader=None, *, native_cube_sources=False, legacy_preview=False):
         self.resource_loader = resource_loader or utils.add_node_from_resources
         self.alias_loader = alias_loader or read_destination_aliases
         self.images = {}
@@ -25,6 +27,7 @@ class ReachStager:
         self.option_cache = {}
         self.manifests = {}
         self.native_cube_sources = native_cube_sources
+        self.legacy_preview = legacy_preview
 
     def remember(self, store, value):
         self.created.append((store, value))
@@ -145,6 +148,17 @@ class ReachStager:
         checkpoint = len(self.created)
         try:
             manifest, record = self.source_record(source)
+            semantic = not self.legacy_preview
+            if semantic:
+                if authoring is None:
+                    authoring = translate(H3MaterialRecord.from_resolved(record, manifest['bitmaps']))
+                if not isinstance(authoring, ReachAuthoringPlan):
+                    raise ValueError('Production staging requires an immutable ReachAuthoringPlan')
+                require_source(authoring, record)
+                report['semantic_plan'] = authoring.to_dict()
+                report['translation_status'] = authoring.status
+                report['rule_id'] = authoring.rule_id
+                authoring = require_writable(authoring)
             if authoring is None:
                 categories, parameters = validate_shader(record)
                 group_name = GROUP_NAME
@@ -183,11 +197,15 @@ class ReachStager:
                         selected[name] = option
                         status = 'name_match'
                     except (ValueError, TypeError):
+                        if semantic:
+                            raise ValueError('UNRESOLVED_WRITER_OPTION: '+name+'='+option)
                         target.default_value = previous
                         status = 'group_default'
                 report['categories'].append({'category': name, 'source_option': option, 'status': status,
                                              'node_option': str(target.default_value) if target else None})
                 if status != 'name_match':
+                    if semantic and name in CATEGORIES:
+                        raise ValueError('UNRESOLVED_WRITER_CATEGORY: '+name)
                     report['diagnostics'].append(f'{name}={option}: {status}; source selection retained in the manifest')
             tree.interface_update(bpy.context)
             if authoring is not None:
@@ -199,11 +217,15 @@ class ReachStager:
                 if parallax != 'off':
                     from ..managed_blam.shader import Parallax
                     Parallax[parallax.upper()]  # Validate the target authoring enum by name.
-                    selected['parallax'] = parallax
+                selected['parallax'] = parallax
+                if semantic:
+                    selected.update(authoring['options'])
                 aliases, contract_notes = read_destination_aliases(selected, self.option_cache, group_name.split('.')[-1])
             else:
                 aliases, contract_notes = self.alias_loader(selected, self.option_cache)
             report['diagnostics'].extend(contract_notes)
+            if semantic and contract_notes:
+                raise ValueError('UNRESOLVED_WRITER_RMOP: '+'; '.join(contract_notes))
             sockets = socket_schema(group)
             if authoring is not None:
                 report['native_socket_schema'] = sockets
@@ -213,6 +235,29 @@ class ReachStager:
                 item = {'name': name, 'type': parameter['type'], 'origin': parameter.get('origin'),
                         'status': 'unmapped', 'sockets': []}
                 report['parameters'].append(item)
+                if semantic and parameter['type'] == 'angle_color':
+                    if name not in aliases:
+                        raise ValueError('UNRESOLVED_WRITER_PARAMETER: '+name)
+                    angle = parameter['value']
+                    # Engine identity -> Foundry UI aliases belongs here.
+                    for label, key in (('normal_specular_color', 'color0_normal'),
+                                       ('glancing_specular_color', 'color1_glancing')):
+                        socket = group.inputs.get(label)
+                        if socket is not None and socket.type == 'RGBA':
+                            color = angle[key]
+                            socket.default_value = [*(utils.srgb_to_linear(v) for v in color[:3]), color[3]]
+                            item['sockets'].append(label)
+                    for label, value in (('specular_color_exponent', angle['exponent']),
+                                         ('specular_color_exponent_min', 0),
+                                         ('specular_color_exponent_max', 1)):
+                        socket = group.inputs.get(label)
+                        if socket is not None and socket.type == 'VALUE':
+                            socket.default_value = value
+                            item['sockets'].append(label)
+                    # The ordinary tag writer consumes the full function from
+                    # h3_reach_authoring_plan; it is not a constant color socket.
+                    item.update(status='semantic_function', source_parameter=parameter)
+                    continue
                 if parameter.get('extern'):
                     item.update(status='runtime_input', extern=parameter['extern'])
                     continue
@@ -225,6 +270,8 @@ class ReachStager:
                     if bindings:
                         item['native_hidden_input'] = True
                 if not bindings:
+                    if semantic and name not in aliases:
+                        raise ValueError('UNRESOLVED_WRITER_PARAMETER: '+name)
                     if authoring is not None and name in aliases:
                         if parameter['type'] == 'bitmap':
                             tex=self.texture(tree,source,manifest,parameter,row,report)
@@ -258,7 +305,9 @@ class ReachStager:
                     item['status'] = 'snapshot' if parameter.get('has_functions') else 'mapped'
                 except (ValueError, TypeError, KeyError, RuntimeError) as exc:
                     item.update(status='unavailable', reason=str(exc))
-            if not any(p['status'] in {'mapped', 'snapshot'} for p in report['parameters']):
+            if semantic and any(p['status'] in {'unmapped', 'ambiguous_socket', 'unavailable'} for p in report['parameters']):
+                raise ValueError('UNRESOLVED_WRITER_BINDING: '+json.dumps(report['parameters']))
+            if not semantic and not any(p['status'] in {'mapped', 'snapshot'} for p in report['parameters']):
                 raise ValueError('No source parameters could be connected to this Reach shader group')
             if selected.get('blend_mode', 'opaque') != 'opaque' or selected.get('alpha_test', 'none') != 'none':
                 material.surface_render_method = 'BLENDED'
@@ -275,15 +324,20 @@ class ReachStager:
             material.nwo.shader_path = ''
             material.nwo.uses_blender_nodes = True
             report.update(status='native_nodes_staged', material=material.name)
-            report['diagnostics'] += [
+            report['diagnostics'] += (['Explicit semantic plan staged; native save/readback and runtime remain untested',
+                                      'No Reach shader or bitmap tags were written'] if semantic else [
                 'Names and socket types are matched; equivalent HLSL behavior is not asserted',
                 'Animated parameters use the extracted snapshot; runtime functions remain in the source manifest',
                 'Native Reach nodes consume raw normal textures; the H3 preview green-flip nodes are not copied',
                 'Sampler export, complete defaults and reference inheritance are not validated by this staging operation',
-                'No Reach shader or bitmap tags were written']
+                'No Reach shader or bitmap tags were written'])
             material['h3_reach_report'] = json.dumps(report)
             if authoring is not None:
                 material['h3_native_authoring'] = json.dumps(authoring)
+            if semantic:
+                material['h3_reach_authoring_plan'] = json.dumps(authoring)
+            else:
+                material['h3_reach_legacy_preview'] = True
             return material
         except Exception as exc:
             report['diagnostics'].append(str(exc))
