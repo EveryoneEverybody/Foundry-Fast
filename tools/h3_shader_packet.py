@@ -3,17 +3,17 @@
 
 This helper deliberately does not use ManagedBlam or Blender. It walks an H3EK
 loose tag tree, selects shader contract / fixture tags, invokes H3 tool.exe's
-`export-tag-to-xml` in batches, and builds a simple manifest so the resulting
-packet can be inspected or fed into later census/translation tooling.
+`export-tag-to-xml` in batches, and builds a manifest so the resulting packet can
+be inspected or fed into later census/translation tooling.
 
-Initial scope:
-- shader.render_method_definition
-- all render_method_option tags under tags/shaders
-- all shader-family tags under a requested subtree, e.g. levels/solo/040_voi
-- optional raw-tag copies preserving relative paths
+Fixture selection can come from either:
+- a physical tag subtree such as levels/solo/040_voi, or
+- a Baboon "Dump Tag References..." report for a scenario. The latter is the
+  preferred mode because it follows the actual dependency graph into shared and
+  object tags outside the level folder.
 
 This is intentionally conservative: it gathers evidence without interpreting or
-rewriting shader math. Baboon/Foundry can consume the packet afterward.
+rewriting shader math.
 """
 
 from __future__ import annotations
@@ -45,6 +45,8 @@ SHADER_SUFFIXES = {
 CONTRACT_RELATIVE_PATHS = (
     Path("shaders/shader.render_method_definition"),
 )
+
+REFERENCE_SUFFIX_MARKERS = (" (see above)", " (missing)")
 
 
 def norm_rel(path: Path) -> str:
@@ -89,6 +91,47 @@ def collect_shader_fixtures(tags_root: Path, subtree: Path) -> list[Path]:
         set(iter_files(root, lambda p: p.suffix.lower() in SHADER_SUFFIXES) or []),
         key=lambda p: str(p).lower(),
     )
+
+
+def _clean_reference_report_line(line: str) -> str:
+    value = line.strip()
+    for marker in REFERENCE_SUFFIX_MARKERS:
+        if value.lower().endswith(marker):
+            value = value[: -len(marker)].rstrip()
+            break
+    return value
+
+
+def collect_shader_fixtures_from_reference_report(
+    tags_root: Path,
+    report_path: Path,
+) -> tuple[list[Path], list[str]]:
+    """Resolve shader paths from Baboon's recursive tag-reference text report."""
+    text = report_path.read_text(encoding="utf-8", errors="replace")
+    found: list[Path] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+
+    suffixes = tuple(sorted(SHADER_SUFFIXES, key=len, reverse=True))
+    for raw_line in text.splitlines():
+        value = _clean_reference_report_line(raw_line)
+        lower = value.lower()
+        if not lower.endswith(suffixes):
+            continue
+
+        rel_text = value.replace("\\", "/").lstrip("/")
+        rel = Path(rel_text)
+        candidate = tags_root / rel
+        key = os.path.normcase(str(candidate.resolve()))
+        if key in seen:
+            continue
+        seen.add(key)
+        if candidate.is_file():
+            found.append(candidate)
+        else:
+            missing.append(rel.as_posix())
+
+    return sorted(found, key=lambda p: str(p).lower()), sorted(missing, key=str.lower)
 
 
 def tool_tag_argument(path: Path) -> str:
@@ -137,7 +180,13 @@ def main() -> int:
         "--subtree",
         type=Path,
         default=Path("levels/solo/040_voi"),
-        help="Tag subtree whose shader-family tags should be dumped (default: levels/solo/040_voi)",
+        help="Fallback tag subtree whose shader-family tags should be dumped",
+    )
+    parser.add_argument(
+        "--reference-report",
+        type=Path,
+        default=None,
+        help="Baboon 'Dump Tag References...' text report. When supplied, referenced shaders replace --subtree fixture discovery.",
     )
     parser.add_argument(
         "--output",
@@ -159,7 +208,7 @@ def main() -> int:
     parser.add_argument(
         "--no-fixtures",
         action="store_true",
-        help="Do not dump shader-family tags found under --subtree",
+        help="Do not dump shader-family fixture tags",
     )
     parser.add_argument(
         "--copy-raw",
@@ -182,12 +231,26 @@ def main() -> int:
         parser.error(f"H3 tags directory not found: {tags_root}")
     if not args.dry_run and not tool.is_file():
         parser.error(f"H3 tool.exe not found: {tool}")
+    if args.reference_report is not None and not args.reference_report.is_file():
+        parser.error(f"Reference report not found: {args.reference_report}")
 
     selected: list[tuple[str, Path]] = []
+    missing_references: list[str] = []
+    fixture_source = f"subtree:{norm_rel(args.subtree)}"
+
     if not args.no_contract:
         selected.extend(("contract", p) for p in collect_contract(tags_root))
+
     if not args.no_fixtures:
-        selected.extend(("fixtures", p) for p in collect_shader_fixtures(tags_root, args.subtree))
+        if args.reference_report is not None:
+            fixtures, missing_references = collect_shader_fixtures_from_reference_report(
+                tags_root,
+                args.reference_report,
+            )
+            fixture_source = f"reference_report:{args.reference_report.resolve()}"
+        else:
+            fixtures = collect_shader_fixtures(tags_root, args.subtree)
+        selected.extend(("fixtures", p) for p in fixtures)
 
     deduped: list[tuple[str, Path]] = []
     seen: set[str] = set()
@@ -203,8 +266,9 @@ def main() -> int:
         "h3ek_root": str(h3ek_root),
         "tags_root": str(tags_root),
         "tool": str(tool),
-        "subtree": norm_rel(args.subtree),
+        "fixture_source": fixture_source,
         "selected_count": len(deduped),
+        "missing_shader_references": missing_references,
         "entries": [],
     }
 
@@ -256,6 +320,8 @@ def main() -> int:
 
     print()
     print(f"Selected: {len(deduped)}")
+    if missing_references:
+        print(f"Missing referenced shader files: {len(missing_references)}")
     if not args.dry_run:
         print(f"Exported: {successes}")
         print(f"Failed:   {failures}")
