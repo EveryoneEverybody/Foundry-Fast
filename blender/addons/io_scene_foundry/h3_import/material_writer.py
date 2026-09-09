@@ -1,10 +1,17 @@
-"""Reach writer boundary for semantic plans; no translation equations here."""
+"""Reach writer boundary, including native compatibility lowering of semantic plans."""
 import json
+import math
 from hashlib import sha256
-from .material_translation import ReachAuthoringPlan, TRANSLATED, TWO, SINGLE, canonical_json
+from .material_translation import (ReachAuthoringPlan, TRANSLATED, TWO, SINGLE,
+                                   canonical_json, roughness_to_compatibility_power)
 
 
-def writer_issues(plan):
+def writer_issues(plan, declarations=None):
+    """Check a plan against selected native RMOP declarations, when available.
+
+    Missing declarations never authorize the hidden compatibility lane. Node
+    sockets are not declarations: callers must read the selected native RMOPs.
+    """
     contract = plan.to_dict() if isinstance(plan, ReachAuthoringPlan) else plan
     issues = []
     if contract.get('format') != 'foundry.h3-reach-material-plan' or contract.get('version') != 1:
@@ -12,27 +19,70 @@ def writer_issues(plan):
     if contract.get('target_node') != 'foundry_reach.shader' or contract.get('destination_group') != 'rmsh':
         issues.append('UNRESOLVED_WRITER_CONTRACT: ordinary Reach shader target required')
     if contract.get('translation_status') != TRANSLATED:
-        issues.append('UNRESOLVED_REQUIRES_RULE: ' + json.dumps(contract.get('diagnostics', []), sort_keys=True))
+        blockers = [d for d in contract.get('diagnostics', []) if d.get('still_blocking', True)]
+        issues.append('UNRESOLVED_REQUIRES_RULE: ' + json.dumps(blockers, sort_keys=True))
     if contract.get('rule_id') in {SINGLE, TWO}:
         if contract.get('options', {}).get('material_model') != 'two_lobe_phong':
             issues.append('UNRESOLVED_WRITER_CONTRACT: explicit two_lobe_phong target missing')
         if contract.get('parameters', {}).get('specular_color_by_angle', {}).get('type') != 'angle_color':
             issues.append('UNRESOLVED_WRITER_CONTRACT: complete angle-color function missing')
+        else:
+            angle = contract['parameters']['specular_color_by_angle'].get('value', {})
+            colors = [angle.get(k) for k in ('color0_normal', 'color1_glancing')]
+            if (not all(isinstance(c, (list, tuple)) and len(c) == 4 and all(_finite(v) for v in c) for c in colors)
+                    or not _finite(angle.get('exponent'))):
+                issues.append('UNRESOLVED_WRITER_CONTRACT: complete angle-color endpoints/exponent required')
     if contract.get('rule_id') == TWO and 'glancing_roughness' not in contract.get('compatibility_inputs', {}):
         issues.append('UNRESOLVED_WRITER_CONTRACT: glancing_roughness missing from compatibility inputs')
     for name, parameter in contract.get('compatibility_inputs', {}).items():
+        if name == 'glancing_roughness':
+            value = parameter.get('value')
+            if (contract.get('options', {}).get('material_model') != 'two_lobe_phong'
+                    or parameter.get('type') != 'real' or not _finite(value) or not 0 <= value <= 1
+                    or parameter.get('has_functions') or parameter.get('functions') or parameter.get('extern')):
+                issues.append('UNRESOLVED_WRITER_COMPATIBILITY: glancing_roughness requires static finite [0,1] roughness and Reach two_lobe_phong')
+            elif declarations is None or 'glancing_specular_power' not in declarations:
+                issues.append('UNRESOLVED_WRITER_RMOP: glancing_roughness requires selected native RMOP declaration of glancing_specular_power')
+            if 'glancing_specular_power' in contract.get('parameters', {}):
+                issues.append('UNRESOLVED_WRITER_COMPATIBILITY: glancing_specular_power must be derived from semantic glancing_roughness')
+            continue
         if parameter.get('type') == 'extern' and parameter.get('provider') == 'Reach renderer':
             continue
         issues.append('UNRESOLVED_WRITER_COMPATIBILITY: ' + name +
                       ' retained in plan; native save/postprocess consumption is not verified')
+    if declarations is not None:
+        for name in contract.get('parameters', {}):
+            if name not in declarations:
+                issues.append('UNRESOLVED_WRITER_PARAMETER: selected Reach RMOP does not declare ' + name)
     return issues
 
 
-def require_writable(plan):
-    issues = writer_issues(plan)
+def _finite(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def require_writable(plan, declarations=None):
+    issues = writer_issues(plan, declarations)
     if issues:
         raise ValueError('; '.join(issues))
     return plan.to_dict() if isinstance(plan, ReachAuthoringPlan) else plan
+
+
+def native_parameters(plan, declarations):
+    """Lower proven compatibility state without mutating the semantic plan.
+
+    Native HREK save/reopen verified both this hidden field and the complete
+    TwoColor/Exponent function. Tool/Faux is not needed for their persistence.
+    """
+    contract = require_writable(plan, declarations)
+    parameters = dict(contract['parameters'])
+    glancing = contract.get('compatibility_inputs', {}).get('glancing_roughness')
+    if glancing is not None:
+        parameters['glancing_specular_power'] = dict(name='glancing_specular_power', type='real',
+            value=roughness_to_compatibility_power(glancing['value']), origin='REACH_DERIVED',
+            source_fields=['glancing_roughness'], semantic_value=glancing['value'],
+            compatibility_rule='reach.glancing_roughness_to_glancing_specular_power.v1', has_functions=False)
+    return parameters
 
 
 def require_source(plan, record):
@@ -90,9 +140,9 @@ def apply_plan(tag, material, contract):
     """Called by the normal ShaderTag writer as well as native completion.
 
     Validate every destination identity against selected Reach RMOPs before
-    authoring. The separate glancing migration lane is deliberately blocked.
+    authoring. Hidden compatibility values are lowered only at this boundary.
     """
-    contract = require_writable(contract)
+    contract = contract.to_dict() if isinstance(contract, ReachAuthoringPlan) else contract
     from .reach_builder import read_destination_aliases
     from .port_environment.native_materials import write_parameter
     from ..managed_blam.render_method_definition import RenderMethodDefinitionTag
@@ -111,12 +161,10 @@ def apply_plan(tag, material, contract):
             if option not in choices:
                 raise ValueError('UNRESOLVED_WRITER_OPTION: ' + name + '=' + option)
             selections.append((category.ElementIndex, choices.index(option)))
-    declarations, notes = read_destination_aliases(contract['options'], {})
+    declarations, notes = read_destination_aliases(contract['options'], {}, definition_path=tag.definition.Path)
     if notes:
         raise ValueError('UNRESOLVED_WRITER_RMOP: ' + '; '.join(notes))
-    for name, parameter in contract['parameters'].items():
-        if name not in declarations:
-            raise ValueError('UNRESOLVED_WRITER_PARAMETER: selected Reach RMOP does not declare ' + name)
+    parameters = native_parameters(contract, declarations)
     for index, option in selections:
         tag.block_options.Elements[index].SelectField('short').Data = option
     tag.reference.Path = None  # All inherited H3 values were resolved upstream.
@@ -124,7 +172,7 @@ def apply_plan(tag, material, contract):
     # authoritative; the generic node writer never handles this material.
     tag.block_parameters.RemoveAllElements()
     receipt = []
-    for parameter in contract['parameters'].values():
+    for parameter in parameters.values():
         if parameter['type'] == 'angle_color':
             element = write_angle_color(tag, parameter, lambda c: tag._GameColor_from_ARGB(
                 c[3], *(utils.srgb_to_linear(v) for v in c[:3])))

@@ -158,7 +158,7 @@ class ReachStager:
                 report['semantic_plan'] = authoring.to_dict()
                 report['translation_status'] = authoring.status
                 report['rule_id'] = authoring.rule_id
-                authoring = require_writable(authoring)
+                authoring = authoring.to_dict()
             if authoring is None:
                 categories, parameters = validate_shader(record)
                 group_name = GROUP_NAME
@@ -226,6 +226,8 @@ class ReachStager:
             report['diagnostics'].extend(contract_notes)
             if semantic and contract_notes:
                 raise ValueError('UNRESOLVED_WRITER_RMOP: '+'; '.join(contract_notes))
+            if semantic:
+                require_writable(authoring, aliases)
             sockets = socket_schema(group)
             if authoring is not None:
                 report['native_socket_schema'] = sockets
@@ -386,21 +388,26 @@ class ReachStager:
         self.images.clear()
 
 
-def read_destination_aliases(selected, cache, shader_group='shader'):
+def read_destination_aliases(selected, cache, shader_group='shader', *, definition_path=None):
     """Read UI aliases for selected Reach options without creating missing tags."""
     aliases = {}
     try:
         from ..managed_blam.render_method_definition import RenderMethodDefinitionTag
         from ..managed_blam.render_method_option import RenderMethodOptionTag
         definition_name=shader_group.removeprefix('shader_')
-        with RenderMethodDefinitionTag(path=f'shaders/{definition_name}.render_method_definition', tag_must_exist=True) as definition:
+        with RenderMethodDefinitionTag(path=definition_path or f'shaders/{definition_name}.render_method_definition', tag_must_exist=True) as definition:
+            unknown = set(selected) - {c.Fields[0].GetStringData() for c in definition.block_categories.Elements}
+            if unknown:
+                raise ValueError('Unknown Reach categories: '+', '.join(sorted(unknown)))
             for category in definition.block_categories.Elements:
                 name = category.Fields[0].GetStringData()
                 if name not in selected:
                     continue
                 option = next((o for o in category.Fields[1].Elements
                                if o.Fields[0].GetStringData() == selected[name]), None)
-                if option is None or option.Fields[1].Path is None:
+                if option is None:
+                    raise ValueError('Unknown Reach option: '+name+'='+selected[name])
+                if option.Fields[1].Path is None:
                     continue
                 path = option.Fields[1].Path
                 key = path.RelativePathWithExtension

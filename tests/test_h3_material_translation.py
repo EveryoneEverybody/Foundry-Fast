@@ -175,10 +175,106 @@ class TranslationContracts(unittest.TestCase):
         damaged['compatibility_inputs'].clear()
         with self.assertRaisesRegex(ValueError, 'glancing_roughness'): w.require_writable(damaged)
 
+    def test_hidden_power_is_derived_from_semantic_roughness_not_h3_power(self):
+        for power in (10, 30, 200, 2000):
+            scalar(self.two, 'glancing_specular_power', power)
+            source = m.H3MaterialRecord.from_resolved(self.two)
+            plan = m.translate(source)
+            before = m.canonical_json(plan.payload)
+            declarations = set(plan.payload['parameters']) | {'glancing_specular_power'}
+            result = w.native_parameters(plan, declarations)['glancing_specular_power']
+            roughness = m.power_to_roughness(power)
+            self.assertEqual(result['value'], max(0, .272909999*max(roughness, .01)**-1.3973))
+            self.assertNotAlmostEqual(result['value'], power)
+            self.assertEqual(result['semantic_value'], roughness)
+            self.assertEqual(result['source_fields'], ['glancing_roughness'])
+            if power == 10:
+                self.assertAlmostEqual(roughness, .19419219303059315)
+                self.assertAlmostEqual(result['value'], 2.695089554282771)
+                self.assertAlmostEqual(result['value'], 2.69508957862854, delta=1e-6)
+            self.assertEqual(before, m.canonical_json(plan.payload))
+            self.assertEqual(source.parameters['glancing_specular_power']['value'], power)
+
+    def test_hidden_power_requires_declared_field_valid_roughness_and_two_lobe(self):
+        plan = translated(self.two).to_dict()
+        declarations = set(plan['parameters']) | {'glancing_specular_power'}
+        self.assertEqual(w.writer_issues(plan, declarations), [])
+        for missing in (None, set(plan['parameters'])):
+            with self.assertRaisesRegex(ValueError, 'UNRESOLVED_WRITER_RMOP'):
+                w.native_parameters(plan, missing)
+        for value in (None, True, '0.2', float('nan'), float('inf'), -.1, 1.1):
+            damaged = copy.deepcopy(plan)
+            damaged['compatibility_inputs']['glancing_roughness']['value'] = value
+            with self.assertRaisesRegex(ValueError, 'glancing_roughness'):
+                w.native_parameters(damaged, declarations)
+        for key, value in (('type', 'color'), ('has_functions', True), ('extern', 'time')):
+            damaged = copy.deepcopy(plan)
+            damaged['compatibility_inputs']['glancing_roughness'][key] = value
+            with self.assertRaisesRegex(ValueError, 'glancing_roughness'):
+                w.native_parameters(damaged, declarations)
+        damaged = copy.deepcopy(plan)
+        damaged['compatibility_inputs']['glancing_roughness'] = dict(type='extern', provider='Reach renderer', value=.2)
+        with self.assertRaisesRegex(ValueError, 'glancing_roughness'):
+            w.native_parameters(damaged, declarations)
+        for model in ('diffuse_only', 'none', 'cook_torrance'):
+            damaged = copy.deepcopy(plan)
+            damaged['options']['material_model'] = model
+            with self.assertRaisesRegex(ValueError, 'two_lobe_phong'):
+                w.native_parameters(damaged, declarations)
+
+    def test_native_parameter_collision_and_unknown_compatibility_fail_closed(self):
+        plan = translated(self.two).to_dict()
+        declarations = set(plan['parameters']) | {'glancing_specular_power'}
+        plan['parameters']['glancing_specular_power'] = dict(type='real', value=30)
+        with self.assertRaisesRegex(ValueError, 'must be derived'): w.native_parameters(plan, declarations)
+        del plan['parameters']['glancing_specular_power']
+        plan['compatibility_inputs']['unknown'] = dict(type='real', value=1)
+        with self.assertRaisesRegex(ValueError, 'UNRESOLVED_WRITER_COMPATIBILITY: unknown'):
+            w.native_parameters(plan, declarations)
+        del plan['compatibility_inputs']['unknown']
+        with self.assertRaisesRegex(ValueError, 'UNRESOLVED_WRITER_PARAMETER'):
+            w.native_parameters(plan, declarations - {'roughness'})
+
+    def test_anti_shadow_is_explicit_nonblocking_loss_including_nonzero_source(self):
+        for value in (0, .7):
+            scalar(self.two, 'analytical_anti_shadow_control', value)
+            before = copy.deepcopy(self.two)
+            plan = translated(self.two)
+            self.assertEqual(plan.status, m.TRANSLATED)
+            loss = plan.to_dict()['diagnostics'][-1]
+            self.assertEqual(loss['status'], 'OPTIONAL_MVP_OMISSION')
+            self.assertFalse(loss['still_blocking'])
+            self.assertEqual(loss['source_value'], value)
+            self.assertIn('no corresponding', loss['reason'])
+            self.assertIn('renderer/shadow response replaces', loss['reason'])
+            parameters = w.native_parameters(plan, set(plan.payload['parameters']) | {'glancing_specular_power'})
+            self.assertNotIn('analytical_anti_shadow_control', parameters)
+            self.assertEqual(before, self.two)
+
+    def test_anti_shadow_loss_does_not_authorize_nonconstant_functions(self):
+        for name in ('analytical_anti_shadow_control', 'self_illum_intensity'):
+            raw = copy.deepcopy(self.two)
+            scalar(raw, 'analytical_anti_shadow_control', .7)
+            scalar(raw, name, .7)
+            next(p for p in raw['parameters'] if p['name'] == name)['has_functions'] = True
+            raw['authored_parameters'] = [dict(name=name, functions=[dict(function_hex='0324'+'00'*30)])]
+            plan = translated(raw)
+            self.assertEqual(plan.status, m.UNRESOLVED)
+            if name == 'self_illum_intensity':
+                self.assertNotIn('analytical_anti_shadow_control', '; '.join(w.writer_issues(plan)))
+            with self.assertRaisesRegex(ValueError, 'UNRESOLVED_REQUIRES_RULE'):
+                w.native_parameters(plan, set(plan.payload['parameters']) | {'glancing_specular_power'})
+
     def test_angle_rgb_snapshot_rejected(self):
         plan = translated(self.single).to_dict()
         plan['parameters']['specular_color_by_angle']['type'] = 'color'
         with self.assertRaisesRegex(ValueError, 'angle-color'): w.require_writable(plan)
+
+    def test_incomplete_angle_function_fails_before_native_write(self):
+        for key in ('color0_normal', 'color1_glancing', 'exponent'):
+            plan = translated(self.single).to_dict()
+            del plan['parameters']['specular_color_by_angle']['value'][key]
+            with self.assertRaisesRegex(ValueError, 'angle-color'): w.require_writable(plan)
 
     def test_writer_rejects_wrong_or_changed_source(self):
         plan = translated(self.single)
@@ -234,6 +330,21 @@ class TranslationContracts(unittest.TestCase):
         self.assertEqual(report['records'][0]['usage']['render_triangles'], 4000)
         self.assertEqual((manifest, plan), before)
         self.assertEqual(report, c.census(manifest, plan))
+
+    def test_census_separates_losses_from_blockers_and_checks_native_declarations(self):
+        scalar(self.two, 'analytical_anti_shadow_control', .7)
+        manifest = dict(shaders={self.two['source']: self.two})
+        plan = translated(self.two)
+        key = m.canonical_json(plan.payload['options'])
+        contracts = {key:dict(declarations=list(plan.payload['parameters'])+['glancing_specular_power'], notes=[])}
+        report = c.census(manifest, destination_contracts=contracts)
+        self.assertEqual(report['writer_status_counts'], {'ELIGIBLE':1})
+        self.assertEqual(report['nonzero_semantic_loss_counts'], {'analytical_anti_shadow_control':1})
+        self.assertEqual(report['records'][0]['unresolved_reasons'], [])
+        self.assertEqual(report['records'][0]['semantic_losses'][0]['source_value'], .7)
+        self.assertEqual(c.census(manifest)['writer_status_counts'], {'BLOCKED':1})
+        contracts[key]['notes'] = ['Native RMOP query failed']
+        self.assertEqual(c.census(manifest, destination_contracts=contracts)['writer_status_counts'], {'BLOCKED':1})
 
     def test_translator_rejects_target_as_source(self):
         with self.assertRaises(TypeError): m.translate(translated(self.single))

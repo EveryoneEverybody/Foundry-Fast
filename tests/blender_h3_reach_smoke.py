@@ -295,12 +295,36 @@ try:
     assert strict.build(semantic_source, semantic.ReachAuthoringPlan(rejected)) is None
     assert strict.results[-1]['semantic_plan']['compatibility_inputs']['glancing_roughness']['value'] == .2
     assert counts == (len(bpy.data.materials), len(bpy.data.images))
+    two_vector = json.loads(fixture_path.with_name('voi_two_lobe_selected_fixtures_2026-09-09.json').read_text())[0]
+    two_record = dict(source=SHADER, group='rmsh', status='resolved_snapshot',
+        categories=[dict(category=k, option=v, source_index=0) for k,v in two_vector['source_categories'].items()],
+        parameters=[dict(name=k, type='color' if isinstance(v,list) else 'real', value=v, has_functions=False)
+                    for k,v in two_vector['source'].items() if v is not None])
+    two_record['parameters'].append(dict(name='analytical_anti_shadow_control', type='real', value=.7))
+    two_data = copy.deepcopy(semantic_data)
+    two_data['shaders'] = {SHADER: two_record}
+    two_source = build_source(two_data, 'semantic two lobe')
+    two_plan = semantic.translate(semantic.H3MaterialRecord.from_resolved(two_record))
+    module.read_destination_aliases = lambda *a: ({name:[] for name in (*two_plan.payload['parameters'], 'glancing_specular_power')}, [])
+    two_native = strict.build(two_source)
+    assert two_native, strict.results
+    two_stored = json.loads(two_native['h3_reach_authoring_plan'])
+    assert two_stored == two_plan.to_dict()
+    assert 'glancing_roughness' in two_stored['compatibility_inputs']
+    assert 'glancing_specular_power' not in two_stored['parameters']
+    assert group_of(two_native).inputs['material_model'].default_value == 'two_lobe_phong'
+    assert group_of(two_native).inputs['specular_color_exponent'].default_value == two_vector['source']['fresnel_curve_steepness']
+    for socket, field in (('normal_specular_color', 'normal_specular_tint'), ('glancing_specular_color', 'glancing_specular_tint')):
+        assert abs(group_of(two_native).inputs[socket].default_value[0] - base['utils'].srgb_to_linear(two_vector['source'][field][0])) < 1e-6
+    assert not any(c['status']=='group_default' for c in strict.results[-1]['categories'])
 finally:
     module.read_destination_aliases = saved_aliases
 
 with tempfile.TemporaryDirectory() as d:
     native.use_fake_user = True
     semantic_native.use_fake_user = True
+    two_native.use_fake_user = True
+    two_name = two_native.name
     semantic_name = semantic_native.name
     material_name = native.name
     path = str(Path(d) / 'reach_staging.blend')
@@ -308,6 +332,7 @@ with tempfile.TemporaryDirectory() as d:
     bpy.ops.wm.open_mainfile(filepath=path)
     reopened = bpy.data.materials[material_name]
     assert json.loads(bpy.data.materials[semantic_name]['h3_reach_authoring_plan']) == stored_plan
+    assert json.loads(bpy.data.materials[two_name]['h3_reach_authoring_plan']) == two_stored
     assert reopened['h3_source_material'] is not None
     assert reopened.nwo.shader_path == ''
     assert group_of(reopened).inputs['self_illum_map.rgb'].is_linked

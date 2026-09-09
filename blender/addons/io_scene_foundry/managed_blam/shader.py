@@ -307,11 +307,11 @@ class ShaderTag(Tag):
 
     def _write_h3_semantic_tag(self, material, linked_to_blender):
         import json
-        from ..h3_import.material_writer import apply_plan, require_writable
+        from ..h3_import.material_writer import apply_plan
         try:
             if not material.get('h3_reach_authoring_plan'):
                 raise ValueError('UNRESOLVED_WRITER_CONTRACT: legacy H3 preview requires semantic restaging before export')
-            plan = require_writable(json.loads(material['h3_reach_authoring_plan']))
+            plan = json.loads(material['h3_reach_authoring_plan'])
             self.blender_material = material
             self.group_node = self._find_group_node(material)
             if not linked_to_blender or self.corinth or not self._group_node_matches(self.group_node):

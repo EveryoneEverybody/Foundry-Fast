@@ -15,7 +15,11 @@ def complete_tag(material, manifest, report, paths):
         raise ValueError('UNRESOLVED_WRITER_CONTRACT: legacy preview cannot enter native completion')
     if semantic:
         from ..material_writer import require_writable
-        require_writable(contract)  # Before unlinking or opening any target tag.
+        from ..reach_builder import read_destination_aliases
+        declarations, notes = read_destination_aliases(contract['options'], {})
+        if notes:
+            raise ValueError('UNRESOLVED_WRITER_RMOP: '+'; '.join(notes))
+        require_writable(contract, declarations)  # Before opening any target tag.
     staging=json.loads(material['h3_reach_report'])
     cls,_=REACH_SUFFIX_TO_CLASS[material.nwo.shader_type]
     source=manifest['shaders'][material['h3_source_shader']]

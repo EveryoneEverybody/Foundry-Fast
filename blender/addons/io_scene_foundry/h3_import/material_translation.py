@@ -346,6 +346,16 @@ def translate(source):
                 if name in source.parameters:
                     if name == 'order3_area_specular' and source.parameters[name].get('value') is False:
                         plan['field_origins'][name] = dict(origin='H3_DIRECT', source_fields=[name], disposition='disabled_optional_path')
+                    elif name == 'analytical_anti_shadow_control' and model == 'two_lobe_phong':
+                        value = scalar(name)  # Animated/extern controls still fail closed.
+                        loss = ('Reach two_lobe_phong RMOP has no corresponding analytical_anti_shadow_control field; '
+                                "Reach's renderer/shadow response replaces this H3 anti-shadow workaround")
+                        # Reuse native_contracts.unexposed_parameter's established loss class.
+                        plan['field_origins'][name] = dict(origin='REACH_DERIVED', source_fields=[name],
+                            source_value=value, disposition='target_renderer_replacement',
+                            resolution_class='OPTIONAL_MVP_OMISSION', fidelity_loss=loss)
+                        plan['diagnostics'].append(dict(field=name, status='OPTIONAL_MVP_OMISSION',
+                            still_blocking=False, source_value=value, reason=loss, fidelity_loss=loss))
                     else:
                         unresolved(name, 'No exact Reach rule for this legacy control')
         except (ValueError, OverflowError) as exc:
