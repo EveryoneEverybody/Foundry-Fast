@@ -8,7 +8,7 @@ packet can be inspected or fed into later census/translation tooling.
 
 Initial scope:
 - shader.render_method_definition
-- all render_method_option tags under tags/shaders (or a filtered subset)
+- all render_method_option tags under tags/shaders
 - all shader-family tags under a requested subtree, e.g. levels/solo/040_voi
 - optional raw-tag copies preserving relative paths
 
@@ -91,14 +91,9 @@ def collect_shader_fixtures(tags_root: Path, subtree: Path) -> list[Path]:
     )
 
 
-def tool_tag_argument(tags_root: Path, path: Path) -> str:
-    """Return an H3 Tool tag path suitable for export-tag-to-xml.
-
-    The command accepts a tag path. Preserve the extension because the command is
-    explicitly exporting a concrete tag file and this also avoids ambiguity
-    between shader-family groups sharing a basename.
-    """
-    return str(rel_to_tags(tags_root, path)).replace("/", "\\")
+def tool_tag_argument(path: Path) -> str:
+    """Return the absolute H3 tag-file path required by export-tag-to-xml."""
+    return str(path.resolve())
 
 
 def xml_output_path(output_root: Path, bucket: str, rel: Path) -> Path:
@@ -111,7 +106,7 @@ def raw_output_path(output_root: Path, bucket: str, rel: Path) -> Path:
 
 def run_export(tool: Path, h3ek_root: Path, tag_arg: str, output: Path) -> tuple[bool, str]:
     output.parent.mkdir(parents=True, exist_ok=True)
-    command = [str(tool), "export-tag-to-xml", tag_arg, str(output)]
+    command = [str(tool), "export-tag-to-xml", tag_arg, str(output.resolve())]
     completed = subprocess.run(
         command,
         cwd=h3ek_root,
@@ -180,7 +175,7 @@ def main() -> int:
 
     h3ek_root = args.h3ek_root.resolve()
     tags_root = h3ek_root / "tags"
-    tool = (args.tool.resolve() if args.tool else h3ek_root / "tool.exe")
+    tool = args.tool.resolve() if args.tool else h3ek_root / "tool.exe"
     output_root = args.output.resolve()
 
     if not tags_root.is_dir():
@@ -194,7 +189,6 @@ def main() -> int:
     if not args.no_fixtures:
         selected.extend(("fixtures", p) for p in collect_shader_fixtures(tags_root, args.subtree))
 
-    # Deduplicate by absolute path while preserving the first bucket assignment.
     deduped: list[tuple[str, Path]] = []
     seen: set[str] = set()
     for bucket, path in selected:
@@ -219,11 +213,12 @@ def main() -> int:
 
     for index, (bucket, path) in enumerate(deduped, 1):
         rel = rel_to_tags(tags_root, path)
-        tag_arg = tool_tag_argument(tags_root, path)
+        tag_arg = tool_tag_argument(path)
         xml_path = xml_output_path(output_root, bucket, rel)
         entry = {
             "bucket": bucket,
             "tag": norm_rel(rel),
+            "source": str(path.resolve()),
             "xml": str(xml_path.relative_to(output_root)).replace("\\", "/"),
             "status": "dry-run" if args.dry_run else "pending",
         }
