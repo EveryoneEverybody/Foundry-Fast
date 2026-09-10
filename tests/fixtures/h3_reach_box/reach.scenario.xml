@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!-- Minimal Foundation authoring excerpt. References are display names. -->
+<tag group="scenario" id="levels\test\box\box">
+  <field name="type" value="solo" type="char enum"/>
+  <field name="structure bsps" value="1" type="block"/>
+  <element index="0">
+    <field name="structure bsp" value="box_000" type="tag reference"/>
+    <field name="structure lighting_info" value="box_000" type="tag reference"/>
+    <field name="custom gravity scale" value="1" type="real"/>
+  </element>
+  <field name="structure designs" value="0" type="block"/>
+  <field name="skies" value="1" type="block"/>
+  <element index="0">
+    <field name="sky" value="sky_daytime" type="tag reference"/>
+    <field name="active on bsps" value="1" type="word block flags"/>
+  </element>
+  <field name="zone sets" value="1" type="block"/>
+  <element index="0">
+    <field name="name" value="levels\test\box\box_000" type="string id"/>
+    <field name="bsp zone flags" value="0" type="long block flags"/>
+    <field name="runtime bsp zone flags" value="1" type="long block flags"/>
+  </element>
+  <field name="player starting locations" value="0" type="block"/>
+  <field name="player starting profile" value="0" type="block"/>
+</tag>

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- First diffuse and final narrow sun sample from the supplied H3 sky XML.
+     Deliberately reduced fixture: no geometry or runtime lightmap resources. -->
+<tag group="render_model" id="levels\test\box\sky\sky">
+  <block name="sky lights" value="sky_lights_block,2">
+    <element index="0">
+      <field name="direction" value="0.973243,0.227325,0.0334955" type="real vector 3d"/>
+      <field name="intensity" value="0.126964,0.116229,0.140056" type="real rgb color"/>
+      <field name="solid angle" value="0.0631476" type="real"/>
+    </element>
+    <element index="1">
+      <field name="direction" value="0.147299,0.779559,0.608761" type="real vector 3d"/>
+      <field name="intensity" value="47793,40364.2,30848.7" type="real rgb color"/>
+      <field name="solid angle" value="5.65487e-05" type="real"/>
+    </element>
+  </block>
+</tag>

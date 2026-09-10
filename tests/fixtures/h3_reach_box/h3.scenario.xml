@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- Minimal authoring excerpt from the paired fixture; no game geometry/resources. -->
+<tag group="scenario" id="levels\test\box\box">
+  <field name="type" value="solo" type="char enum"/>
+  <block name="structure bsps" value="scenario_structure_bsp_reference_block,1">
+    <element index="0">
+      <field name="structure bsp" value="levels\test\box\box,sbsp" type="tag reference"/>
+      <field name="structure design" value=",NULL" type="tag reference"/>
+      <field name="structure lighting_info" value="levels\test\box\box,stli" type="tag reference"/>
+      <field name="default sky" value=",-1" type="short block index"/>
+    </element>
+  </block>
+  <block name="skies" value="scenario_sky_reference_block,1">
+    <element index="0">
+      <field name="sky" value="levels\test\box\sky\sky,scen" type="tag reference"/>
+      <field name="active on bsps" value="0" type="word block flags"/>
+    </element>
+  </block>
+  <block name="zone sets" value="scenario_zone_set_block,0"/>
+  <block name="player starting locations" value="scenario_players_block,0"/>
+  <block name="player starting profile" value="scenario_profiles_block,0"/>
+</tag>

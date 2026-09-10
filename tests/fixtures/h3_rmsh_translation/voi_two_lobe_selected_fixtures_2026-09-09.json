@@ -1,0 +1,584 @@
+[
+  {
+    "rule_id": "h3.two_lobe_phong_to_reach.two_lobe_phong.canonical_v1",
+    "source_shader": "levels/solo/020_base/shaders/hb_metal_pipe_a_rusty.shader",
+    "source_categories": {
+      "albedo": "two_detail",
+      "bump_mapping": "standard",
+      "alpha_test": "none",
+      "specular_mask": "specular_mask_from_diffuse",
+      "material_model": "two_lobe_phong",
+      "environment_mapping": "per_pixel",
+      "self_illumination": "off",
+      "blend_mode": "opaque",
+      "parallax": "off",
+      "misc": "first_person_never",
+      "distortion": "off",
+      "soft_fade": "off",
+      "misc_attr_animation": "off"
+    },
+    "source": {
+      "specular_coefficient": 8.0,
+      "analytical_specular_contribution": 0.5,
+      "area_specular_contribution": 0.30000001192092896,
+      "environment_map_specular_contribution": 5.0,
+      "normal_specular_power": 20.0,
+      "glancing_specular_power": 30.0,
+      "normal_specular_tint": [
+        0.43921568989753723,
+        0.43921568989753723,
+        0.43921568989753723,
+        1.0
+      ],
+      "glancing_specular_tint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "fresnel_curve_steepness": 0.699999988079071,
+      "albedo_specular_tint_blend": 0.0,
+      "env_roughness_scale": null
+    },
+    "expected_reach_authoring_plan": {
+      "material_model": "two_lobe_phong",
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 4.0,
+      "area_specular_contribution": 0.763943757197494,
+      "environment_map_specular_contribution": 40.0,
+      "roughness": 0.14165536102041346,
+      "glancing_roughness": 0.11778605690902512,
+      "analytical_roughness": 0.14165536102041346,
+      "specular_color_by_angle": {
+        "color0_normal": [
+          0.43921568989753723,
+          0.43921568989753723,
+          0.43921568989753723,
+          1.0
+        ],
+        "color1_glancing": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "exponent": 0.699999988079071
+      },
+      "albedo_specular_tint_blend": 0.0
+    },
+    "provenance": {
+      "model_migration": "same model name; legacy power/tint representation -> modern Reach representation",
+      "power_to_roughness": "ManagedBlam render_method_convert_specular_power_roughness_parameters(direction=0)",
+      "specular_color_by_angle": "ManagedBlam render_method_convert_specular_color_by_angle_parameters(direction=0)",
+      "coefficient_fold": "ManagedBlam version stage 2->3",
+      "analytical_roughness": "ManagedBlam version stage 3->4",
+      "area_normalization": "ManagedBlam version stage 4->5",
+      "environment_offset": "ManagedBlam version stage 2->3 when env scale exists"
+    },
+    "caveats": [
+      "Canonical Reach migration, not pixel-identical Halo 3 BRDF emulation.",
+      "glancing_roughness is a migration/compatibility input known to ManagedBlam but is not a normal visible current two-lobe RMOP authoring field.",
+      "The writer must preserve the full two-color exponent specular_color_by_angle function; a single color snapshot is insufficient."
+    ]
+  },
+  {
+    "rule_id": "h3.two_lobe_phong_to_reach.two_lobe_phong.canonical_v1",
+    "source_shader": "levels/solo/040_voi/shaders/lights/metal_doodad_a.shader",
+    "source_categories": {
+      "albedo": "two_detail",
+      "bump_mapping": "detail",
+      "alpha_test": "none",
+      "specular_mask": "specular_mask_from_diffuse",
+      "material_model": "two_lobe_phong",
+      "environment_mapping": "dynamic",
+      "self_illumination": "simple",
+      "blend_mode": "opaque",
+      "parallax": "off",
+      "misc": "first_person_never",
+      "distortion": "off",
+      "soft_fade": "off",
+      "misc_attr_animation": "off"
+    },
+    "source": {
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 0.10000000149011612,
+      "area_specular_contribution": 0.10000000149011612,
+      "environment_map_specular_contribution": 2.0,
+      "normal_specular_power": 10.0,
+      "glancing_specular_power": 20.0,
+      "normal_specular_tint": [
+        0.3607843220233917,
+        0.3607843220233917,
+        0.3607843220233917,
+        1.0
+      ],
+      "glancing_specular_tint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "fresnel_curve_steepness": 1.0,
+      "albedo_specular_tint_blend": 0.0,
+      "env_roughness_scale": 0.019999999552965164
+    },
+    "expected_reach_authoring_plan": {
+      "material_model": "two_lobe_phong",
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 0.10000000149011612,
+      "area_specular_contribution": 0.03183098909269776,
+      "environment_map_specular_contribution": 2.0,
+      "roughness": 0.19419219303059315,
+      "glancing_roughness": 0.14165536102041346,
+      "analytical_roughness": 0.19419219303059315,
+      "specular_color_by_angle": {
+        "color0_normal": [
+          0.3607843220233917,
+          0.3607843220233917,
+          0.3607843220233917,
+          1.0
+        ],
+        "color1_glancing": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "exponent": 1.0
+      },
+      "albedo_specular_tint_blend": 0.0,
+      "env_roughness_scale": 0.019999999552965164,
+      "env_roughness_offset": 0.404845825371604
+    },
+    "provenance": {
+      "model_migration": "same model name; legacy power/tint representation -> modern Reach representation",
+      "power_to_roughness": "ManagedBlam render_method_convert_specular_power_roughness_parameters(direction=0)",
+      "specular_color_by_angle": "ManagedBlam render_method_convert_specular_color_by_angle_parameters(direction=0)",
+      "coefficient_fold": "ManagedBlam version stage 2->3",
+      "analytical_roughness": "ManagedBlam version stage 3->4",
+      "area_normalization": "ManagedBlam version stage 4->5",
+      "environment_offset": "ManagedBlam version stage 2->3 when env scale exists"
+    },
+    "caveats": [
+      "Canonical Reach migration, not pixel-identical Halo 3 BRDF emulation.",
+      "glancing_roughness is a migration/compatibility input known to ManagedBlam but is not a normal visible current two-lobe RMOP authoring field.",
+      "The writer must preserve the full two-color exponent specular_color_by_angle function; a single color snapshot is insufficient."
+    ]
+  },
+  {
+    "rule_id": "h3.two_lobe_phong_to_reach.two_lobe_phong.canonical_v1",
+    "source_shader": "levels/solo/040_voi/shaders/metals/metal_barricade_gate.shader",
+    "source_categories": {
+      "albedo": "default",
+      "bump_mapping": "detail",
+      "alpha_test": "none",
+      "specular_mask": "specular_mask_from_diffuse",
+      "material_model": "two_lobe_phong",
+      "environment_mapping": "dynamic",
+      "self_illumination": "off",
+      "blend_mode": "opaque",
+      "parallax": "off",
+      "misc": "first_person_never",
+      "distortion": "off",
+      "soft_fade": "off",
+      "misc_attr_animation": "off"
+    },
+    "source": {
+      "specular_coefficient": 0.30000001192092896,
+      "analytical_specular_contribution": 0.5,
+      "area_specular_contribution": 0.20000000298023224,
+      "environment_map_specular_contribution": 0.10000000149011612,
+      "normal_specular_power": 10.0,
+      "glancing_specular_power": 10.0,
+      "normal_specular_tint": [
+        0.9450980424880981,
+        0.8470588326454163,
+        0.7803921699523926,
+        1.0
+      ],
+      "glancing_specular_tint": [
+        0.8039215803146362,
+        0.929411768913269,
+        0.9843137264251709,
+        1.0
+      ],
+      "fresnel_curve_steepness": 5.0,
+      "albedo_specular_tint_blend": 0.0,
+      "env_roughness_scale": 0.699999988079071
+    },
+    "expected_reach_authoring_plan": {
+      "material_model": "two_lobe_phong",
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 0.15000000596046448,
+      "area_specular_contribution": 0.019098594214528575,
+      "environment_map_specular_contribution": 0.03000000163912775,
+      "roughness": 0.19419219303059315,
+      "glancing_roughness": 0.19419219303059315,
+      "analytical_roughness": 0.19419219303059315,
+      "specular_color_by_angle": {
+        "color0_normal": [
+          0.9450980424880981,
+          0.8470588326454163,
+          0.7803921699523926,
+          1.0
+        ],
+        "color1_glancing": [
+          0.8039215803146362,
+          0.929411768913269,
+          0.9843137264251709,
+          1.0
+        ],
+        "exponent": 5.0
+      },
+      "albedo_specular_tint_blend": 0.0,
+      "env_roughness_scale": 0.699999988079071,
+      "env_roughness_offset": 0.47087116988793537
+    },
+    "provenance": {
+      "model_migration": "same model name; legacy power/tint representation -> modern Reach representation",
+      "power_to_roughness": "ManagedBlam render_method_convert_specular_power_roughness_parameters(direction=0)",
+      "specular_color_by_angle": "ManagedBlam render_method_convert_specular_color_by_angle_parameters(direction=0)",
+      "coefficient_fold": "ManagedBlam version stage 2->3",
+      "analytical_roughness": "ManagedBlam version stage 3->4",
+      "area_normalization": "ManagedBlam version stage 4->5",
+      "environment_offset": "ManagedBlam version stage 2->3 when env scale exists"
+    },
+    "caveats": [
+      "Canonical Reach migration, not pixel-identical Halo 3 BRDF emulation.",
+      "glancing_roughness is a migration/compatibility input known to ManagedBlam but is not a normal visible current two-lobe RMOP authoring field.",
+      "The writer must preserve the full two-color exponent specular_color_by_angle function; a single color snapshot is insufficient."
+    ]
+  },
+  {
+    "rule_id": "h3.two_lobe_phong_to_reach.two_lobe_phong.canonical_v1",
+    "source_shader": "levels/solo/040_voi/shaders/metals/metal_h_boltpattern.shader",
+    "source_categories": {
+      "albedo": "default",
+      "bump_mapping": "standard",
+      "alpha_test": "none",
+      "specular_mask": "specular_mask_from_diffuse",
+      "material_model": "two_lobe_phong",
+      "environment_mapping": "per_pixel",
+      "self_illumination": "off",
+      "blend_mode": "opaque",
+      "parallax": "off",
+      "misc": "first_person_never",
+      "distortion": "off",
+      "soft_fade": "off",
+      "misc_attr_animation": "off"
+    },
+    "source": {
+      "specular_coefficient": 2.0,
+      "analytical_specular_contribution": 0.5,
+      "area_specular_contribution": 0.0,
+      "environment_map_specular_contribution": 1.0,
+      "normal_specular_power": 10.0,
+      "glancing_specular_power": 20.0,
+      "normal_specular_tint": [
+        0.43921568989753723,
+        0.43921568989753723,
+        0.43921568989753723,
+        1.0
+      ],
+      "glancing_specular_tint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "fresnel_curve_steepness": 5.0,
+      "albedo_specular_tint_blend": 1.0,
+      "env_roughness_scale": null
+    },
+    "expected_reach_authoring_plan": {
+      "material_model": "two_lobe_phong",
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 1.0,
+      "area_specular_contribution": 0.0,
+      "environment_map_specular_contribution": 2.0,
+      "roughness": 0.19419219303059315,
+      "glancing_roughness": 0.14165536102041346,
+      "analytical_roughness": 0.19419219303059315,
+      "specular_color_by_angle": {
+        "color0_normal": [
+          0.43921568989753723,
+          0.43921568989753723,
+          0.43921568989753723,
+          1.0
+        ],
+        "color1_glancing": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "exponent": 5.0
+      },
+      "albedo_specular_tint_blend": 1.0
+    },
+    "provenance": {
+      "model_migration": "same model name; legacy power/tint representation -> modern Reach representation",
+      "power_to_roughness": "ManagedBlam render_method_convert_specular_power_roughness_parameters(direction=0)",
+      "specular_color_by_angle": "ManagedBlam render_method_convert_specular_color_by_angle_parameters(direction=0)",
+      "coefficient_fold": "ManagedBlam version stage 2->3",
+      "analytical_roughness": "ManagedBlam version stage 3->4",
+      "area_normalization": "ManagedBlam version stage 4->5",
+      "environment_offset": "ManagedBlam version stage 2->3 when env scale exists"
+    },
+    "caveats": [
+      "Canonical Reach migration, not pixel-identical Halo 3 BRDF emulation.",
+      "glancing_roughness is a migration/compatibility input known to ManagedBlam but is not a normal visible current two-lobe RMOP authoring field.",
+      "The writer must preserve the full two-color exponent specular_color_by_angle function; a single color snapshot is insufficient."
+    ]
+  },
+  {
+    "rule_id": "h3.two_lobe_phong_to_reach.two_lobe_phong.canonical_v1",
+    "source_shader": "levels/solo/040_voi/shaders/metals/metal_pipe_rusty.shader",
+    "source_categories": {
+      "albedo": "default",
+      "bump_mapping": "detail",
+      "alpha_test": "none",
+      "specular_mask": "specular_mask_from_diffuse",
+      "material_model": "two_lobe_phong",
+      "environment_mapping": "none",
+      "self_illumination": "off",
+      "blend_mode": "opaque",
+      "parallax": "off",
+      "misc": "first_person_never",
+      "distortion": "off",
+      "soft_fade": "off",
+      "misc_attr_animation": "off"
+    },
+    "source": {
+      "specular_coefficient": 4.0,
+      "analytical_specular_contribution": 0.5,
+      "area_specular_contribution": 0.5,
+      "environment_map_specular_contribution": 0.0,
+      "normal_specular_power": 10.0,
+      "glancing_specular_power": 10.0,
+      "normal_specular_tint": [
+        0.5647059082984924,
+        0.3686274588108063,
+        0.2980392277240753,
+        1.0
+      ],
+      "glancing_specular_tint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "fresnel_curve_steepness": 5.0,
+      "albedo_specular_tint_blend": 1.0,
+      "env_roughness_scale": null
+    },
+    "expected_reach_authoring_plan": {
+      "material_model": "two_lobe_phong",
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 2.0,
+      "area_specular_contribution": 0.6366197723675814,
+      "environment_map_specular_contribution": 0.0,
+      "roughness": 0.19419219303059315,
+      "glancing_roughness": 0.19419219303059315,
+      "analytical_roughness": 0.19419219303059315,
+      "specular_color_by_angle": {
+        "color0_normal": [
+          0.5647059082984924,
+          0.3686274588108063,
+          0.2980392277240753,
+          1.0
+        ],
+        "color1_glancing": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "exponent": 5.0
+      },
+      "albedo_specular_tint_blend": 1.0
+    },
+    "provenance": {
+      "model_migration": "same model name; legacy power/tint representation -> modern Reach representation",
+      "power_to_roughness": "ManagedBlam render_method_convert_specular_power_roughness_parameters(direction=0)",
+      "specular_color_by_angle": "ManagedBlam render_method_convert_specular_color_by_angle_parameters(direction=0)",
+      "coefficient_fold": "ManagedBlam version stage 2->3",
+      "analytical_roughness": "ManagedBlam version stage 3->4",
+      "area_normalization": "ManagedBlam version stage 4->5",
+      "environment_offset": "ManagedBlam version stage 2->3 when env scale exists"
+    },
+    "caveats": [
+      "Canonical Reach migration, not pixel-identical Halo 3 BRDF emulation.",
+      "glancing_roughness is a migration/compatibility input known to ManagedBlam but is not a normal visible current two-lobe RMOP authoring field.",
+      "The writer must preserve the full two-color exponent specular_color_by_angle function; a single color snapshot is insufficient."
+    ]
+  },
+  {
+    "rule_id": "h3.two_lobe_phong_to_reach.two_lobe_phong.canonical_v1",
+    "source_shader": "levels/solo/040_voi/shaders/metals/metal_trim_c.shader",
+    "source_categories": {
+      "albedo": "two_detail",
+      "bump_mapping": "detail",
+      "alpha_test": "none",
+      "specular_mask": "specular_mask_from_diffuse",
+      "material_model": "two_lobe_phong",
+      "environment_mapping": "dynamic",
+      "self_illumination": "off",
+      "blend_mode": "opaque",
+      "parallax": "off",
+      "misc": "first_person_never",
+      "distortion": "off",
+      "soft_fade": "off",
+      "misc_attr_animation": "off"
+    },
+    "source": {
+      "specular_coefficient": 3.0,
+      "analytical_specular_contribution": 0.10000000149011612,
+      "area_specular_contribution": 0.10000000149011612,
+      "environment_map_specular_contribution": 1.0,
+      "normal_specular_power": 20.0,
+      "glancing_specular_power": 40.0,
+      "normal_specular_tint": [
+        0.772549033164978,
+        0.772549033164978,
+        0.772549033164978,
+        1.0
+      ],
+      "glancing_specular_tint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "fresnel_curve_steepness": 1.0,
+      "albedo_specular_tint_blend": 0.8999999761581421,
+      "env_roughness_scale": 0.05000000074505806
+    },
+    "expected_reach_authoring_plan": {
+      "material_model": "two_lobe_phong",
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 0.30000000447034836,
+      "area_specular_contribution": 0.09549296727809328,
+      "environment_map_specular_contribution": 3.0,
+      "roughness": 0.14165536102041346,
+      "glancing_roughness": 0.10333186413247018,
+      "analytical_roughness": 0.14165536102041346,
+      "specular_color_by_angle": {
+        "color0_normal": [
+          0.772549033164978,
+          0.772549033164978,
+          0.772549033164978,
+          1.0
+        ],
+        "color1_glancing": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "exponent": 1.0
+      },
+      "albedo_specular_tint_blend": 0.8999999761581421,
+      "env_roughness_scale": 0.05000000074505806,
+      "env_roughness_offset": 0.43271370356807437
+    },
+    "provenance": {
+      "model_migration": "same model name; legacy power/tint representation -> modern Reach representation",
+      "power_to_roughness": "ManagedBlam render_method_convert_specular_power_roughness_parameters(direction=0)",
+      "specular_color_by_angle": "ManagedBlam render_method_convert_specular_color_by_angle_parameters(direction=0)",
+      "coefficient_fold": "ManagedBlam version stage 2->3",
+      "analytical_roughness": "ManagedBlam version stage 3->4",
+      "area_normalization": "ManagedBlam version stage 4->5",
+      "environment_offset": "ManagedBlam version stage 2->3 when env scale exists"
+    },
+    "caveats": [
+      "Canonical Reach migration, not pixel-identical Halo 3 BRDF emulation.",
+      "glancing_roughness is a migration/compatibility input known to ManagedBlam but is not a normal visible current two-lobe RMOP authoring field.",
+      "The writer must preserve the full two-color exponent specular_color_by_angle function; a single color snapshot is insufficient."
+    ]
+  },
+  {
+    "rule_id": "h3.two_lobe_phong_to_reach.two_lobe_phong.canonical_v1",
+    "source_shader": "levels/solo/040_voi/shaders/metals/metal_trim_d.shader",
+    "source_categories": {
+      "albedo": "two_detail",
+      "bump_mapping": "detail",
+      "alpha_test": "none",
+      "specular_mask": "specular_mask_from_diffuse",
+      "material_model": "two_lobe_phong",
+      "environment_mapping": "dynamic",
+      "self_illumination": "off",
+      "blend_mode": "opaque",
+      "parallax": "off",
+      "misc": "first_person_never",
+      "distortion": "off",
+      "soft_fade": "off",
+      "misc_attr_animation": "off"
+    },
+    "source": {
+      "specular_coefficient": 2.0,
+      "analytical_specular_contribution": 0.10000000149011612,
+      "area_specular_contribution": 0.10000000149011612,
+      "environment_map_specular_contribution": 1.0,
+      "normal_specular_power": 10.0,
+      "glancing_specular_power": 10.0,
+      "normal_specular_tint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "glancing_specular_tint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "fresnel_curve_steepness": 5.0,
+      "albedo_specular_tint_blend": 1.0,
+      "env_roughness_scale": 0.10000000149011612
+    },
+    "expected_reach_authoring_plan": {
+      "material_model": "two_lobe_phong",
+      "specular_coefficient": 1.0,
+      "analytical_specular_contribution": 0.20000000298023224,
+      "area_specular_contribution": 0.06366197818539553,
+      "environment_map_specular_contribution": 2.0,
+      "roughness": 0.19419219303059315,
+      "glancing_roughness": 0.19419219303059315,
+      "analytical_roughness": 0.19419219303059315,
+      "specular_color_by_angle": {
+        "color0_normal": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "color1_glancing": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "exponent": 5.0
+      },
+      "albedo_specular_tint_blend": 1.0,
+      "env_roughness_scale": 0.10000000149011612,
+      "env_roughness_offset": 0.41261351328091755
+    },
+    "provenance": {
+      "model_migration": "same model name; legacy power/tint representation -> modern Reach representation",
+      "power_to_roughness": "ManagedBlam render_method_convert_specular_power_roughness_parameters(direction=0)",
+      "specular_color_by_angle": "ManagedBlam render_method_convert_specular_color_by_angle_parameters(direction=0)",
+      "coefficient_fold": "ManagedBlam version stage 2->3",
+      "analytical_roughness": "ManagedBlam version stage 3->4",
+      "area_normalization": "ManagedBlam version stage 4->5",
+      "environment_offset": "ManagedBlam version stage 2->3 when env scale exists"
+    },
+    "caveats": [
+      "Canonical Reach migration, not pixel-identical Halo 3 BRDF emulation.",
+      "glancing_roughness is a migration/compatibility input known to ManagedBlam but is not a normal visible current two-lobe RMOP authoring field.",
+      "The writer must preserve the full two-color exponent specular_color_by_angle function; a single color snapshot is insufficient."
+    ]
+  }
+]

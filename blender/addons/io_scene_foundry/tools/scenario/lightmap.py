@@ -306,30 +306,18 @@ class LightMapper:
         ):
             return self
 
-        print("\nDirect Illumination")
-        print(
-            "-------------------------------------------------------------------------\n"
-        )
-        if not self.farm("dillum"):
-            return self
-        print("\nCasting Photons")
-        print(
-            "-------------------------------------------------------------------------\n"
-        )
-        if not self.farm("pcast"):
-            return self
-        print("\nExtended Illumination")
-        print(
-            "-------------------------------------------------------------------------\n"
-        )
-        if not self.farm("radest_extillum"):
-            return self 
-        print("\nFinal Gather")
-        print(
-            "-------------------------------------------------------------------------\n"
-        )
-        if not self.farm("fgather"):
-            return self
+        # HREK marks photons, radiance estimation and final gather disabled
+        # for direct_only. Invoking
+        # disabled phases prints LIGHTMAPPER FAILED even with process exit 0.
+        # Keep the existing farm driver; dispatch only the preset's work.
+        stages = [("dillum", "Direct Illumination")]
+        if self.quality != "direct_only":
+            stages.extend([("pcast", "Casting Photons"), ("radest_extillum", "Extended Illumination")])
+            stages.append(("fgather", "Final Gather"))
+        for stage, label in stages:
+            print(f"\n{label}\n-------------------------------------------------------------------------\n")
+            if not self.farm(stage):
+                return self
 
         print("\nFaux Farm Process Finalise")
         print(

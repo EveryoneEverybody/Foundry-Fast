@@ -93,7 +93,7 @@ def source_snapshot(material):
 data = manifest()
 source = build_source(data)
 snapshot = source_snapshot(source)
-stager = module.ReachStager(load_resource, no_aliases)
+stager = module.ReachStager(load_resource, no_aliases, legacy_preview=True)
 native = stager.build(source)
 assert native, stager.results
 print('REACH_STAGING_RESULT', json.dumps(stager.results[-1]))
@@ -179,7 +179,7 @@ assert not any(n.type == 'NORMAL_MAP' for n in body_native.node_tree.nodes)
 
 # Exercise a supplied option UI alias without claiming a real Reach tag read.
 aliased_stager = module.ReachStager(load_resource,
-    lambda selected, cache: ({'diffuse_coefficient': ['diffuse_contribution']}, []))
+    lambda selected, cache: ({'diffuse_coefficient': ['diffuse_contribution']}, []), legacy_preview=True)
 aliased = aliased_stager.build(body_source)
 assert aliased, aliased_stager.results
 assert group_of(aliased).inputs['diffuse_contribution'].default_value == 0
@@ -194,7 +194,7 @@ ob.data.materials.clear(); ob.data.materials.append(source)
 external = bpy.data.objects.new('outside staging', ob.data)
 bpy.context.scene.collection.objects.link(external)
 geometry = [(tuple(v.co)) for v in ob.data.vertices]
-assignment_stager = module.ReachStager(load_resource, no_aliases)
+assignment_stager = module.ReachStager(load_resource, no_aliases, legacy_preview=True)
 assert assignment_stager.apply([ob]) == 1
 assert ob.active_material.get('h3_reach_staged')
 assert external.active_material == source
@@ -216,7 +216,7 @@ assert any(p['status'] == 'unavailable' for p in stager.results[-1]['parameters'
 
 # Missing resource failures leave no replacement material or orphan image copies.
 counts = (len(bpy.data.materials), len(bpy.data.images))
-failed = module.ReachStager(lambda *args: None, no_aliases)
+failed = module.ReachStager(lambda *args: None, no_aliases, legacy_preview=True)
 assert failed.build(source) is None
 assert counts == (len(bpy.data.materials), len(bpy.data.images))
 assert failed.results[0]['status'] == 'skipped'
@@ -239,7 +239,7 @@ for current in bpy.context.selected_objects:
     current.select_set(False)
 ob.select_set(True); bpy.context.view_layer.objects.active = ob
 original_factory = ops.ReachStager
-ops.ReachStager = lambda: module.ReachStager(load_resource, no_aliases)
+ops.ReachStager = lambda: module.ReachStager(load_resource, no_aliases, legacy_preview=True)
 ops.register()
 try:
     assert bpy.ops.nwo.stage_h3_reach_materials() == {'FINISHED'}
@@ -254,13 +254,85 @@ finally:
     ops.ReachStager = original_factory
 
 # Saved materials retain source identity, packed images, and editable native inputs.
+# Production staging is separate from the historical preview assertions above.
+# Synthetic declarations stand in for a read-only RMOP query; no kit is loaded.
+semantic = importlib.import_module(base['NAME'] + '.h3_import.material_translation')
+fixture_path = base['ROOT'].parents[2] / 'tests/fixtures/h3_rmsh_translation/voi_single_lobe_regression_vectors_2026-09-09.json'
+single_vector = json.loads(fixture_path.read_text())[1]
+semantic_data = copy.deepcopy(data)
+semantic_data['bitmaps'] = {}
+semantic_record = dict(source=SHADER, group='rmsh', status='resolved_snapshot',
+    categories=[dict(category=k, option=v, source_index=0) for k,v in single_vector['source_categories'].items()],
+    parameters=[dict(name=k, type='real', value=v, has_functions=False) for k,v in single_vector['source'].items()])
+semantic_record['parameters'].append(dict(name='specular_tint',type='color',value=[.2,.4,.7,1]))
+semantic_data['shaders'] = {SHADER: semantic_record}
+semantic_source = build_source(semantic_data, 'semantic single lobe')
+immutable = semantic.H3MaterialRecord.from_resolved(semantic_record)
+single_plan = semantic.translate(immutable)
+saved_aliases = module.read_destination_aliases
+base['utils'].srgb_to_linear = lambda v: v/12.92 if v <= .04045 else ((v+.055)/1.055)**2.4
+module.read_destination_aliases = lambda *a: ({name:[] for name in single_plan.payload['parameters']}, [])
+try:
+    strict = module.ReachStager(load_resource, no_aliases)
+    semantic_native = strict.build(semantic_source)
+    assert semantic_native, strict.results
+    assert group_of(semantic_native).inputs['material_model'].default_value == 'two_lobe_phong'
+    for name in ('normal_specular_color', 'glancing_specular_color'):
+        assert abs(group_of(semantic_native).inputs[name].default_value[0] - base['utils'].srgb_to_linear(.2)) < 1e-6
+    assert group_of(semantic_native).inputs['specular_color_exponent'].default_value == 1
+    stored_plan = json.loads(semantic_native['h3_reach_authoring_plan'])
+    assert stored_plan['parameters']['specular_color_by_angle']['value']['color0_normal'] == [.2,.4,.7,1]
+    assert any(p['status']=='semantic_function' for p in strict.results[-1]['parameters'])
+    assert not any(c['status']=='group_default' for c in strict.results[-1]['categories'])
+    rejected = single_plan.to_dict()
+    rejected['options']['albedo'] = 'unsupported_reach_option'
+    counts = (len(bpy.data.materials), len(bpy.data.images))
+    assert strict.build(semantic_source, semantic.ReachAuthoringPlan(rejected)) is None
+    assert counts == (len(bpy.data.materials), len(bpy.data.images))
+    assert any('UNRESOLVED_WRITER_OPTION' in d for d in strict.results[-1]['diagnostics'])
+    rejected = single_plan.to_dict()
+    rejected['compatibility_inputs']['glancing_roughness'] = dict(type='real', value=.2)
+    assert strict.build(semantic_source, semantic.ReachAuthoringPlan(rejected)) is None
+    assert strict.results[-1]['semantic_plan']['compatibility_inputs']['glancing_roughness']['value'] == .2
+    assert counts == (len(bpy.data.materials), len(bpy.data.images))
+    two_vector = json.loads(fixture_path.with_name('voi_two_lobe_selected_fixtures_2026-09-09.json').read_text())[0]
+    two_record = dict(source=SHADER, group='rmsh', status='resolved_snapshot',
+        categories=[dict(category=k, option=v, source_index=0) for k,v in two_vector['source_categories'].items()],
+        parameters=[dict(name=k, type='color' if isinstance(v,list) else 'real', value=v, has_functions=False)
+                    for k,v in two_vector['source'].items() if v is not None])
+    two_record['parameters'].append(dict(name='analytical_anti_shadow_control', type='real', value=.7))
+    two_data = copy.deepcopy(semantic_data)
+    two_data['shaders'] = {SHADER: two_record}
+    two_source = build_source(two_data, 'semantic two lobe')
+    two_plan = semantic.translate(semantic.H3MaterialRecord.from_resolved(two_record))
+    module.read_destination_aliases = lambda *a: ({name:[] for name in (*two_plan.payload['parameters'], 'glancing_specular_power')}, [])
+    two_native = strict.build(two_source)
+    assert two_native, strict.results
+    two_stored = json.loads(two_native['h3_reach_authoring_plan'])
+    assert two_stored == two_plan.to_dict()
+    assert 'glancing_roughness' in two_stored['compatibility_inputs']
+    assert 'glancing_specular_power' not in two_stored['parameters']
+    assert group_of(two_native).inputs['material_model'].default_value == 'two_lobe_phong'
+    assert group_of(two_native).inputs['specular_color_exponent'].default_value == two_vector['source']['fresnel_curve_steepness']
+    for socket, field in (('normal_specular_color', 'normal_specular_tint'), ('glancing_specular_color', 'glancing_specular_tint')):
+        assert abs(group_of(two_native).inputs[socket].default_value[0] - base['utils'].srgb_to_linear(two_vector['source'][field][0])) < 1e-6
+    assert not any(c['status']=='group_default' for c in strict.results[-1]['categories'])
+finally:
+    module.read_destination_aliases = saved_aliases
+
 with tempfile.TemporaryDirectory() as d:
     native.use_fake_user = True
+    semantic_native.use_fake_user = True
+    two_native.use_fake_user = True
+    two_name = two_native.name
+    semantic_name = semantic_native.name
     material_name = native.name
     path = str(Path(d) / 'reach_staging.blend')
     bpy.ops.wm.save_as_mainfile(filepath=path)
     bpy.ops.wm.open_mainfile(filepath=path)
     reopened = bpy.data.materials[material_name]
+    assert json.loads(bpy.data.materials[semantic_name]['h3_reach_authoring_plan']) == stored_plan
+    assert json.loads(bpy.data.materials[two_name]['h3_reach_authoring_plan']) == two_stored
     assert reopened['h3_source_material'] is not None
     assert reopened.nwo.shader_path == ''
     assert group_of(reopened).inputs['self_illum_map.rgb'].is_linked

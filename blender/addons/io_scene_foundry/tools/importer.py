@@ -369,6 +369,7 @@ def draw_scenario_import_sections(operator, layout, corinth, show_template=True,
         row.prop(operator, "decorator_lod")
     view_box.prop(operator, "build_blender_materials")
     view_box.prop(operator, "always_extract_bitmaps")
+    h3_scenario_ui.draw_inspection(operator, layout)
 
 def _decorator_cloud_marker_data(cloud: bpy.types.Object):
     tag_path = cloud.get(DECORATOR_TAG_PROP) or cloud.nwo.marker_game_instance_tag_name
@@ -945,6 +946,10 @@ class NWO_OT_ConvertScene(bpy.types.Operator):
         
         return {'FINISHED'}
 
+from ..h3_import import scenario_ui as h3_scenario_ui
+
+
+@h3_scenario_ui.scenario_properties
 class NWO_Import(bpy.types.Operator):
     bl_label = "Foundry Import"
     bl_idname = "nwo.foundry_import"
@@ -1141,7 +1146,8 @@ class NWO_Import(bpy.types.Operator):
     
     tag_sky: bpy.props.StringProperty(
         name="Sky",
-        description="Enter the tag relative path to the sky to import with this Scenario",
+        description="Select a scenario sky or enter its relative tag path. H3 also accepts a source sky index",
+        search=h3_scenario_ui.search_skies,
     )
     
     tag_cinematic_import_scenario: bpy.props.BoolProperty(
@@ -1319,6 +1325,14 @@ class NWO_Import(bpy.types.Operator):
             self.report({"WARNING"}, "No files to import")
             return {'CANCELLED'}
         
+        try:
+            routed = h3_scenario_ui.route(self, context, filepaths)
+            if routed is not None:
+                return routed
+        except (OSError, ValueError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+
         start = time.perf_counter()
         imported_objects = []
         imported_actions = []
@@ -2216,6 +2230,12 @@ class NWO_Import(bpy.types.Operator):
                 ob.parent = self.anchor
                 ob.parent_type = 'OBJECT'
     
+    def modal(self, context, event):
+        return self._h3_job.modal(context, event)
+
+    def check(self, context):
+        return h3_scenario_ui.refresh(self)
+
     def invoke(self, context, event):
         # skip_fileselect = False
         # if self.directory or self.files or self.filepath:
@@ -4969,6 +4989,7 @@ class NWOImporter:
                     animation.animation_type = 'replacement'
                     animation.animation_space = 'local'
                         
+@h3_scenario_ui.scenario_properties
 class NWO_OT_ImportFromDrop(bpy.types.Operator):
     bl_idname = "nwo.import_from_drop"
     bl_label = "Foundry Importer"
@@ -5100,6 +5121,8 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
         return items
     
     def items_sky(self, context):
+        if h3_scenario_ui.selection_state(self).source == "halo3":
+            return h3_scenario_ui.sky_items(self, context)
         items = [("none", "None", "")]
         for sky in sky_items:
             items.append((sky, Path(sky).with_suffix("").name, ""))
@@ -5399,8 +5422,8 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
             keywords["setup_as_asset"] = False
         keywords['files'] = [{'name': f.name} for f in self.files]
         ensure_import_operator_enum_defaults(keywords)
-        bpy.ops.nwo.foundry_import(**keywords)
-        return {'FINISHED'}
+        result = bpy.ops.nwo.foundry_import(**keywords)
+        return {'CANCELLED'} if result == {'CANCELLED'} else {'FINISHED'}
     
     def invoke(self, context, event):
         scene_nwo = utils.get_scene_props()
@@ -5442,17 +5465,30 @@ class NWO_OT_ImportFromDrop(bpy.types.Operator):
             if self.import_type == "scenario":
                 global zone_set_items
                 global sky_items
-                with ScenarioTag(path=self.filepath) as scenario:
-                    zone_set_items = scenario.get_zone_sets_dict()
-                    if zone_set_items:
-                        self.has_zone_sets = True
-                    
+                try:
+                    h3_scenario_ui.refresh(self)
+                    source_kind, _ = h3_scenario_ui.classify(self.filepath)
+                    selection_error = h3_scenario_ui.selection_state(self).error
+                    if selection_error:
+                        raise ValueError(selection_error)
+                except (OSError, ValueError) as error:
+                    self.report({'ERROR'}, str(error))
+                    return {'CANCELLED'}
+                if source_kind == 'halo3':
+                    zone_set_items = {}
                     sky_items = []
-                    for element in scenario.tag.SelectField("skies").Elements:
-                        sky = element.SelectField("Reference:sky").Path
-                        sky_path = scenario.get_path_str(sky, True)
-                        if sky_path and Path(sky_path).exists():
-                            sky_items.append(sky.RelativePathWithExtension)
+                else:
+                    with ScenarioTag(path=self.filepath) as scenario:
+                        zone_set_items = scenario.get_zone_sets_dict()
+                        if zone_set_items:
+                            self.has_zone_sets = True
+
+                        sky_items = []
+                        for element in scenario.tag.SelectField("skies").Elements:
+                            sky = element.SelectField("Reference:sky").Path
+                            sky_path = scenario.get_path_str(sky, True)
+                            if sky_path and Path(sky_path).exists():
+                                sky_items.append(sky.RelativePathWithExtension)
                             
             elif self.import_type == 'cinematic':
                 global cinematic_scene_items

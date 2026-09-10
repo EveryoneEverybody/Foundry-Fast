@@ -1,0 +1,421 @@
+{
+  "format": "foundry.h3-environment-semantic-rules",
+  "version": 1,
+  "scope": "Source authoring plans only; no native build or runtime acceptance",
+  "evidence": {
+    "H3_ART": {
+      "kind": "documentation",
+      "url": "https://c20.reclaimers.net/h3/source-data/h3-materials/",
+      "claim": "ASS material symbols distinguish collision, sphere collision, ladder, breakable, transparency, shadow and lightmap intent; seams require matching owners."
+    },
+    "H3_LIGHT": {
+      "kind": "official_documentation",
+      "url": "https://learn.microsoft.com/en-us/halo-master-chief-collection/h3/individual/dynamiclights",
+      "claim": "Scenario .light placements are dynamic lights; marker X is emission direction. Their runtime functions are separate from authored static lightmap inputs."
+    },
+    "H3_FUNCTION": {
+      "kind": "decoder_source",
+      "url": "https://github.com/Zoephie/blam-tags/blob/5d0509fb75eadb96ac7774542ca0b2c10aed7b00/blam-tags/src/tag_function/mod.rs",
+      "claim": "Type 1 unranged functions are authored constants, including constant colors. Other decoded functions can be evaluated at a specified source input/time."
+    },
+    "H3_CBUFFER": {
+      "kind": "decoder_source",
+      "url": "https://github.com/Zoephie/blam-tags/blob/5d0509fb75eadb96ac7774542ca0b2c10aed7b00/blam-tags/src/render_method/cbuffer.rs",
+      "claim": "Resolved parameter values apply rmop defaults then authored channel overrides; bitmap transforms use scale XY, translation ZW."
+    },
+    "H3_PARTS": {
+      "kind": "schema_source",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/RenderGeometry/Mesh.cs",
+      "claim": "PartTypeNew: 3 opaque nonshadowing, 4 transparent, 5 lightmap only; flag bit 1 ignored by lightmapper. These are not interchangeable transparency modes."
+    },
+    "H3_COLLISION": {
+      "kind": "schema_source",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/BspCollisionGeometry/CollisionGeometry.cs",
+      "claim": "Surface bits 0 two-sided, 1 invisible, 2 climbable, 3 breakable; material and breakable indices are independent fields."
+    },
+    "H3_BREAKABLE_HSC": {
+      "kind": "documentation",
+      "url": "https://c20.reclaimers.net/h3/engine/scripting/",
+      "claim": "breakable_surfaces_enable(boolean) controls level surface breakability; breakable_surfaces_reset() restores the surfaces. Together with the H3 '-' material convention these support a BSP surface subsystem, not an inference of whole-instance damage states."
+    },
+    "H3_BREAKABLE_BSP_LINK": {
+      "kind": "reverse_engineered_source_and_inference",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/Utils/GeometryToObjectConverter.cs#L474",
+      "claim": "The BSP-to-object converter removes the breakable flag because loss of sbsp linkage causes crashes. This supports preserving BSP ownership; it does not establish a valid Reach shard/support reconstruction."
+    },
+    "REACH_BUMP_DETAIL": {
+      "kind": "supplied_target_tag_xml",
+      "archive": "ReachTreeBarkXML.zip",
+      "archive_sha256": "ebc156026a2ab0f40da13b77469f3a80e374bcba1e8fea67981d92d436de0bbf",
+      "member": "ReachTreeBarkXML/mp_treebark.shader.xml",
+      "member_sha256": "6e69e9f2497f7985fc985ed679c546de676e7e70c60343198f54dc73ea2ce5b2",
+      "target_tag_identity_from_user_inventory": "levels/shared/shaders/multi/mp_treebark.shader",
+      "xml_bitmap_display_names": {
+        "base_map": "treebark_cedar",
+        "bump_map": "treebark_cedar_bump",
+        "detail_map": "",
+        "bump_detail_map": "treebark_cedar_bump"
+      },
+      "claim": "Reach has a native bump_detail_map slot and may reuse a bitmap across bump slots. A distinct detail-bump asset is not required. These target references are structural evidence only; the XML exposes display names, not full reference paths.",
+      "authoring_policy": "Keep the verified H3 retail sampler identity and H3 UV transform, using decoded H3 source pixels. Never substitute Reach cedar/ceder assets. Bark opacity and foliage cutout are separate semantics.",
+      "foundry_writer_evidence": "h3_import/reach_materials.py parameter_bindings and image_usage; native shader bump_mapping detail option"
+    },
+    "H3_NULL_MATERIAL": {
+      "kind": "source_and_inference",
+      "url": "https://github.com/TheGuardians/TagTool/blob/ce2dc6ac13072b160752af618ea1dc143e2727ac/TagTool/Geometry/Utils/GeometryToObjectConverter.cs",
+      "claim": "Instance collision can retain material -1 independently of sky. No rendered correspondence plus solid collision flags supports preserving an untextured collision shell; the shader identity is not inferred."
+    },
+    "H3_CUBE": {
+      "kind": "decoder_source",
+      "url": "https://github.com/Zoephie/blam-tags/blob/5d0509fb75eadb96ac7774542ca0b2c10aed7b00/blam-tags/src/bitmap/layout.rs",
+      "claim": "DDS face order and per-face mip chains; six-face RGBA8 TIFF cross from decoded source pixels. Target import orientation must be checked by the next native writer."
+    },
+    "REACH_MATERIAL": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/shader.py",
+      "claim": "Native Reach shader options and parameter authoring, including alpha test, blend modes and environment mapping."
+    },
+    "REACH_TERRAIN": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/shader_terrain.py",
+      "claim": "Native shader_terrain group, morph/dynamic morph, four independently selected material layers, material names and terrain parameters."
+    },
+    "REACH_FOLIAGE": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/shader_foliage.py",
+      "claim": "Native shader_foliage, default albedo, alpha from texture or albedo, translucent material option."
+    },
+    "REACH_FACES": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/export/process.py",
+      "claim": "Connected geometry ladder, sphere collision only, no shadow, lightmap only, transparency and breakable face properties; breakable collision proxies are invalid."
+    },
+    "REACH_LIGHTING": {
+      "kind": "authoring_writer",
+      "path": "blender/addons/io_scene_foundry/managed_blam/scenario_structure_lighting_info.py",
+      "claim": "Native static light definitions and instances; emissive material focus and attenuation. H3 frustum blend/angles do not have direct fields."
+    },
+    "BREAKABLE_GEOMETRY_PROOF": {
+      "kind": "verified_source_geometry_and_authoring_rebuild",
+      "path": "blender/addons/io_scene_foundry/h3_import/port_environment/breakable_geometry.py",
+      "claim": "Every collision ring must match render positions, source planes, boundary edges, area and shader identity. Opposite render copies must have equal UV/color/weights and opposite normals. Complete coverage permits unified two-sided Reach breakable scenario geometry; separate proxies are prohibited. Tool rebuilds target breakable support/IDs from this geometry.",
+      "limitations": "Limited to completely two-sided breakable definitions with triangle/convex-quad collision rings. Mixed definitions, ambiguous vertices, incompatible corner attributes or unmatched faces remain blocking. No compiled shard payload is copied."
+    },
+    "REACH_EMISSIVE_SPREAD": {
+      "kind": "authoring_writer_and_explicit_approximation",
+      "paths": [
+        "blender/addons/io_scene_foundry/export/process.py",
+        "blender/addons/io_scene_foundry/export/virtual_geometry.py",
+        "blender/addons/io_scene_foundry/managed_blam/connected_geometry.py",
+        "blender/addons/io_scene_foundry/utils.py",
+        "blender/addons/io_scene_foundry/h3_import/port_environment/emissive.py"
+      ],
+      "verified_contract": "Foundry exports native focus = 1 - degrees(emissive_focus_property)/180; its importer applies the inverse. Area-light conversion sets this property from light.spread. Distances have independent falloff/cutoff properties and unit conversion.",
+      "inference": "solid_angle_equivalent_cone_v1 treats source frustum angles as half-angles, uses a linear-in-cosine taper and blends angular integrals with the basic focus cone. It is an explicitly chosen MVP approximation, not a claim that either engine uses this photometric law.",
+      "preserved": "Source bake power, color, quality and distance attenuation; emission remains on the original material faces.",
+      "known_documentation_conflict": "The mesh-property focus tooltip reverses the spread convention relative to executable export/import and area-light conversion. The plan follows the executable roundtrip without modifying the proven writer."
+    },
+    "H3_REACH_SEAM_ACTIVATION": {
+      "kind": "installed_runtime_raw_x64_and_authoring_evidence",
+      "h3_executable": {
+        "identity": "H3EK/halo3_tag_test.exe",
+        "sha256": "59a78f2c96034d7ceb5d710505b2b36813aa141fc81a083e3f952973dbce4602",
+        "image_base": "0x140000000",
+        "active_seams_calculator_rva": "0x4b2230",
+        "owner_presence_checks_rva": [
+          "0x4b2296",
+          "0x4b22a0"
+        ],
+        "collision_material_extant_initializer_rva": "0x4b1f10",
+        "active_seam_clears_collision_material_bit_rva": "0x4b2014",
+        "inactive_seam_sets_collision_material_bit_rva": "0x4b2038",
+        "disconnect_clears_owner_rva": "0x4b35d5",
+        "disconnect_recalculates_mask_rva": "0x4b38c5"
+      },
+      "reach_executable": {
+        "identity": "HREK/reach_tag_test.exe",
+        "sha256": "cbdd8448a87a433b0dffc0de47d06db7a18b4bf868b96b057135daa86790aba8",
+        "image_base": "0x140000000",
+        "active_seams_calculator_rva": "0x12c800",
+        "owner_presence_checks_rva": [
+          "0x12c8df",
+          "0x12c8e6"
+        ],
+        "collision_material_extant_initializer_rva": "0x12b9b0",
+        "active_seam_clears_collision_material_bit_rva": "0x12baed",
+        "inactive_mapped_seam_sets_collision_material_bit_rva": "0x12bb0f",
+        "unmapped_IsSeam_skips_collision_bit_rva": "0x12babe"
+      },
+      "claim": "Both runtimes set a seam active only when its two connected-owner bytes are not -1. H3 retains a mapped seam collision material when inactive and suppresses it when active. Reach matches this for mapped seams, but skips an unmapped (-1) IsSeam material. The static slice therefore retains the exact H3 collision face as ordinary native collision-only geometry and retains seam identity for future paired-zone authoring.",
+      "method": "Read-only PE disassembly, assertion-string cross-references and branch inspection. Neither executable was run or patched. No executable/resource bytes are included in this catalog.",
+      "authoring_documentation": [
+        "https://learn.microsoft.com/en-us/halo-master-chief-collection/h3/bsp/bsphome",
+        "https://c20.reclaimers.net/h3/guides/map-making/level-creation/blender-level-modeling/blender-level-creation-additional-info/#seams",
+        "https://learn.microsoft.com/en-us/halo-master-chief-collection/hr/art/fbxtogr2#appendix-b-json-parameters"
+      ],
+      "boundary": "This establishes source/target state semantics, not native Tool compilation or runtime acceptance of generated Voi. Repeated identifiers alone never establish neighbors."
+    },
+    "PAIRED_TERRAIN": {
+      "kind": "supplied_tag_evidence",
+      "path": "H3TagXML.zip and ReachTagXML.zip: levels/reference/lighting_reference/shaders/terrain_grass.shader_terrain.xml",
+      "claim": "Both games retain four top-level material names; target is shader_terrain rather than ordinary shader."
+    },
+    "SOURCE": {
+      "kind": "decoded_tag_evidence",
+      "claim": "Per-record source fields, SHA-256 identity, usage, topology, transform, snapshot and XML provenance are retained in the plan and run artifacts."
+    },
+    "KIT_HLSL": {
+      "kind": "installed_authoring_source",
+      "paths": [
+        "H3EK/tags/shaders/foliage_fx.hlsl_include",
+        "H3EK/tags/shaders/alpha_test_fx.hlsl_include",
+        "H3EK/tags/shaders/terrain_fx.hlsl_include",
+        "HREK/tags/shaders/templated/foliage.hlsl_include",
+        "HREK/tags/shaders/templated/alpha_test.hlsl_include",
+        "HREK/tags/shaders/templated/terrain_new.hlsl_include"
+      ],
+      "claim": "Both alpha tests sample texture alpha and use cutoff 0.5. H3 default foliage static lighting uses SH/PRT diffuse; back_light is declared but unused there. Reach flat foliage is a diffuse approximation; Reach has foliage_translucency, not a back_light color socket. Wind coefficient zero alone does not remove phase displacement: freeze authored rest geometry by zero amplitude. Terrain morph/dynamic morph preserve the same active RGBA normalization; Reach D3D11 adds 1e-8 to source blend channels before division."
+    },
+    "REACH_GLOBAL_SEAM_OWNERSHIP": {
+      "kind": "installed_reach_stock_tags_and_existing_foundry_writers",
+      "claim": "A valid Reach seam is owned globally by the scenario and persists across zones that load both, one, or neither owner. Runtime connection activation requires both owner BSPs; authored scenario membership is distinct from the active zone mask.",
+      "stock_example": {
+        "scenario": "levels/solo/m20/m20.scenario",
+        "structure_seams": "levels/solo/m20/m20.structure_seams",
+        "global_seam_count": 20,
+        "seam_index": 13,
+        "owner_bsp_indices": [
+          4,
+          5
+        ],
+        "owner_bsps": [
+          "levels/solo/m20/m20_015.scenario_structure_bsp",
+          "levels/solo/m20/m20_020.scenario_structure_bsp"
+        ],
+        "identifier": [
+          572700572,
+          1290613524,
+          -233912671,
+          -1043446416
+        ],
+        "original_vertices": 191,
+        "triangles": 189,
+        "zone_examples": [
+          {
+            "source_index": 1,
+            "name": "zoneset_courtyard_valley",
+            "bsp_mask": 57,
+            "present_owners": [
+              4,
+              5
+            ],
+            "seam_active": true,
+            "global_seam_authored": true
+          },
+          {
+            "source_index": 2,
+            "name": "zoneset_exterior",
+            "bsp_mask": 225,
+            "present_owners": [
+              5
+            ],
+            "seam_active": false,
+            "global_seam_authored": true
+          },
+          {
+            "source_index": 5,
+            "name": "zoneset_end_cinematic",
+            "bsp_mask": 7,
+            "present_owners": [],
+            "seam_active": false,
+            "global_seam_authored": true
+          }
+        ],
+        "source_hashes": {
+          "levels/solo/m20/m20.scenario": "303f5b62f4e7b48dcaab1be3316895eef3b556a5ddf78060ee7fb15f983aa958",
+          "levels/solo/m20/m20.structure_seams": "cfbf4ec4e6a40f36e556c5ffe396bcaaaec2454f0fb27396f2a2293d0d8c76c4",
+          "levels/solo/m20/m20_015.scenario_structure_bsp": "6d8a608b012d3c160a1bf56adef7bef7e082d8d7fd1e5e09be2df7a7432fa81f",
+          "levels/solo/m20/m20_020.scenario_structure_bsp": "696c87d51ed3b02fc6ce48f77fb563c650f8eaf533bb0b32c9bfd5ebbf5b6209"
+        },
+        "correspondence": "Same global seam index, identifier and 191 valid edge mappings in each owner; two cluster centers match in opposite cluster ordering."
+      },
+      "foundry_paths": [
+        "blender/addons/io_scene_foundry/export/process.py",
+        "blender/addons/io_scene_foundry/export/build_sidecar.py",
+        "blender/addons/io_scene_foundry/managed_blam/connected_geometry.py",
+        "blender/addons/io_scene_foundry/managed_blam/structure_seams.py",
+        "blender/addons/io_scene_foundry/managed_blam/scenario.py",
+        "blender/addons/io_scene_foundry/tools/importer.py"
+      ],
+      "writer_contract": "Native paired seam uses associated-BSP regions and reversed back-facing topology; the authoring region set must contain both owners. The sidecar emits scenario-level structure_seams. Active zone membership is stored separately in scenario BSP masks.",
+      "import_limit": "Paired reconstruction helpers exist, but BSP seam discovery is commented out in the current main scenario import path. This evidence does not claim working end-to-end seam import.",
+      "bounded_build": "Keep the global source relationship and geometry in the plan even when an owner is outside the build. Do not fabricate an unbuilt target reference or add BSP020 to intro_faa. A fully authored target scenario retains its native seam while an owner is inactive.",
+      "verification": "Read-only stock tag XML exports and source hashes, combined with the separately verified Reach runtime owner predicate. No Reach tags or Voi assets were written."
+    },
+    "H3_BARK_SOURCE_HISTORY": {
+      "kind": "user_relayed_community_confirmation_and_local_artifact",
+      "source_bitmap": "levels/solo/010_jungle/bitmaps/tree_barkc_detail_bump.bitmap",
+      "historical_source_name": "tree_barkc_detail_bump.tiff",
+      "classification": "HISTORICAL_H3_AUTHORING_ASSET",
+      "claim": "Modders with access to cut H3/Digsite content confirm the historical TIFF exists and its texture content matches the supplied Deadlock copy; the Deadlock name adds only the deadlock_ prefix.",
+      "verification_limit": "The unprefixed historical TIFF was not supplied locally for an independent byte/pixel comparison; no exact loose EK bitmap identity is asserted.",
+      "supplied_artifact": {
+        "name": "deadlock_tree_barkc_detail_bump.tiff",
+        "sha256": "3ab5044e3400d10fe53f0471e9863b17c86717340c6b328563ffde694ee65368",
+        "bytes": 1048830,
+        "size": [
+          256,
+          1024
+        ]
+      },
+      "runtime_decision": "Verified retail 040_voi outtree_bark.bump_detail_map remains shaders/default_bitmaps/bitmaps/default_vector.bitmap with its source UV transform.",
+      "policy": "Historical existence does not imply active retail use. Source-history evidence cannot authorize bitmap replacement or provide pixels to the native material manifest."
+    }
+  },
+  "rules": [
+    {
+      "id": "material.parameters",
+      "meaning": "Resolve every active parameter independently; the record takes its strongest remaining restriction",
+      "evidence": [
+        "H3_FUNCTION",
+        "H3_CBUFFER",
+        "REACH_MATERIAL",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "material.constant",
+      "meaning": "Unranged authored constant channel, including opacity: preserve decoded source value exactly",
+      "evidence": [
+        "H3_FUNCTION",
+        "H3_CBUFFER"
+      ]
+    },
+    {
+      "id": "material.canonical_animation",
+      "meaning": "Freeze permitted cosmetic UV or emissive animation at source input/time zero; never opacity, cutout, visibility or topology",
+      "evidence": [
+        "H3_CBUFFER",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "material.engine_extern",
+      "meaning": "Reach owns native BRDF/reflection externs; foliage wind may freeze at source rest state",
+      "evidence": [
+        "REACH_MATERIAL",
+        "REACH_FOLIAGE",
+        "SOURCE",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "surface.render_pass",
+      "meaning": "Compose verified draw category with independent shader alpha/blend and lightmapper flags",
+      "evidence": [
+        "H3_ART",
+        "H3_PARTS",
+        "REACH_FACES",
+        "REACH_MATERIAL",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "collision.untextured_shell",
+      "meaning": "Preserve unassigned solid instance collision with zero render correspondence as collision-only, never sky",
+      "evidence": [
+        "H3_ART",
+        "H3_COLLISION",
+        "H3_NULL_MATERIAL",
+        "REACH_FACES",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "collision.surface_flags",
+      "meaning": "Map verified collision flags; unified breakable authoring requires complete local render/collision correspondence",
+      "evidence": [
+        "H3_ART",
+        "H3_COLLISION",
+        "H3_BREAKABLE_HSC",
+        "H3_BREAKABLE_BSP_LINK",
+        "REACH_FACES",
+        "SOURCE",
+        "BREAKABLE_GEOMETRY_PROOF"
+      ]
+    },
+    {
+      "id": "terrain.native_layers",
+      "meaning": "Stage normalized source terrain into native Reach terrain options, layered samplers, transforms and material names",
+      "evidence": [
+        "H3_CBUFFER",
+        "REACH_TERRAIN",
+        "PAIRED_TERRAIN",
+        "SOURCE",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "foliage.native_cutout",
+      "meaning": "Native foliage texture alpha test; approximate diffuse lighting with Reach flat foliage, retain unused back_light recipe and freeze wind separately",
+      "evidence": [
+        "REACH_FOLIAGE",
+        "H3_ART",
+        "SOURCE",
+        "KIT_HLSL"
+      ]
+    },
+    {
+      "id": "bitmap.single_cube",
+      "meaning": "Decode one BC1/BC3 cube as six faces, retain all source mip resources and cube identity",
+      "evidence": [
+        "H3_CUBE",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "lighting.material_properties",
+      "meaning": "Absent imported index is not an index into another row; recover authored material properties by source identity",
+      "evidence": [
+        "H3_ART",
+        "REACH_FACES",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "lighting.dynamic_placements",
+      "meaning": "Separate documented dynamic .light objects from BSP-owned static bake definitions and instances",
+      "evidence": [
+        "H3_LIGHT",
+        "REACH_LIGHTING",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "lighting.emissive_frustum",
+      "meaning": "Preserve nonzero source power/color/distances; approximate the frustum with a documented solid-angle cone through native Reach focus",
+      "evidence": [
+        "REACH_LIGHTING",
+        "REACH_EMISSIVE_SPREAD",
+        "SOURCE"
+      ]
+    },
+    {
+      "id": "seam.inactive_neighbor",
+      "meaning": "Retain scenario-global seam ownership and source geometry; native activation follows zone membership, while the bounded build preserves existing extant source collision",
+      "evidence": [
+        "H3_ART",
+        "H3_REACH_SEAM_ACTIVATION",
+        "SOURCE",
+        "REACH_GLOBAL_SEAM_OWNERSHIP"
+      ]
+    },
+    {
+      "id": "source.unknown",
+      "meaning": "Unrecognized source semantics and missing original records remain blocking",
+      "evidence": [
+        "SOURCE"
+      ]
+    }
+  ]
+}

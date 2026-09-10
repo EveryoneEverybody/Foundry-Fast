@@ -1,0 +1,2827 @@
+{
+  "format": "foundry.render-skinning-regression",
+  "version": 1,
+  "source_render_model": "objects/levels/solo/040_voi/voi_door_arms_new/voi_door_arms_new.render_model",
+  "source_sha256": "97a9b805ce9b09f75ac4c4fe231a28c67215b6adda2469f43a41f4a887aeda26",
+  "ir_sha256": "585cc0b521b53597594d3c9966696c2a6a383b82745c06108ca904bc6868c6ff",
+  "manual_archive_sha256": "dc7ee5fa2b860a9724d6bfd4de8d674b30b322858ae3e0784dbdb17efe5a5212",
+  "baseline_head": "bbb7ac23c96e43089d852442a89c4e0aa156ddc8",
+  "provenance": "Source corners from the pinned H3 IR, captured at VirtualMesh render welding; indices are zero-based. No spatial side rule or weight reassignment.",
+  "expected_legacy_wrong_corners": 24,
+  "manual_owner_change_vertices": [
+    6,
+    38,
+    43,
+    45,
+    50,
+    131,
+    146,
+    384,
+    747,
+    748,
+    755,
+    756
+  ],
+  "bone_bindings": [
+    "anim_voi_door_arms_a_01",
+    "anim_voi_door_arms_a_02",
+    "anim_voi_door_arms_roller_dup3",
+    "anim_voi_door_arms_roller_dup4",
+    "anim_voi_door_arms_roller_dup5",
+    "anim_voi_door_arms_slider_dup1",
+    "anim_voi_door_arms_slider_dup2",
+    "anim_voi_door_arms_roller",
+    "anim_voi_door_arms_roller_dup1",
+    "anim_voi_door_arms_roller_dup2",
+    "anim_voi_door_arms_slider",
+    "voi_door_arms_slider_a_04"
+  ],
+  "corners": [
+    {
+      "source": {
+        "triangle": 699,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1233,
+        "ir_vertex": 2098
+      },
+      "position": [
+        -2.000035285949707,
+        0.0005006790161132812,
+        42.99995803833008
+      ],
+      "normal": [
+        -3.3908322620845865e-06,
+        6.467499604444205e-13,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 764,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1320,
+        "ir_vertex": 2294
+      },
+      "position": [
+        2.000068187713623,
+        0.0005006790161132812,
+        -3.4875938581535593e-06
+      ],
+      "normal": [
+        1.0,
+        -2.591091856629646e-07,
+        0.0
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 766,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1322,
+        "ir_vertex": 2300
+      },
+      "position": [
+        2.0000696182250977,
+        0.0005006790161132812,
+        42.99995803833008
+      ],
+      "normal": [
+        1.0,
+        -2.1291239704623877e-07,
+        -3.3267742338694006e-08
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 767,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1324,
+        "ir_vertex": 2302
+      },
+      "position": [
+        -2.0000360012054443,
+        0.0005006790161132812,
+        -3.427976480452344e-06
+      ],
+      "normal": [
+        -1.0,
+        1.79936932909186e-07,
+        0.0
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 769,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1325,
+        "ir_vertex": 2308
+      },
+      "position": [
+        -2.000035285949707,
+        0.0005006790161132812,
+        42.99995803833008
+      ],
+      "normal": [
+        -1.0,
+        2.1291239704623877e-07,
+        1.6633871169347003e-08
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 772,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1329,
+        "ir_vertex": 2317
+      },
+      "position": [
+        1.9371509552001953e-05,
+        0.0004887580871582031,
+        210.00001525878906
+      ],
+      "normal": [
+        7.539978469139896e-06,
+        -3.433228584981407e-06,
+        1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 786,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1352,
+        "ir_vertex": 2358
+      },
+      "position": [
+        1.6391277313232422e-05,
+        0.0005006790161132812,
+        -3.4577624319354072e-06
+      ],
+      "normal": [
+        -1.4900774836235087e-08,
+        -2.911687943196739e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 786,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1353,
+        "ir_vertex": 2359
+      },
+      "position": [
+        -2.0000360012054443,
+        0.0005006790161132812,
+        -3.427976480452344e-06
+      ],
+      "normal": [
+        -1.4900774836235087e-08,
+        -2.911687943196739e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 793,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1363,
+        "ir_vertex": 2381
+      },
+      "position": [
+        2.0000696182250977,
+        0.0005006790161132812,
+        42.99995803833008
+      ],
+      "normal": [
+        3.3908327168319374e-06,
+        -6.467500146545291e-13,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 796,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1367,
+        "ir_vertex": 2390
+      },
+      "position": [
+        2.000068187713623,
+        0.0005006790161132812,
+        -3.4875938581535593e-06
+      ],
+      "normal": [
+        -1.4900777500770346e-08,
+        -2.9116872610757127e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1069,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1683,
+        "ir_vertex": 3208
+      },
+      "position": [
+        -11.000001907348633,
+        -8.999549865722656,
+        42.99999237060547
+      ],
+      "normal": [
+        -6.458731149905361e-07,
+        1.0899080962190055e-06,
+        -1.0
+      ],
+      "uv": [
+        0.07335770130157471,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1069,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1682,
+        "ir_vertex": 3209
+      },
+      "position": [
+        -2.000028610229492,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        -6.458731149905361e-07,
+        1.0899080962190055e-06,
+        -1.0
+      ],
+      "uv": [
+        0.009070992469787598,
+        0.1611793041229248,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1070,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1682,
+        "ir_vertex": 3210
+      },
+      "position": [
+        -2.000028610229492,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        -2.7126668555865763e-06,
+        2.1558339694579404e-13,
+        -1.0
+      ],
+      "uv": [
+        0.009070992469787598,
+        0.1611793041229248,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1070,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1683,
+        "ir_vertex": 3211
+      },
+      "position": [
+        -11.000001907348633,
+        -8.999549865722656,
+        42.99999237060547
+      ],
+      "normal": [
+        -2.7126668555865763e-06,
+        2.1558339694579404e-13,
+        -1.0
+      ],
+      "uv": [
+        0.07335770130157471,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1070,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1684,
+        "ir_vertex": 3212
+      },
+      "position": [
+        -2.0000271797180176,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        -2.7126668555865763e-06,
+        2.1558339694579404e-13,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 146,
+      "corrected_native_vertex": 146
+    },
+    {
+      "source": {
+        "triangle": 1071,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1683,
+        "ir_vertex": 3213
+      },
+      "position": [
+        -11.000001907348633,
+        -8.999549865722656,
+        42.99999237060547
+      ],
+      "normal": [
+        -2.4322245735675097e-05,
+        2.0486551875364967e-05,
+        -1.0
+      ],
+      "uv": [
+        0.07335770130157471,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1071,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1685,
+        "ir_vertex": 3214
+      },
+      "position": [
+        -12.951776504516602,
+        -8.999549865722656,
+        43.000038146972656
+      ],
+      "normal": [
+        -2.4322245735675097e-05,
+        2.0486551875364967e-05,
+        -1.0
+      ],
+      "uv": [
+        0.08729898929595947,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1071,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1684,
+        "ir_vertex": 3215
+      },
+      "position": [
+        -2.0000271797180176,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        -2.4322245735675097e-05,
+        2.0486551875364967e-05,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 146,
+      "corrected_native_vertex": 146
+    },
+    {
+      "source": {
+        "triangle": 1072,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1684,
+        "ir_vertex": 3216
+      },
+      "position": [
+        -2.0000271797180176,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        -7.4308727562311105e-06,
+        1.1811054521568276e-12,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 146,
+      "corrected_native_vertex": 146
+    },
+    {
+      "source": {
+        "triangle": 1072,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1685,
+        "ir_vertex": 3217
+      },
+      "position": [
+        -12.951776504516602,
+        -8.999549865722656,
+        43.000038146972656
+      ],
+      "normal": [
+        -7.4308727562311105e-06,
+        1.1811054521568276e-12,
+        -1.0
+      ],
+      "uv": [
+        0.08729898929595947,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1072,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1686,
+        "ir_vertex": 3218
+      },
+      "position": [
+        -12.951774597167969,
+        0.00035762786865234375,
+        43.000038146972656
+      ],
+      "normal": [
+        -7.4308727562311105e-06,
+        1.1811054521568276e-12,
+        -1.0
+      ],
+      "uv": [
+        0.08729898929595947,
+        0.007137417793273926,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1073,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1687,
+        "ir_vertex": 3219
+      },
+      "position": [
+        -2.0000271797180176,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        -1.0,
+        7.097079901541292e-08,
+        -1.6633867616633324e-08
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 43,
+      "corrected_native_vertex": 43
+    },
+    {
+      "source": {
+        "triangle": 1073,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1689,
+        "ir_vertex": 3220
+      },
+      "position": [
+        -2.0000264644622803,
+        0.0005006790161132812,
+        4.141838871873915e-06
+      ],
+      "normal": [
+        -1.0,
+        7.097079901541292e-08,
+        -1.6633867616633324e-08
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 38,
+      "corrected_native_vertex": 38
+    },
+    {
+      "source": {
+        "triangle": 1073,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1688,
+        "ir_vertex": 3221
+      },
+      "position": [
+        -2.000028610229492,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        -1.0,
+        7.097079901541292e-08,
+        -1.6633867616633324e-08
+      ],
+      "uv": [
+        0.40388667583465576,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1074,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1688,
+        "ir_vertex": 3222
+      },
+      "position": [
+        -2.000028610229492,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        -1.0,
+        5.452802298577808e-08,
+        -3.833889206106278e-09
+      ],
+      "uv": [
+        0.40388667583465576,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1074,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1689,
+        "ir_vertex": 3223
+      },
+      "position": [
+        -2.0000264644622803,
+        0.0005006790161132812,
+        4.141838871873915e-06
+      ],
+      "normal": [
+        -1.0,
+        5.452802298577808e-08,
+        -3.833889206106278e-09
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 38,
+      "corrected_native_vertex": 38
+    },
+    {
+      "source": {
+        "triangle": 1074,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1690,
+        "ir_vertex": 3224
+      },
+      "position": [
+        -2.000030040740967,
+        -52.99967575073242,
+        19.999967575073242
+      ],
+      "normal": [
+        -1.0,
+        5.452802298577808e-08,
+        -3.833889206106278e-09
+      ],
+      "uv": [
+        0.5087568759918213,
+        0.8999769687652588,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1075,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1689,
+        "ir_vertex": 3225
+      },
+      "position": [
+        -2.0000264644622803,
+        0.0005006790161132812,
+        4.141838871873915e-06
+      ],
+      "normal": [
+        -1.0,
+        7.917222433206916e-08,
+        0.0
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 38,
+      "corrected_native_vertex": 38
+    },
+    {
+      "source": {
+        "triangle": 1075,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1691,
+        "ir_vertex": 3226
+      },
+      "position": [
+        -2.000030040740967,
+        -52.99967575073242,
+        -0.00015370621986221522
+      ],
+      "normal": [
+        -1.0,
+        7.917222433206916e-08,
+        0.0
+      ],
+      "uv": [
+        0.5087568759918213,
+        0.9941750764846802,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1075,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1690,
+        "ir_vertex": 3227
+      },
+      "position": [
+        -2.000030040740967,
+        -52.99967575073242,
+        19.999967575073242
+      ],
+      "normal": [
+        -1.0,
+        7.917222433206916e-08,
+        0.0
+      ],
+      "uv": [
+        0.5087568759918213,
+        0.8999769687652588,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1136,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1760,
+        "ir_vertex": 3408
+      },
+      "position": [
+        2.0000786781311035,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        1.0,
+        -4.731386482603739e-08,
+        3.326773878598033e-08
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 50,
+      "corrected_native_vertex": 50
+    },
+    {
+      "source": {
+        "triangle": 1136,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1761,
+        "ir_vertex": 3409
+      },
+      "position": [
+        2.00007700920105,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        1.0,
+        -4.731386482603739e-08,
+        3.326773878598033e-08
+      ],
+      "uv": [
+        0.40388667583465576,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1136,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1762,
+        "ir_vertex": 3410
+      },
+      "position": [
+        2.000080108642578,
+        0.0005006790161132812,
+        4.201410774840042e-06
+      ],
+      "normal": [
+        1.0,
+        -4.731386482603739e-08,
+        3.326773878598033e-08
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 45,
+      "corrected_native_vertex": 45
+    },
+    {
+      "source": {
+        "triangle": 1137,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1761,
+        "ir_vertex": 3411
+      },
+      "position": [
+        2.00007700920105,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        1.0,
+        -4.544002152329085e-08,
+        4.2458044191562294e-08
+      ],
+      "uv": [
+        0.40388667583465576,
+        0.791649580001831,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1137,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1763,
+        "ir_vertex": 3412
+      },
+      "position": [
+        2.00007700920105,
+        -52.99967575073242,
+        19.999967575073242
+      ],
+      "normal": [
+        1.0,
+        -4.544002152329085e-08,
+        4.2458044191562294e-08
+      ],
+      "uv": [
+        0.5087568759918213,
+        0.8999769687652588,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1137,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1762,
+        "ir_vertex": 3413
+      },
+      "position": [
+        2.000080108642578,
+        0.0005006790161132812,
+        4.201410774840042e-06
+      ],
+      "normal": [
+        1.0,
+        -4.544002152329085e-08,
+        4.2458044191562294e-08
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 45,
+      "corrected_native_vertex": 45
+    },
+    {
+      "source": {
+        "triangle": 1138,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1762,
+        "ir_vertex": 3414
+      },
+      "position": [
+        2.000080108642578,
+        0.0005006790161132812,
+        4.201410774840042e-06
+      ],
+      "normal": [
+        1.0,
+        -5.757980048315403e-08,
+        0.0
+      ],
+      "uv": [
+        0.26709890365600586,
+        0.9941742420196533,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 45,
+      "corrected_native_vertex": 45
+    },
+    {
+      "source": {
+        "triangle": 1138,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1763,
+        "ir_vertex": 3415
+      },
+      "position": [
+        2.00007700920105,
+        -52.99967575073242,
+        19.999967575073242
+      ],
+      "normal": [
+        1.0,
+        -5.757980048315403e-08,
+        0.0
+      ],
+      "uv": [
+        0.5087568759918213,
+        0.8999769687652588,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1138,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1764,
+        "ir_vertex": 3416
+      },
+      "position": [
+        2.00007700920105,
+        -52.99967575073242,
+        -0.0001536466006655246
+      ],
+      "normal": [
+        1.0,
+        -5.757980048315403e-08,
+        0.0
+      ],
+      "uv": [
+        0.5087568759918213,
+        0.9941750764846802,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1144,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1773,
+        "ir_vertex": 3433
+      },
+      "position": [
+        2.00007700920105,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        6.458728876168607e-07,
+        1.089907527784817e-06,
+        -1.0
+      ],
+      "uv": [
+        0.009070992469787598,
+        0.1611793041229248,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1144,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1774,
+        "ir_vertex": 3434
+      },
+      "position": [
+        11.000052452087402,
+        -8.999549865722656,
+        42.99999237060547
+      ],
+      "normal": [
+        6.458728876168607e-07,
+        1.089907527784817e-06,
+        -1.0
+      ],
+      "uv": [
+        0.07335770130157471,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1145,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1773,
+        "ir_vertex": 3435
+      },
+      "position": [
+        2.00007700920105,
+        -29.99966049194336,
+        42.99996566772461
+      ],
+      "normal": [
+        2.712667310333927e-06,
+        -2.1558342405084835e-13,
+        -1.0
+      ],
+      "uv": [
+        0.009070992469787598,
+        0.1611793041229248,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1145,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1775,
+        "ir_vertex": 3436
+      },
+      "position": [
+        2.0000786781311035,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        2.712667310333927e-06,
+        -2.1558342405084835e-13,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 131,
+      "corrected_native_vertex": 131
+    },
+    {
+      "source": {
+        "triangle": 1145,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1774,
+        "ir_vertex": 3437
+      },
+      "position": [
+        11.000052452087402,
+        -8.999549865722656,
+        42.99999237060547
+      ],
+      "normal": [
+        2.712667310333927e-06,
+        -2.1558342405084835e-13,
+        -1.0
+      ],
+      "uv": [
+        0.07335770130157471,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1146,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1774,
+        "ir_vertex": 3438
+      },
+      "position": [
+        11.000052452087402,
+        -8.999549865722656,
+        42.99999237060547
+      ],
+      "normal": [
+        2.4322212993865833e-05,
+        2.0486524590523914e-05,
+        -1.0
+      ],
+      "uv": [
+        0.07335770130157471,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1146,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1775,
+        "ir_vertex": 3439
+      },
+      "position": [
+        2.0000786781311035,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        2.4322212993865833e-05,
+        2.0486524590523914e-05,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 131,
+      "corrected_native_vertex": 131
+    },
+    {
+      "source": {
+        "triangle": 1146,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1776,
+        "ir_vertex": 3440
+      },
+      "position": [
+        12.951828956604004,
+        -8.999549865722656,
+        43.000038146972656
+      ],
+      "normal": [
+        2.4322212993865833e-05,
+        2.0486524590523914e-05,
+        -1.0
+      ],
+      "uv": [
+        0.08729898929595947,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1147,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1775,
+        "ir_vertex": 3441
+      },
+      "position": [
+        2.0000786781311035,
+        0.0005006790161132812,
+        42.99996566772461
+      ],
+      "normal": [
+        7.430871846736409e-06,
+        0.0,
+        -1.0
+      ],
+      "uv": [
+        0.009070873260498047,
+        0.0071372389793396,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 131,
+      "corrected_native_vertex": 131
+    },
+    {
+      "source": {
+        "triangle": 1147,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1777,
+        "ir_vertex": 3442
+      },
+      "position": [
+        12.951828956604004,
+        0.00035762786865234375,
+        43.000038146972656
+      ],
+      "normal": [
+        7.430871846736409e-06,
+        0.0,
+        -1.0
+      ],
+      "uv": [
+        0.08729898929595947,
+        0.007137417793273926,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1147,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1776,
+        "ir_vertex": 3443
+      },
+      "position": [
+        12.951828956604004,
+        -8.999549865722656,
+        43.000038146972656
+      ],
+      "normal": [
+        7.430871846736409e-06,
+        0.0,
+        -1.0
+      ],
+      "uv": [
+        0.08729898929595947,
+        0.08701121807098389,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1158,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1796,
+        "ir_vertex": 3474
+      },
+      "position": [
+        2.5331974029541016e-05,
+        0.0005006790161132812,
+        4.171624823356979e-06
+      ],
+      "normal": [
+        1.4877472587215834e-08,
+        2.9116877158230636e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 755,
+      "corrected_native_vertex": 755
+    },
+    {
+      "source": {
+        "triangle": 1158,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1797,
+        "ir_vertex": 3475
+      },
+      "position": [
+        2.000080108642578,
+        0.0005006790161132812,
+        4.201410774840042e-06
+      ],
+      "normal": [
+        1.4877472587215834e-08,
+        2.9116877158230636e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 756,
+      "corrected_native_vertex": 756
+    },
+    {
+      "source": {
+        "triangle": 1158,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1798,
+        "ir_vertex": 3476
+      },
+      "position": [
+        1.6391277313232422e-05,
+        -159.99948120117188,
+        -0.00046169833512976766
+      ],
+      "normal": [
+        1.4877472587215834e-08,
+        2.9116877158230636e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1159,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1797,
+        "ir_vertex": 3477
+      },
+      "position": [
+        2.000080108642578,
+        0.0005006790161132812,
+        4.201410774840042e-06
+      ],
+      "normal": [
+        -5.310274445946561e-06,
+        2.9782556794089032e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 756,
+      "corrected_native_vertex": 756
+    },
+    {
+      "source": {
+        "triangle": 1159,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1799,
+        "ir_vertex": 3478
+      },
+      "position": [
+        2.00007700920105,
+        -52.99967575073242,
+        -0.0001536466006655246
+      ],
+      "normal": [
+        -5.310274445946561e-06,
+        2.9782556794089032e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0887140035629272,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1159,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1798,
+        "ir_vertex": 3479
+      },
+      "position": [
+        1.6391277313232422e-05,
+        -159.99948120117188,
+        -0.00046169833512976766
+      ],
+      "normal": [
+        -5.310274445946561e-06,
+        2.9782556794089032e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1164,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1804,
+        "ir_vertex": 3492
+      },
+      "position": [
+        2.5331974029541016e-05,
+        0.0005006790161132812,
+        4.171624823356979e-06
+      ],
+      "normal": [
+        1.4900775724413506e-08,
+        2.9116872610757127e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 747,
+      "corrected_native_vertex": 747
+    },
+    {
+      "source": {
+        "triangle": 1164,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1806,
+        "ir_vertex": 3493
+      },
+      "position": [
+        1.6391277313232422e-05,
+        -159.99948120117188,
+        -0.00046169833512976766
+      ],
+      "normal": [
+        1.4900775724413506e-08,
+        2.9116872610757127e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1164,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1805,
+        "ir_vertex": 3494
+      },
+      "position": [
+        -2.0000264644622803,
+        0.0005006790161132812,
+        4.141838871873915e-06
+      ],
+      "normal": [
+        1.4900775724413506e-08,
+        2.9116872610757127e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 748,
+      "corrected_native_vertex": 748
+    },
+    {
+      "source": {
+        "triangle": 1165,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1805,
+        "ir_vertex": 3495
+      },
+      "position": [
+        -2.0000264644622803,
+        0.0005006790161132812,
+        4.141838871873915e-06
+      ],
+      "normal": [
+        5.340147708920995e-06,
+        2.978254997287877e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 748,
+      "corrected_native_vertex": 748
+    },
+    {
+      "source": {
+        "triangle": 1165,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1806,
+        "ir_vertex": 3496
+      },
+      "position": [
+        1.6391277313232422e-05,
+        -159.99948120117188,
+        -0.00046169833512976766
+      ],
+      "normal": [
+        5.340147708920995e-06,
+        2.978254997287877e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1165,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1807,
+        "ir_vertex": 3497
+      },
+      "position": [
+        -2.000030040740967,
+        -52.99967575073242,
+        -0.00015370621986221522
+      ],
+      "normal": [
+        5.340147708920995e-06,
+        2.978254997287877e-06,
+        -1.0
+      ],
+      "uv": [
+        1.0887140035629272,
+        0.263624906539917,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1233,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1877,
+        "ir_vertex": 3699
+      },
+      "position": [
+        -12.951777458190918,
+        0.00035762786865234375,
+        210.00006103515625
+      ],
+      "normal": [
+        3.76999014406465e-06,
+        3.433228130234056e-06,
+        1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.26348161697387695,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1233,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1879,
+        "ir_vertex": 3700
+      },
+      "position": [
+        -12.951848983764648,
+        -159.99954223632812,
+        210.0006103515625
+      ],
+      "normal": [
+        3.76999014406465e-06,
+        3.433228130234056e-06,
+        1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.26348161697387695,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1233,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1878,
+        "ir_vertex": 3701
+      },
+      "position": [
+        2.2351741790771484e-05,
+        0.0005006790161132812,
+        210.00001525878906
+      ],
+      "normal": [
+        3.76999014406465e-06,
+        3.433228130234056e-06,
+        1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 384,
+      "corrected_native_vertex": 384
+    },
+    {
+      "source": {
+        "triangle": 1234,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1878,
+        "ir_vertex": 3702
+      },
+      "position": [
+        2.2351741790771484e-05,
+        0.0005006790161132812,
+        210.00001525878906
+      ],
+      "normal": [
+        -2.058759673673194e-05,
+        5.054474513599416e-06,
+        1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 384,
+      "corrected_native_vertex": 384
+    },
+    {
+      "source": {
+        "triangle": 1234,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1879,
+        "ir_vertex": 3703
+      },
+      "position": [
+        -12.951848983764648,
+        -159.99954223632812,
+        210.0006103515625
+      ],
+      "normal": [
+        -2.058759673673194e-05,
+        5.054474513599416e-06,
+        1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.26348161697387695,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1234,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1880,
+        "ir_vertex": 3704
+      },
+      "position": [
+        1.4901161193847656e-05,
+        -159.99949645996094,
+        210.00082397460938
+      ],
+      "normal": [
+        -2.058759673673194e-05,
+        5.054474513599416e-06,
+        1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1235,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1881,
+        "ir_vertex": 3705
+      },
+      "position": [
+        1.4901161193847656e-05,
+        -159.99949645996094,
+        210.00082397460938
+      ],
+      "normal": [
+        1.8849850675906055e-05,
+        5.054474058852065e-06,
+        1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1235,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1883,
+        "ir_vertex": 3706
+      },
+      "position": [
+        12.951876640319824,
+        -159.99954223632812,
+        210.0006103515625
+      ],
+      "normal": [
+        1.8849850675906055e-05,
+        5.054474058852065e-06,
+        1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.26348161697387695,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1235,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1882,
+        "ir_vertex": 3707
+      },
+      "position": [
+        2.2351741790771484e-05,
+        0.0005006790161132812,
+        210.00001525878906
+      ],
+      "normal": [
+        1.8849850675906055e-05,
+        5.054474058852065e-06,
+        1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 6,
+      "corrected_native_vertex": 6
+    },
+    {
+      "source": {
+        "triangle": 1236,
+        "corner": 0,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1882,
+        "ir_vertex": 3708
+      },
+      "position": [
+        2.2351741790771484e-05,
+        0.0005006790161132812,
+        210.00001525878906
+      ],
+      "normal": [
+        -3.7699887798225973e-06,
+        3.433228130234056e-06,
+        1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.2636510133743286,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ],
+      "bad_native_and_manual_vertex": 6,
+      "corrected_native_vertex": 6
+    },
+    {
+      "source": {
+        "triangle": 1236,
+        "corner": 1,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1883,
+        "ir_vertex": 3709
+      },
+      "position": [
+        12.951876640319824,
+        -159.99954223632812,
+        210.0006103515625
+      ],
+      "normal": [
+        -3.7699887798225973e-06,
+        3.433228130234056e-06,
+        1.0
+      ],
+      "uv": [
+        1.0880204439163208,
+        0.26348161697387695,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "source": {
+        "triangle": 1236,
+        "corner": 2,
+        "source_mesh": 0,
+        "source_part": 1,
+        "source_vertex": 1884,
+        "ir_vertex": 3710
+      },
+      "position": [
+        12.951825141906738,
+        0.00035762786865234375,
+        210.00006103515625
+      ],
+      "normal": [
+        -3.7699887798225973e-06,
+        3.433228130234056e-06,
+        1.0
+      ],
+      "uv": [
+        1.0901142358779907,
+        0.26348161697387695,
+        0.0
+      ],
+      "bone_indices": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "bone_weights": [
+        255,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

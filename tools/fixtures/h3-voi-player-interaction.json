@@ -1,0 +1,112 @@
+{
+  "main_scenario": "levels/h3_port/040_voi/full_scenario/full_scenario.scenario",
+  "main_sha256": "ac7fa7442d4115c08a679050b33b520b0db6d6e6a0f4d4c440a970e2c32b7644",
+  "initial_zone": "intro",
+  "initial_flag": "diag_intro",
+  "anchors": [
+    {
+      "id": "factory_a_entry02_switch",
+      "family": "controls",
+      "source_index": 0,
+      "native_index": 0,
+      "position": [
+        -4.35,
+        -99.2,
+        1.1
+      ]
+    },
+    {
+      "id": "factory_a_entry02",
+      "family": "machines",
+      "source_index": 41,
+      "native_index": 13,
+      "position": [
+        -4.25,
+        -100.5,
+        -1.5
+      ]
+    },
+    {
+      "id": "cinderblock_882",
+      "family": "crates",
+      "source_index": 882,
+      "native_index": 379,
+      "position": [
+        24.3655,
+        -99.4547,
+        -1.28459
+      ]
+    }
+  ],
+  "flags": [
+    {
+      "name": "diag_switch",
+      "position": [
+        -4.35,
+        -100.3,
+        1.2
+      ],
+      "facing_degrees": 90,
+      "basis": "DIAGNOSTIC_OFFSET from native control 0: [0,-1.1,+0.1]; actual-player survival and interaction prompt verified after source startup kill-volume initialization.",
+      "zone": "intro_faa"
+    },
+    {
+      "name": "diag_door",
+      "position": [
+        -3.0,
+        -100.5,
+        -1.35
+      ],
+      "facing_degrees": 180,
+      "basis": "DIAGNOSTIC_OFFSET from native machine 13: [+1.25,0,+0.15]; player collision pending.",
+      "zone": "intro_faa"
+    },
+    {
+      "name": "diag_crate",
+      "position": [
+        24.3655,
+        -98.4547,
+        -1.15
+      ],
+      "facing_degrees": -90,
+      "basis": "DIAGNOSTIC_OFFSET from source crate 882/native 379: [0,+1,+0.13459]; player collision pending.",
+      "zone": "intro_faa"
+    },
+    {
+      "name": "diag_source_factorya",
+      "position": [
+        -10.2022,
+        -108.0,
+        -1.49976
+      ],
+      "facing_degrees": 99.3396,
+      "basis": "Exact H3 authored teleport_factorya_player0 source cutscene flag 19, environment.plan.json selection.spawn.",
+      "zone": "intro_faa"
+    },
+    {
+      "name": "diag_intro",
+      "position": [
+        3.92253,
+        -240.486,
+        -2.43752
+      ],
+      "facing_degrees": 98.7094,
+      "basis": "Exact native main player start 0; positive control for copied-scenario spawn.",
+      "zone": "intro"
+    }
+  ],
+  "disabled_kill_volumes": [
+    {
+      "name": "kill_all_lakebed_a",
+      "source_script": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_line": 4128,
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04"
+    },
+    {
+      "name": "kill_bfg_cin_start",
+      "source_script": "levels/solo/040_voi/scripts/040_voi_mission.hsc",
+      "source_line": 4129,
+      "source_sha256": "cb95588b12dfa128597f5c91032f59420e006d8c7c3006d2738a8434f1dcff04"
+    }
+  ]
+}

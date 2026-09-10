@@ -60,6 +60,7 @@ class PreferenceTests(unittest.TestCase):
             'bpy': SimpleNamespace(path=SimpleNamespace(abspath=lambda p: p)),
             'utils': SimpleNamespace(get_prefs=lambda: self.prefs, get_tags_path=lambda: str(self.destination)),
             'find_tags_root': core.find_tags_root,
+            'resolve_tags_root': core.resolve_tags_root,
             '_bundled_helper_path': lambda: self.helper,
             'ImportHelper': SimpleNamespace(invoke=self.invoke_base),
         }
@@ -68,6 +69,24 @@ class PreferenceTests(unittest.TestCase):
     def test_automatic_paths_without_project_xml(self):
         self.assertEqual(self.ns['_source_paths'](self.source), (self.root, self.helper))
         self.assertFalse((self.root.parent / 'project.xml').exists())
+
+    def test_kit_root_resolves_scenario_and_bsp_from_same_tags_directory(self):
+        self.prefs.h3_tags_root = str(self.root.parent)
+        scenario = self.root / 'levels/040_voi/040_voi.scenario'
+        scenario.parent.mkdir(parents=True)
+        scenario.touch()
+        bsp = scenario.with_name('040_bsp_000.scenario_structure_bsp')
+        bsp.touch()
+        root, _ = self.ns['_source_paths'](scenario)
+        self.assertEqual(root, self.root)
+        self.assertEqual(scenario.relative_to(root).as_posix(), 'levels/040_voi/040_voi.scenario')
+        self.assertEqual(root / 'levels/040_voi/040_bsp_000.scenario_structure_bsp', bsp)
+
+    def test_normalized_root_still_rejects_active_reach_tags(self):
+        self.prefs.h3_tags_root = str(self.root.parent)
+        self.ns['utils'].get_tags_path = lambda: str(self.root)
+        with self.assertRaisesRegex(ValueError, 'must be different'):
+            self.ns['_source_paths'](self.source)
 
     def test_saved_directory_with_nonstandard_name(self):
         custom = self.base / 'source_assets'

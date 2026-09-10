@@ -1,0 +1,76 @@
+name: Test H3 portability census prototype
+
+on:
+  push:
+    branches: ["feature/h3-scenario-inspection"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      FOUNDRY_FAST_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select isolated build directory
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('CARGO_TARGET_DIR=' + str(Path(os.environ['RUNNER_TEMP']) / 'h3-port-census-build') + '\n')
+      - name: Test parser, graph, read-only CLI, schema and existing helper code
+        run: cargo test --locked --release --manifest-path tools/h3_object_bridge/Cargo.toml
+      - name: Build census helper
+        run: cargo build --locked --release --manifest-path tools/h3_object_bridge/Cargo.toml --bin h3-scenario-inspect
+      - name: Validate the published JSON Schema
+        shell: python
+        run: |
+          import json, subprocess, sys
+          from pathlib import Path
+          subprocess.run([sys.executable, '-m', 'pip', 'install', 'jsonschema'], check=True)
+          from jsonschema import Draft202012Validator
+          Draft202012Validator.check_schema(json.loads(Path('tools/h3_object_bridge/data/port_census.schema.json').read_bytes()))
+      - name: Validate existing pure H3 import logic
+        shell: python
+        run: |
+          import subprocess, sys
+          for pattern in ('test_h3_scenario*.py', 'test_h3_import*.py'):
+              subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', pattern], check=True)
+      - name: Package standalone Windows prototype
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib, json, os, shutil, subprocess, zipfile
+          stage = Path(os.environ['RUNNER_TEMP']) / 'H3-port-census-1.9.47'
+          stage.mkdir()
+          exe = Path(os.environ['CARGO_TARGET_DIR']) / 'release/h3-scenario-inspect.exe'
+          subprocess.run([str(exe), 'port-census', '--help'], check=True)
+          shutil.copy2(exe, stage / exe.name)
+          shutil.copy2('docs/h3-port-census.md', stage / 'README.md')
+          shutil.copy2('tools/h3_object_bridge/data/port_census.schema.json', stage / 'port_census.schema.json')
+          shutil.copy2('LICENSE', stage / 'LICENSE')
+          for name in ('hsc_compatibility.json', 'hsc_context_reviews.json', 'hsc_signatures.json'):
+              shutil.copy2(Path('tools/h3_object_bridge/data') / name, stage / name)
+          shutil.copy2('docs/h3-hsc-compatibility.md', stage / 'HSC-COMPATIBILITY.md')
+          files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(stage.iterdir())}
+          (stage / 'build.json').write_text(json.dumps({'checkpoint':'h3-port-census-1.9.47','commit':os.environ['GITHUB_SHA'],'sha256':files},indent=2))
+          archive = Path('H3-port-census-1.9.47-windows.zip')
+          with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
+              for p in sorted(stage.iterdir()): z.write(p, p.name)
+          Path('H3-port-census-1.9.47-windows.sha256').write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + '  ' + archive.name + '\n')
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: H3-port-census-1.9.47-windows
+          path: |
+            H3-port-census-1.9.47-windows.zip
+            H3-port-census-1.9.47-windows.sha256
+          if-no-files-found: error

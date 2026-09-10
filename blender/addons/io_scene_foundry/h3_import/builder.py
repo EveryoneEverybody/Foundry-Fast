@@ -12,7 +12,8 @@ from .volume_display import configure_material, configure_object
 
 
 class BuildSession:
-    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True):
+    def __init__(self, context, payload, source_path, reference_only=True, preview_materials=False, flip_normal_green=True, *, source_axes=False, variant=None, emit_warnings=True, shared_preview=None):
+        self.shared_preview = shared_preview
         self.context = context
         self.payload = payload
         self.source_path = str(source_path)
@@ -20,6 +21,12 @@ class BuildSession:
         self.settings = utils.get_scene_props()
         self.scale = import_transform.scale_factor(self.settings)
         self.rotation = import_transform.rotation_matrix(self.settings)
+        self.source_axes = source_axes
+        if source_axes:
+            self.rotation = Matrix.Identity(4)
+        self.variant = variant
+        self.emit_warnings = emit_warnings
+        self.variant_regions = None
         self.created = []
         self.warnings = list(payload.get("warnings", []))
         self.armature = None
@@ -27,6 +34,10 @@ class BuildSession:
         self.flip_normal_green = flip_normal_green
         self.render_materials = []
         self.physics_material = None
+        if variant is not None:
+            from .scenario_objects import variant_regions
+            self.variant_regions, warnings = variant_regions(payload, variant)
+            self.warnings.extend(warnings)
 
     def remember(self, store, value):
         self.created.append((store, value))
@@ -92,13 +103,34 @@ class BuildSession:
             ob.parent = self.armature
             ob.parent_type = 'BONE'
             ob.parent_bone = node
+            if self.source_axes:
+                # Fresh source templates have rest-pose bones and an identity
+                # armature object. Blender's ordinary bone parent is at its tail.
+                # Set the local basis directly, avoiding one full-scene depsgraph
+                # evaluation per marker while preserving the same world matrix.
+                bone = self.armature.data.bones[node]
+                parent = self.armature.matrix_world @ bone.matrix_local @ Matrix.Translation((0., bone.length, 0.))
+                ob.matrix_parent_inverse = Matrix.Identity(4)
+                ob.matrix_basis = parent.inverted_safe() @ matrix
+                return
             self.context.view_layer.update()
         ob.matrix_world = matrix
 
     def materials(self, mesh, role):
         materials = []
         for slot, source in enumerate(mesh["materials"]):
-            material = self.remember(bpy.data.materials, bpy.data.materials.new(f"H3 {source['name']}"))
+            shared_key = None
+            if role == 'render' and self.shared_preview:
+                candidates = shader_candidates(source['name'], self.payload.get('shader_paths', []))
+                shared_key = candidates[0] if len(candidates) == 1 else None
+                self.shared_preview.usage.append(dict(source_tag=self.payload['source_tag'], slot=slot, record=source, shader=shared_key))
+                if shared_key in self.shared_preview.materials:
+                    material = self.shared_preview.materials[shared_key]
+                    materials.append(material)
+                    self.render_materials.append(material)
+                    continue
+            remember = self.shared_preview.remember if shared_key else self.remember
+            material = remember(bpy.data.materials, bpy.data.materials.new(f"H3 {source['name']}"))
             material["h3_source_name"] = source["name"]
             material["h3_source_label"] = source["label"]
             material["h3_source_slot"] = slot
@@ -114,6 +146,7 @@ class BuildSession:
                 self.render_materials.append(material)
             if role == "collision":
                 configure_material(material, "collision")
+            if shared_key: self.shared_preview.materials[shared_key] = material
             materials.append(material)
         return materials
 
@@ -240,6 +273,10 @@ class BuildSession:
 
     def build(self):
         root = self.collection("H3 " + self.payload["name"], self.context.scene.collection, self.reference_only)
+        self.root = root
+        if self.variant is not None:
+            root['h3_requested_variant'] = self.variant
+            root['h3_source_variants'] = json.dumps(self.payload.get('variants', []))
         root["h3_source_tag"] = self.payload["source_tag"]
         root["h3_extraction_file"] = self.source_path
         root["h3_dependencies"] = json.dumps(self.payload.get("dependencies", {}))
@@ -252,6 +289,8 @@ class BuildSession:
             collection = self.collection(role.title(), root)
             materials = self.materials(source, role)
             for key, triangles in groups(source, collision=role == 'collision').items():
+                if self.variant_regions is not None and key[0] in self.variant_regions and key[1] not in self.variant_regions[key[0]]:
+                    continue
                 self.build_mesh(source, key, triangles, materials, collection, role)
                 yield f"{role}: {key[0]} / {key[1]}"
         markers = self.collection("Markers", root)
@@ -273,8 +312,9 @@ class BuildSession:
         report.write("Halo 3 object import\n\nSource: " + self.payload["source_tag"] +
                      "\nExtraction: " + self.source_path + "\n\n" + "\n".join(self.warnings))
         root["h3_import_report"] = report.name
-        for warning in self.warnings:
-            utils.print_warning(warning)
+        if self.emit_warnings:
+            for warning in self.warnings:
+                utils.print_warning(warning)
         if self.armature is not None:
             for ob in self.context.selected_objects:
                 ob.select_set(False)
@@ -284,6 +324,14 @@ class BuildSession:
         yield "Complete"
 
     def build_material_previews(self, root):
+        if self.shared_preview is not None:
+            builder = self.shared_preview
+            root['h3_shader_manifest'] = builder.source_text
+            for material in self.render_materials:
+                material['h3_shader_manifest'] = builder.source_text
+                builder.build(material)
+                yield 'Shared source material preview'
+            return
         from .materials import load_manifest
         from .material_builder import PreviewBuilder
         path = Path(self.source_path).parent / 'shader_manifest.json'

@@ -6,6 +6,8 @@ from .materials import _object_pairs, validate_manifest
 from .reach_materials import (CATEGORIES, GROUP_NAME, normalized,
                              parameter_bindings, stage_name, staged_image_key,
                              staged_image_name, validate_shader)
+from .material_translation import H3MaterialRecord, ReachAuthoringPlan, translate
+from .material_writer import require_source, require_writable
 
 
 def socket_schema(group):
@@ -14,7 +16,7 @@ def socket_schema(group):
 
 
 class ReachStager:
-    def __init__(self, resource_loader=None, alias_loader=None):
+    def __init__(self, resource_loader=None, alias_loader=None, *, native_cube_sources=False, legacy_preview=False):
         self.resource_loader = resource_loader or utils.add_node_from_resources
         self.alias_loader = alias_loader or read_destination_aliases
         self.images = {}
@@ -24,6 +26,8 @@ class ReachStager:
         self.results = []
         self.option_cache = {}
         self.manifests = {}
+        self.native_cube_sources = native_cube_sources
+        self.legacy_preview = legacy_preview
 
     def remember(self, store, value):
         self.created.append((store, value))
@@ -76,6 +80,13 @@ class ReachStager:
         if image.colorspace_settings.name != key[2]:
             image.colorspace_settings.name = key[2]
         image.alpha_mode = 'CHANNEL_PACKED'
+        if self.native_cube_sources and bitmap.get('type')=='cube map':
+            from .port_environment.native_bitmaps import author_cube
+            cube=author_cube(image,bitmap['cube_source'])
+            self.created.remove((bpy.data.images,image))
+            self.remember(bpy.data.images,cube)
+            bpy.data.images.remove(image)
+            image=cube
         image.nwo.filepath = ''
         image.nwo.source_name = ''
         image.nwo.bitmap_type = key[3]
@@ -93,7 +104,10 @@ class ReachStager:
 
     def texture(self, tree, source, manifest, parameter, row, report):
         bitmap = manifest['bitmaps'].get(parameter.get('bitmap'))
-        if bitmap is None or not bitmap.get('preview'):
+        cube = (self.native_cube_sources and bitmap is not None and bitmap.get('type') == 'cube map'
+            and bitmap.get('cube_source', {}).get('decoded_faces') == 6
+            and bitmap.get('cube_source', {}).get('layout') == 'directx_cross_4x3')
+        if bitmap is None or not bitmap.get('preview') and not cube:
             raise ValueError((bitmap or {}).get('preview_error', 'No decoded 2D bitmap'))
         image = self.image(bitmap, parameter, source)
         tex = tree.nodes.new('ShaderNodeTexImage')
@@ -126,7 +140,7 @@ class ReachStager:
         tex['h3_source_sampler'] = json.dumps(sampler)
         return tex
 
-    def build(self, source):
+    def build(self, source, authoring=None):
         report = {'source_material': source.name, 'source_shader': source.get('h3_source_shader'),
                   'status': 'skipped', 'destination_shader': None, 'categories': [],
                   'parameters': [], 'diagnostics': []}
@@ -134,13 +148,34 @@ class ReachStager:
         checkpoint = len(self.created)
         try:
             manifest, record = self.source_record(source)
-            categories, parameters = validate_shader(record)
+            semantic = not self.legacy_preview
+            if semantic:
+                if authoring is None:
+                    authoring = translate(H3MaterialRecord.from_resolved(record, manifest['bitmaps']))
+                if not isinstance(authoring, ReachAuthoringPlan):
+                    raise ValueError('Production staging requires an immutable ReachAuthoringPlan')
+                require_source(authoring, record)
+                report['semantic_plan'] = authoring.to_dict()
+                report['translation_status'] = authoring.status
+                report['rule_id'] = authoring.rule_id
+                authoring = authoring.to_dict()
+            if authoring is None:
+                categories, parameters = validate_shader(record)
+                group_name = GROUP_NAME
+            else:
+                if record.get('status') != 'resolved_snapshot':
+                    raise ValueError('Accepted native material requires resolved source parameters')
+                categories = {k:dict(option=v) for k,v in authoring['options'].items()}
+                parameters = authoring['parameters']
+                group_name = authoring['target_node']
+                if group_name not in {GROUP_NAME, 'foundry_reach.shader_terrain', 'foundry_reach.shader_foliage', 'foundry_reach.shader_decal'}:
+                    raise ValueError('Unimplemented accepted native material group: '+group_name)
             material = self.remember(bpy.data.materials, bpy.data.materials.new(stage_name(record['source'])))
             material.use_nodes = True
             material.node_tree.nodes.clear()
             tree = material.node_tree
             group = tree.nodes.new('ShaderNodeGroup')
-            group.node_tree = self.resource_loader('reach_nodes', GROUP_NAME)
+            group.node_tree = self.resource_loader('reach_nodes', group_name)
             if group.node_tree is None:
                 raise ValueError('Bundled Foundry Reach shader group is missing')
             group.location = (60, 0)
@@ -153,7 +188,7 @@ class ReachStager:
                 option = choice['option']
                 target = group.inputs.get(name)
                 status = 'unexposed'
-                if name in CATEGORIES and target is not None and target.type == 'MENU':
+                if (authoring is not None or name in CATEGORIES) and target is not None and target.type == 'MENU':
                     previous = target.default_value
                     try:
                         target.default_value = option
@@ -162,27 +197,89 @@ class ReachStager:
                         selected[name] = option
                         status = 'name_match'
                     except (ValueError, TypeError):
+                        if semantic:
+                            raise ValueError('UNRESOLVED_WRITER_OPTION: '+name+'='+option)
                         target.default_value = previous
                         status = 'group_default'
                 report['categories'].append({'category': name, 'source_option': option, 'status': status,
                                              'node_option': str(target.default_value) if target else None})
                 if status != 'name_match':
+                    if semantic and name in CATEGORIES:
+                        raise ValueError('UNRESOLVED_WRITER_CATEGORY: '+name)
                     report['diagnostics'].append(f'{name}={option}: {status}; source selection retained in the manifest')
             tree.interface_update(bpy.context)
-            aliases, contract_notes = self.alias_loader(selected, self.option_cache)
+            if authoring is not None:
+                if group_name=='foundry_reach.shader_decal':
+                    # Hidden decal options are written by exact native RMD
+                    # name and verified in the native completion stage.
+                    selected.update(authoring['options'])
+                parallax = authoring['options'].get('parallax', 'off')
+                if parallax != 'off':
+                    from ..managed_blam.shader import Parallax
+                    Parallax[parallax.upper()]  # Validate the target authoring enum by name.
+                selected['parallax'] = parallax
+                if semantic:
+                    selected.update(authoring['options'])
+                aliases, contract_notes = read_destination_aliases(selected, self.option_cache, group_name.split('.')[-1])
+            else:
+                aliases, contract_notes = self.alias_loader(selected, self.option_cache)
             report['diagnostics'].extend(contract_notes)
+            if semantic and contract_notes:
+                raise ValueError('UNRESOLVED_WRITER_RMOP: '+'; '.join(contract_notes))
+            if semantic:
+                require_writable(authoring, aliases)
             sockets = socket_schema(group)
+            if authoring is not None:
+                report['native_socket_schema'] = sockets
             claimed = set()
             row = 0
             for name, parameter in parameters.items():
                 item = {'name': name, 'type': parameter['type'], 'origin': parameter.get('origin'),
                         'status': 'unmapped', 'sockets': []}
                 report['parameters'].append(item)
+                if semantic and parameter['type'] == 'angle_color':
+                    if name not in aliases:
+                        raise ValueError('UNRESOLVED_WRITER_PARAMETER: '+name)
+                    angle = parameter['value']
+                    # Engine identity -> Foundry UI aliases belongs here.
+                    for label, key in (('normal_specular_color', 'color0_normal'),
+                                       ('glancing_specular_color', 'color1_glancing')):
+                        socket = group.inputs.get(label)
+                        if socket is not None and socket.type == 'RGBA':
+                            color = angle[key]
+                            socket.default_value = [*(utils.srgb_to_linear(v) for v in color[:3]), color[3]]
+                            item['sockets'].append(label)
+                    for label, value in (('specular_color_exponent', angle['exponent']),
+                                         ('specular_color_exponent_min', 0),
+                                         ('specular_color_exponent_max', 1)):
+                        socket = group.inputs.get(label)
+                        if socket is not None and socket.type == 'VALUE':
+                            socket.default_value = value
+                            item['sockets'].append(label)
+                    # The ordinary tag writer consumes the full function from
+                    # h3_reach_authoring_plan; it is not a constant color socket.
+                    item.update(status='semantic_function', source_parameter=parameter)
+                    continue
                 if parameter.get('extern'):
                     item.update(status='runtime_input', extern=parameter['extern'])
                     continue
                 bindings = parameter_bindings(parameter, sockets, aliases.get(name, ()))
+                if not bindings and authoring is not None:
+                    # Native shader writing resolves parameters from selected
+                    # rmop options, including UI-hidden inputs. Preserve those
+                    # bindings instead of interpreting UI visibility as usage.
+                    bindings = parameter_bindings(parameter, [dict(s,visible=True) for s in sockets], aliases.get(name, ()))
+                    if bindings:
+                        item['native_hidden_input'] = True
                 if not bindings:
+                    if semantic and name not in aliases:
+                        raise ValueError('UNRESOLVED_WRITER_PARAMETER: '+name)
+                    if authoring is not None and name in aliases:
+                        if parameter['type'] == 'bitmap':
+                            tex=self.texture(tree,source,manifest,parameter,row,report)
+                            tex['h3_native_supplemental_parameter']=name
+                            row+=1
+                        item.update(status='native_supplemental',source_parameter=parameter)
                     continue
                 if any(socket in claimed for socket, _ in bindings):
                     item['status'] = 'ambiguous_socket'
@@ -200,6 +297,8 @@ class ReachStager:
                             socket.default_value = parameter['value'][3]
                         elif channel == 'color_value':
                             value = parameter['value']
+                            if authoring is not None:
+                                value=[*(utils.srgb_to_linear(v) for v in value[:3]),value[3]]
                             socket.default_value = value[:3] if socket.type == 'VECTOR' else value
                         else:
                             socket.default_value = parameter['value']
@@ -208,7 +307,9 @@ class ReachStager:
                     item['status'] = 'snapshot' if parameter.get('has_functions') else 'mapped'
                 except (ValueError, TypeError, KeyError, RuntimeError) as exc:
                     item.update(status='unavailable', reason=str(exc))
-            if not any(p['status'] in {'mapped', 'snapshot'} for p in report['parameters']):
+            if semantic and any(p['status'] in {'unmapped', 'ambiguous_socket', 'unavailable'} for p in report['parameters']):
+                raise ValueError('UNRESOLVED_WRITER_BINDING: '+json.dumps(report['parameters']))
+            if not semantic and not any(p['status'] in {'mapped', 'snapshot'} for p in report['parameters']):
                 raise ValueError('No source parameters could be connected to this Reach shader group')
             if selected.get('blend_mode', 'opaque') != 'opaque' or selected.get('alpha_test', 'none') != 'none':
                 material.surface_render_method = 'BLENDED'
@@ -221,17 +322,24 @@ class ReachStager:
                     material[key] = source[key]
             material['h3_source_material'] = source
             material['h3_reach_staged'] = True
-            material.nwo.shader_type = '.shader'
+            material.nwo.shader_type = '.'+group_name.split('.')[-1]
             material.nwo.shader_path = ''
             material.nwo.uses_blender_nodes = True
             report.update(status='native_nodes_staged', material=material.name)
-            report['diagnostics'] += [
+            report['diagnostics'] += (['Explicit semantic plan staged; native save/readback and runtime remain untested',
+                                      'No Reach shader or bitmap tags were written'] if semantic else [
                 'Names and socket types are matched; equivalent HLSL behavior is not asserted',
                 'Animated parameters use the extracted snapshot; runtime functions remain in the source manifest',
                 'Native Reach nodes consume raw normal textures; the H3 preview green-flip nodes are not copied',
                 'Sampler export, complete defaults and reference inheritance are not validated by this staging operation',
-                'No Reach shader or bitmap tags were written']
+                'No Reach shader or bitmap tags were written'])
             material['h3_reach_report'] = json.dumps(report)
+            if authoring is not None:
+                material['h3_native_authoring'] = json.dumps(authoring)
+            if semantic:
+                material['h3_reach_authoring_plan'] = json.dumps(authoring)
+            else:
+                material['h3_reach_legacy_preview'] = True
             return material
         except Exception as exc:
             report['diagnostics'].append(str(exc))
@@ -280,20 +388,26 @@ class ReachStager:
         self.images.clear()
 
 
-def read_destination_aliases(selected, cache):
+def read_destination_aliases(selected, cache, shader_group='shader', *, definition_path=None):
     """Read UI aliases for selected Reach options without creating missing tags."""
     aliases = {}
     try:
         from ..managed_blam.render_method_definition import RenderMethodDefinitionTag
         from ..managed_blam.render_method_option import RenderMethodOptionTag
-        with RenderMethodDefinitionTag(path='shaders/shader.render_method_definition', tag_must_exist=True) as definition:
+        definition_name=shader_group.removeprefix('shader_')
+        with RenderMethodDefinitionTag(path=definition_path or f'shaders/{definition_name}.render_method_definition', tag_must_exist=True) as definition:
+            unknown = set(selected) - {c.Fields[0].GetStringData() for c in definition.block_categories.Elements}
+            if unknown:
+                raise ValueError('Unknown Reach categories: '+', '.join(sorted(unknown)))
             for category in definition.block_categories.Elements:
                 name = category.Fields[0].GetStringData()
                 if name not in selected:
                     continue
                 option = next((o for o in category.Fields[1].Elements
                                if o.Fields[0].GetStringData() == selected[name]), None)
-                if option is None or option.Fields[1].Path is None:
+                if option is None:
+                    raise ValueError('Unknown Reach option: '+name+'='+selected[name])
+                if option.Fields[1].Path is None:
                     continue
                 path = option.Fields[1].Path
                 key = path.RelativePathWithExtension
@@ -302,8 +416,9 @@ def read_destination_aliases(selected, cache):
                         cache[key] = [(e.Fields[0].GetStringData(), e.Fields[1].GetStringData())
                                       for e in rmop.block_parameters.Elements]
                 for parameter, ui_name in cache[key]:
+                    aliases.setdefault(parameter, [])
                     if ui_name and ui_name != parameter:
-                        aliases.setdefault(parameter, []).append(ui_name)
+                        aliases[parameter].append(ui_name)
         return aliases, []
     except Exception as exc:
         return aliases, [f'Reach option UI aliases unavailable: {exc}. Matching exposed socket names only']

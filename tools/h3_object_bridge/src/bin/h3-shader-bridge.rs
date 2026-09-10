@@ -69,6 +69,18 @@ struct Reader {
     options: BTreeMap<PathBuf, OptionSource>,
     definitions: BTreeMap<PathBuf, RenderMethodDefinition>,
     bitmaps: BTreeMap<String, Value>,
+    bitmap_seconds: f64,
+    bitmap_hits: usize,
+    single_image_pixels: bool,
+}
+
+fn preview_shape(is_2d: bool, depth: u32, images: usize, has_sequences: bool, single_image_pixels: bool) -> bool {
+    is_2d && depth == 1 && images == 1 && (!has_sequences || single_image_pixels)
+}
+
+fn environment_cube_shape(is_cube: bool, width: u32, height: u32, depth: u32, images: usize, format: &str, enabled: bool) -> bool {
+    enabled && is_cube && width > 0 && width <= 4096 && width == height && depth == 1 && images == 1
+        && matches!(format, "dxt1" | "dxt5")
 }
 
 impl Reader {
@@ -90,8 +102,9 @@ impl Reader {
 
     fn bitmap(&mut self, name: &str, index: i16) -> String {
         let key = format!("{}#{index}", name.replace('\\', "/"));
-        if self.bitmaps.contains_key(&key) { return key; }
+        if self.bitmaps.contains_key(&key) { self.bitmap_hits += 1; return key; }
         let number = self.bitmaps.len();
+        let started = std::time::Instant::now();
         let result = (|| -> Result<Value> {
             if index < 0 { bail!("Negative bitmap index"); }
             let path = resolve(&self.root, name, Some("bitmap"))?;
@@ -111,8 +124,30 @@ impl Reader {
             }
             let format = image.format_name().unwrap_or_default().to_lowercase();
             let large = u64::from(image.width()) * u64::from(image.height()) > 67_108_864;
-            if !image.type_name().is_some_and(|t| t.eq_ignore_ascii_case("2d texture"))
-                || image.depth() != 1 || bitmap.len() != 1 || !bitmap.sequences().is_empty() {
+            if environment_cube_shape(image.is_cube(), image.width(), image.height(), image.depth().into(),
+                bitmap.len(), &format, self.single_image_pixels) {
+                // The pinned decoder writes all SIX decoded faces to a cross;
+                // this is source-pixel recovery, never a 2D preview substitute.
+                let tiff = format!("textures/{number:05}_cube.tif");
+                out.clear();
+                image.write_tiff(&mut out)?;
+                write_new(&self.output.join(&tiff), &out)?;
+                result["cube_source"] = json!({"tiff":tiff,"layout":"directx_cross_4x3",
+                    "face_order":["+X","-X","+Y","-Y","+Z","-Z"],
+                    "cells":[[0,1],[2,1],[1,0],[1,2],[1,1],[3,1]],
+                    "face_rotations_quarter_turns":[0,0,0,0,0,0],
+                    "width":image.width()*4,"height":image.height()*3,"decoded_faces":6,
+                    "pixel_format":"RGBA8","mip_policy":"TIFF contains six base faces; DDS retains every source mip",
+                    "source_sequence_count":bitmap.sequences().len()});
+                result["status"] = json!("cube_source_pixels");
+                return Ok(result);
+            }
+            // The explicit compiler path samples the entire sole indexed 2D
+            // texture, not a sprite/sequence frame. Ordinary inspection keeps
+            // its conservative preview policy. Real box textures have one
+            // sequence naming the single image (including BC5 normal maps).
+            if !preview_shape(image.type_name().is_some_and(|t| t.eq_ignore_ascii_case("2d texture")),
+                image.depth().into(), bitmap.len(), !bitmap.sequences().is_empty(), self.single_image_pixels) {
                 result["preview_error"] = json!("Cube, volume, array, multi-image or sprite bitmap needs a dedicated preview");
             } else if large || image.width() == 0 || image.height() == 0 {
                 result["preview_error"] = json!("Invalid or oversized preview dimensions");
@@ -135,6 +170,7 @@ impl Reader {
         })();
         let value = result.unwrap_or_else(|e| json!({"path":name,"index":index,"status":"error","error":format!("{e:#}")}));
         self.bitmaps.insert(key.clone(), value);
+        self.bitmap_seconds += started.elapsed().as_secs_f64();
         key
     }
 
@@ -309,15 +345,25 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+fn validate_asset(geometry: &Value) -> Result<()> {
+    if (geometry["format"] != "foundry.h3-object" && geometry["format"] != "foundry.h3-scene")
+        || geometry["game"] != "halo3_mcc" || geometry["version"].as_u64() != Some(1) {
+        bail!("Unsupported H3 object or scene manifest");
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut values = BTreeMap::new();
+    let mut single_image_pixels = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--tags-root" | "--asset" | "--output" | "--reach-tags-root" => {
                 values.insert(arg,args.next().context("Missing argument value")?);
             }
-            "--version" => { println!("h3-shader-bridge 0.2.0; material schema 1; source description schema 1"); return Ok(()); }
+            "--single-image-pixels" => { single_image_pixels = true; }
+            "--version" => { println!("h3-shader-bridge 0.2.1; material schema 1; source description schema 1; single-image-pixels"); return Ok(()); }
             _ => bail!("Unknown argument: {arg}"),
         }
     }
@@ -333,11 +379,10 @@ fn run() -> Result<()> {
     if !asset.starts_with(&output) { bail!("Asset manifest must be in the extraction directory"); }
     if output.join("shader_manifest.json").exists() { bail!("Shader manifest already exists"); }
     let geometry: Value = serde_json::from_slice(&fs::read(&asset)?)?;
-    if geometry["format"] != "foundry.h3-object" || geometry["game"] != "halo3_mcc" || geometry["version"] != 1 {
-        bail!("Unsupported object manifest");
-    }
+    validate_asset(&geometry)?;
     fs::create_dir(output.join("textures"))?;
-    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new()};
+    let mut reader = Reader {root,output:output.clone(),reach,options:BTreeMap::new(),definitions:BTreeMap::new(),bitmaps:BTreeMap::new(),bitmap_seconds:0.,bitmap_hits:0,single_image_pixels};
+    let started = std::time::Instant::now();
     let paths = geometry["shader_paths"].as_array().context("Missing shader paths")?;
     let mut shaders = BTreeMap::new();
     for (i, source) in paths.iter().enumerate() {
@@ -356,12 +401,17 @@ fn run() -> Result<()> {
         shaders.insert(source.to_string(),record);
         if i % 10 == 0 || i+1 == paths.len() { println!("H3 shader metadata: {} / {}",i+1,paths.len()); }
     }
+    let inclusive = started.elapsed().as_secs_f64();
+    println!("H3 timing shader metadata: {:.3}s exclusive; bitmap extraction: {:.3}s; combined: {:.3}s inclusive", inclusive-reader.bitmap_seconds,reader.bitmap_seconds,inclusive);
     let manifest = json!({"format":"foundry.h3-shaders","version":1,"source_tag":geometry["source_tag"],
+        "timings":{"shader_metadata_exclusive_seconds":inclusive-reader.bitmap_seconds,"bitmap_extraction_seconds":reader.bitmap_seconds,"combined_inclusive_seconds":inclusive},
         "source_game":"halo3_mcc","shaders":shaders,"bitmaps":reader.bitmaps,
+        "pixel_policy":if single_image_pixels {"entire_single_indexed_2d_image"} else {"inspection_preview"},
+        "cache":{"unique_bitmaps":reader.bitmaps.len(),"bitmap_cache_hits":reader.bitmap_hits},
         "notes":["Blender previews are approximations, not game shader conversions.",
             "Source function blobs, parameter values and sampler settings are retained.",
             "Runtime externs, reference inheritance and animated materials require additional work."]});
-    write_new(&output.join("shader_manifest.json"),&serde_json::to_vec_pretty(&manifest)?)?;
+    write_new(&output.join("shader_manifest.json"),&serde_json::to_vec(&manifest)?)?;
     println!("H3 shader extraction complete: {} shaders, {} bitmap bindings",shaders.len(),reader.bitmaps.len());
     Ok(())
 }
@@ -371,6 +421,24 @@ fn main() { if let Err(e) = run() { eprintln!("{e:#}"); std::process::exit(1); }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn compiler_pixels_are_opt_in_and_still_single_2d() {
+        assert!(!preview_shape(true, 1, 1, true, false));
+        assert!(preview_shape(true, 1, 1, true, true));
+        assert!(preview_shape(true, 1, 1, false, false));
+        for (is_2d, depth, count) in [(false, 1, 1), (true, 2, 1), (true, 1, 2), (true, 1, 0)] {
+            assert!(!preview_shape(is_2d, depth, count, true, true));
+        }
+    }
+    #[test] fn accepts_object_and_scene_material_requests() {
+        for format in ["foundry.h3-object", "foundry.h3-scene"] {
+            assert!(validate_asset(&json!({"format":format,"game":"halo3_mcc","version":1})).is_ok());
+        }
+        for bad in [json!({"format":"foundry.h3-scene","game":"haloreach_mcc","version":1}),
+                    json!({"format":"unknown","game":"halo3_mcc","version":1}),
+                    json!({"format":"foundry.h3-scene","game":"halo3_mcc","version":true})] {
+            assert!(validate_asset(&bad).is_err());
+        }
+    }
     use blam_tags::render_method::{RenderMethodDefinitionCategory, RenderMethodDefinitionCategoryOption};
     fn option(name:&str)->RenderMethodDefinitionCategoryOption {
         RenderMethodDefinitionCategoryOption{option_name:name.into(),option_path:format!("options/{name}"),vertex_function:String::new(),pixel_function:String::new()}
@@ -380,6 +448,17 @@ mod tests {
             RenderMethodDefinitionCategory{category_name:"blend_mode".into(),vertex_function:String::new(),pixel_function:String::new(),options:vec![option("opaque"),option("alpha_blend")]},
             RenderMethodDefinitionCategory{category_name:"albedo".into(),vertex_function:String::new(),pixel_function:String::new(),options:vec![option("constant_color"),option("default")]},
         ],shared_pixel_shaders_path:String::new(),shared_vertex_shaders_path:String::new(),flags:0,version:0}
+    }
+    #[test] fn environment_cube_pixels_require_six_face_semantics_and_known_formats() {
+        for format in ["dxt1", "dxt5"] {
+            assert!(environment_cube_shape(true,64,64,1,1,format,true));
+            assert!(!environment_cube_shape(true,64,64,1,1,format,false));
+            assert!(!environment_cube_shape(false,64,64,1,1,format,true));
+            assert!(!environment_cube_shape(true,64,32,1,1,format,true));
+            assert!(!environment_cube_shape(true,64,64,6,1,format,true));
+            assert!(!environment_cube_shape(true,64,64,1,2,format,true));
+        }
+        assert!(!environment_cube_shape(true,64,64,1,1,"dxn",true));
     }
     #[test] fn options_are_matched_by_name_not_index() {
         let source=json!({"categories":[{"category":"albedo","option":"default","source_index":0}]});

@@ -29,6 +29,7 @@ from .. import utils
 from ..tools.asset_types import AssetType
 
 from .cinematic import Actor, Frame
+from .vertex_weld import render_weld_components, stable_unique_rows_with_epsilon
 
 from ..constants import IDENTITY_MATRIX, IK_INFLUENCE_ROUNDING_TOLERANCE, VALID_MESHES, WU_SCALAR
 NORMAL_FIX_MATRIX = Matrix(((1, 0, 0), (0, -1, 0), (0, 0, -1)))
@@ -1398,18 +1399,7 @@ class VirtualMesh:
         self.vertex_array = vertex_array
 
     def _stable_unique_rows_with_epsilon(self, arrays: list[np.ndarray], epsilon: float) -> tuple[np.ndarray, np.ndarray]:
-        loop_data = arrays[0] if len(arrays) == 1 else np.hstack(arrays)
-
-        quantized = np.rint(loop_data / epsilon).astype(np.int64)
-        _, first_indices, inverse = np.unique(quantized, axis=0, return_index=True, return_inverse=True)
-        order = np.argsort(first_indices)
-        new_indices = first_indices[order].astype(np.int32)
-
-        remap = np.empty(order.size, dtype=np.int32)
-        remap[order] = np.arange(order.size, dtype=np.int32)
-        face_indices = remap[inverse].astype(np.int32)
-
-        return new_indices, face_indices
+        return stable_unique_rows_with_epsilon(arrays, epsilon)
         
     def _setup(self, ob: bpy.types.Object, scene: 'VirtualScene', render_mesh: bool, props: dict, bones: list[str]):
         mesh_type_value = props.get("bungie_mesh_type")
@@ -1728,18 +1718,12 @@ class VirtualMesh:
             self.pca_num_vertices = num_loops
 
         # Remove duplicate vertex data.
-        # Render meshes: emulate fbx-to-gr2 weld key (position + normal + UVs + color0) with
-        # k_real_epsilon tolerance (1e-4) and stable first-seen ordering.
+        # Render equivalence includes skinning: sharing a rest position does not
+        # imply sharing a deformed position. Keep epsilon and first-seen ordering.
         if render_mesh:
-            weld_components = [self.positions]
-            if self.normals is not None:
-                weld_components.append(self.normals)
-            if self.texcoords is not None:
-                weld_components.extend(self.texcoords)
-            if self.lighting_texcoords is not None:
-                weld_components.append(self.lighting_texcoords)
-            if self.vertex_colors is not None:
-                weld_components.extend(self.vertex_colors)
+            weld_components = render_weld_components(
+                self.positions, self.normals, self.texcoords, self.lighting_texcoords,
+                self.vertex_colors, self.bone_indices, self.bone_weights)
             new_indices, face_indices = self._stable_unique_rows_with_epsilon(weld_components, 1.0e-4)
         else:
             weld_components = [self.positions]

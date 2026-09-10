@@ -84,7 +84,8 @@ class MaterialTests(unittest.TestCase):
     def test_preview_path_validation(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d); (root / 'texture.tif').touch()
-            self.assertEqual(m.preview_path(root, 'texture.tif'), root / 'texture.tif')
+            # Match the canonical path returned by the source-boundary validator.
+            self.assertEqual(m.preview_path(root, 'texture.tif'), (root / 'texture.tif').resolve(strict=True))
             for bad in ['../texture.tif', '/texture.tif', 'C:\\texture.tif', '\\\\server\\texture.tif', 'a//texture.tif', 'texture.exe']:
                 with self.assertRaises((ValueError, OSError)):
                     m.preview_path(root, bad)

@@ -9,8 +9,9 @@ import bpy
 from bpy.props import BoolProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 from .. import utils
-from .core import find_tags_root, load_payload
+from .core import find_tags_root, resolve_tags_root, load_payload
 from .builder import BuildSession
+from .import_output import HelperLogTail, HelperPending, ImportProgress, open_output
 
 _active = []
 
@@ -24,26 +25,10 @@ def _source_paths(source):
     """Resolve source settings without loading an H3 project or changing Reach."""
     prefs = utils.get_prefs()
     configured_root = prefs.h3_tags_root.strip()
-    if configured_root:
-        root = Path(bpy.path.abspath(configured_root)).resolve()
-        if not root.is_dir():
-            raise NotADirectoryError(
-                "Halo 3 Tags Directory is not a directory. "
-                "Set it in Foundry preferences > Halo 3 Import"
-            )
-    else:
-        try:
-            root = find_tags_root(source)
-        except ValueError as exc:
-            raise ValueError(
-                "No tags directory in source path. "
-                "Set Halo 3 Tags Directory in Foundry preferences > Halo 3 Import"
-            ) from exc
-    if not source.is_relative_to(root):
-        raise ValueError(
-            "Selected tag is outside the configured Halo 3 Tags Directory. "
-            "Change or clear that directory in Foundry preferences > Halo 3 Import"
-        )
+    configured = bpy.path.abspath(configured_root) if configured_root else None
+    root = resolve_tags_root(source, configured)
+    if configured and root != Path(configured).resolve():
+        print(f'H3 source root normalized to tags directory: {root}', flush=True)
     if root == Path(utils.get_tags_path()).resolve():
         raise ValueError("Halo 3 source tags and the active Reach tags directory must be different")
     override = prefs.h3_extraction_helper.strip()
@@ -58,8 +43,8 @@ def _source_paths(source):
 
 class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     bl_idname = "nwo.import_halo3_object"
-    bl_label = "Import Halo 3 Object (Experimental)"
-    bl_description = "Read H3EK object dependencies into the current Reach project without changing source tags"
+    bl_label = "Import Halo 3 Asset (Experimental)"
+    bl_description = "Read H3EK object or scenario dependencies into the current Reach project without changing source tags"
     bl_options = {'REGISTER', 'UNDO'}
     filename_ext = ""
     filter_glob: StringProperty(default="*.model;*.render_model;*.scenery;*.crate;*.biped;*.vehicle;*.weapon;*.device_machine;*.device_control;*.equipment;*.h3asset.json", options={'HIDDEN'})
@@ -68,6 +53,13 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
     preview_materials: BoolProperty(name="Material Previews", default=True, description="Extract shader metadata and packed textures; no Reach tags are generated")
     flip_normal_green: BoolProperty(name="Flip Normal Green", default=True, description="Invert the green channel in preview nodes only; extracted pixels stay unchanged")
     reference_only: BoolProperty(name="Reference Only", default=True, description="Exclude the imported root collection from Foundry export until inspected")
+
+    scenario_geometry: BoolProperty(name="BSP Geometry", default=True, description="Decode BSP geometry and placements as excluded references")
+    scenario_hints: BoolProperty(name="Giant Sector and Rail Hints", default=False)
+    scenario_objects: BoolProperty(name="Placed Game Objects", default=True, description="Reuse H3 object geometry by source tag and variant; excluded from export")
+    scenario_content: BoolProperty(name="Scenario Content and AI Organization", default=False, description="Show authored positions and preserve source folders, squads, zones and objectives")
+    scenario_points: BoolProperty(name="AI and Script Points", default=False, description="Show source-world firing positions and script points; unresolved reference frames remain in the report")
+    scenario_bsp_indices: StringProperty(name="BSP Indices", default="", description="Comma-separated source BSP indices. Blank imports every BSP, not an inferred zone set")
 
     @classmethod
     def poll(cls, context):
@@ -102,7 +94,11 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         return ImportHelper.invoke(self, context, event)
 
     def execute(self, context):
+        if not hasattr(self, 'owner') and Path(self.filepath).suffix.lower() == '.scenario':
+            return bpy.ops.nwo.import_from_drop('INVOKE_DEFAULT', filepath=self.filepath)
         self._process = None
+        self._output = HelperLogTail()
+        self._progress = None
         self._log = None
         self._timer = None
         self._session = None
@@ -120,34 +116,65 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._finished = False
         self._shader_started = False
         self._source_root = None
+        self._is_scenario = False
+        from .scenario_reporting import Profile
+        self._scenario_profile = Profile()
+        self._helper_started = None
         try:
+            open_output(utils, bpy)
+            self._progress = ImportProgress('asset', self._area)
+            self._progress.update(self._phase, force=True)
             source = Path(bpy.path.abspath(self.filepath)).resolve(strict=True)
+            self._is_scenario = source.suffix.lower() == '.scenario'
+            self._source_tag = None
             if source.name.lower().endswith('.h3asset.json'):
                 self._payload_path = source
             else:
                 root, helper = _source_paths(source)
                 self._source_root = root
-                output = Path(tempfile.mkdtemp(prefix="foundry_h3_"))
-                self._payload_path = output / "asset.h3asset.json"
-                self._log_path = output / "helper.log"
+                self._object_helper = helper
+                self._source_tag = source.relative_to(root).as_posix()
+                if self._is_scenario:
+                    from .scenario_scene import bsp_selection
+                    bsp_selection(self.scenario_bsp_indices)
+                    helper = helper.with_name('h3-scenario-inspect.exe' if os.name == 'nt' else 'h3-scenario-inspect')
+                    if not helper.is_file():
+                        raise FileNotFoundError("Scenario inspector is missing beside the H3 extraction helper. Install the scenario prototype build.")
+                temporary = Path(tempfile.mkdtemp(prefix="foundry_h3_"))
+                output = temporary / "source" if self._is_scenario else temporary
+                if self._is_scenario:
+                    output.mkdir()
+                self._payload_path = output / ("scene.h3scene.json" if self._is_scenario else "asset.h3asset.json")
+                self._log_path = temporary / "helper.log"
                 self._log = self._log_path.open('w', encoding='utf-8')
+                self._output.follow(self._log_path)
                 command = [str(helper.resolve()), '--tags-root', str(root), '--input', str(source), '--output', str(output)]
-                if self.import_collision:
-                    command.append('--collision')
-                if self.import_physics:
-                    command.append('--physics')
+                if self._is_scenario:
+                    if self.scenario_geometry:
+                        command.append('--geometry')
+                    if self.scenario_bsp_indices.strip():
+                        command += ['--bsp-indices', self.scenario_bsp_indices]
+                else:
+                    if self.import_collision:
+                        command.append('--collision')
+                    if self.import_physics:
+                        command.append('--physics')
+                self._helper_started = time.monotonic()
                 self._process = subprocess.Popen(command, stdout=self._log, stderr=subprocess.STDOUT,
                     cwd=str(output), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             self._settings.export_in_progress = True
             self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
             _active.append(self)
-            context.window_manager.modal_handler_add(self)
-            print("Halo 3 object import started. Source tags are read-only.")
+            context.window_manager.modal_handler_add(getattr(self, 'owner', self))
+            print("Halo 3 asset import started. Source tags are read-only.")
             return {'RUNNING_MODAL'}
+        except KeyboardInterrupt:
+            self._finish(context, rollback=True)
+            return {'CANCELLED'}
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             traceback.print_exc()
-            self._finish(context, rollback=True)
+            self._finish(context, rollback=True, state='failed')
             return {'CANCELLED'}
 
     def modal(self, context, event):
@@ -164,7 +191,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             elapsed = time.monotonic() - self._started
             spinner = ('/', '-', '\\', '|')[int(elapsed * 8) % 4]
             if self._area is not None:
-                self._area.header_text_set(f"( {spinner} ) H3 object: {self._phase} | {elapsed:.1f}s | Esc: cancel")
+                self._area.header_text_set(f"( {spinner} ) H3 asset: {self._phase} | {elapsed:.1f}s | Esc: cancel")
             if self._cancel_requested:
                 if self._process is not None and self._process.poll() is None:
                     if time.monotonic() - self._cancel_at > 3:
@@ -175,44 +202,80 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             if self._process is not None:
                 code = self._process.poll()
                 if code is None:
+                    self._output.poll()
+                    self._progress.update(self._phase)
                     return {'RUNNING_MODAL'}
+                if self._is_scenario and self._helper_started is not None:
+                    label = 'BSP shader helper elapsed' if self._shader_started else 'scenario inventory and BSP helper elapsed'
+                    self._scenario_profile.elapsed(label, time.monotonic()-self._helper_started)
+                    self._helper_started = None
                 self._log.close()
                 self._log = None
-                text = self._log_path.read_text(encoding='utf-8', errors='replace')
-                print(text)
+                text = self._output.poll(final=True)
                 self._process = None
                 if code != 0:
                     if self._shader_started:
                         utils.print_warning(f"H3 shader extraction failed ({code}); geometry retained. {text[-1200:]}")
                     else:
                         raise RuntimeError(f"H3 helper failed ({code}). {text[-1200:]}")
-            if self.preview_materials and not self._shader_started:
+            if self.preview_materials and not self._shader_started and not hasattr(self, 'options'):
                 self._shader_started = True
                 if self._start_shader_helper():
                     return {'RUNNING_MODAL'}
             if self._steps is None:
-                payload = load_payload(self._payload_path)
-                if not self.import_collision:
-                    payload['collision'] = None
-                if not self.import_physics:
-                    payload['physics'] = None
-                self._session = BuildSession(context, payload, self._payload_path, self.reference_only,
-                    self.preview_materials, self.flip_normal_green)
-                self._steps = iter(self._session.build())
+                if self._is_scenario:
+                    from .scenario_scene import load_scene
+                    from .scenario_builder import ScenarioBuildSession
+                    from .materials import load_manifest
+                    self._progress.update('Validating scenario inventory', force=True)
+                    with self._scenario_profile.span('source inventory validation'):
+                        payload, inventory = load_scene(self._payload_path, self._source_tag, progress=self._progress.update)
+                    from .scenario_scene import result_messages
+                    for message in result_messages(payload):
+                        print(message, flush=True)
+                    material_manifest = None
+                    if self.preview_materials and not hasattr(self, 'options'):
+                        try:
+                            material_manifest = load_manifest(self._payload_path.parent / 'shader_manifest.json', payload['source_tag'])
+                        except (OSError, ValueError, TypeError) as error:
+                            utils.print_warning(f"Scenario material metadata unavailable: {error}")
+                    self._session = ScenarioBuildSession(context, payload, inventory, self._payload_path.parent,
+                        material_manifest, self.scenario_hints, self.scenario_points, self.flip_normal_green,
+                        import_objects=self.scenario_objects, import_content=self.scenario_content,
+                        tags_root=self._source_root, object_helper=self._object_helper,
+                        preview_materials=self.preview_materials, options=getattr(self, 'options', None))
+                    self._session.profile = self._scenario_profile
+                    self._steps = iter(self._session.steps())
+                else:
+                    self._progress.update('Validating object geometry', force=True)
+                    payload = load_payload(self._payload_path)
+                    if not self.import_collision:
+                        payload['collision'] = None
+                    if not self.import_physics:
+                        payload['physics'] = None
+                    self._session = BuildSession(context, payload, self._payload_path, self.reference_only,
+                        self.preview_materials, self.flip_normal_green)
+                    self._steps = iter(self._session.build())
             deadline = time.monotonic() + 0.025
             while time.monotonic() < deadline:
                 try:
                     self._phase = next(self._steps)
+                    self._progress.update(self._phase)
+                    if isinstance(self._phase, HelperPending):
+                        break
                 except StopIteration:
                     self._finish(context)
-                    print(f"[Foundry perf] Halo 3 object import: {elapsed:.3f}s")
+                    print(f"[Foundry perf] Halo 3 asset import: {elapsed:.3f}s")
                     self.report({'INFO'}, "H3 import complete. See the H3 import report in Blender's Text Editor")
                     return {'FINISHED'}
             return {'RUNNING_MODAL'}
+        except KeyboardInterrupt:
+            self._finish(context, rollback=True)
+            return {'CANCELLED'}
         except Exception as exc:
             traceback.print_exc()
             self.report({'ERROR'}, str(exc))
-            self._finish(context, rollback=True)
+            self._finish(context, rollback=True, state='failed')
             return {'CANCELLED'}
 
     def _start_shader_helper(self):
@@ -227,12 +290,14 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
         self._phase = "Reading shaders and bitmaps"
         self._log_path = output / 'shader-helper.log'
         self._log = self._log_path.open('w', encoding='utf-8')
+        self._output.follow(self._log_path)
         command = [str(helper.resolve()), '--tags-root', str(self._source_root),
                    '--asset', str(self._payload_path), '--output', str(output)]
         reach = Path(utils.get_tags_path())
         if reach.is_dir():
             command.extend(['--reach-tags-root', str(reach.resolve())])
         try:
+            self._helper_started = time.monotonic()
             self._process = subprocess.Popen(command, stdout=self._log, stderr=subprocess.STDOUT,
                 cwd=str(output), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         except OSError as exc:
@@ -242,7 +307,7 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
             return False
         return True
 
-    def _finish(self, context, rollback=False):
+    def _finish(self, context, rollback=False, state=None):
         if self._finished:
             return
         self._finished = True
@@ -254,6 +319,17 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 self._steps.close()
             if rollback and self._session is not None:
                 self._session.rollback()
+            if not rollback and self._is_scenario and self._session is not None:
+                try:
+                    self._session.finish_profile(time.monotonic() - self._started)
+                except BaseException:
+                    state = 'failed'
+                    self._session.rollback()
+                    raise
+                if getattr(self, 'options', None) and self.options.setup_as_asset:
+                    from ..tools.importer import set_asset
+                    set_asset('.scenario')
+                    utils.get_export_props().create_debug_zone_set = False
             if rollback:
                 for ob in context.selected_objects:
                     ob.select_set(False)
@@ -267,6 +343,8 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 except ReferenceError:
                     pass
         finally:
+            if self._progress is not None:
+                self._progress.finish(state or ('cancelled' if rollback else 'completed'))
             if self._log is not None:
                 self._log.close()
             if self._timer is not None:
@@ -281,8 +359,33 @@ class NWO_OT_ImportHalo3Object(bpy.types.Operator, ImportHelper):
                 _active.remove(self)
 
 
+class ScenarioImportJob:
+    """Execution service owned by Foundry's normal import operator, no second dialog."""
+    execute = NWO_OT_ImportHalo3Object.execute
+    modal = NWO_OT_ImportHalo3Object.modal
+    _start_shader_helper = NWO_OT_ImportHalo3Object._start_shader_helper
+    _finish = NWO_OT_ImportHalo3Object._finish
+
+    def __init__(self, owner, options):
+        self.owner = owner
+        self.report = owner.report
+        self.filepath = owner.filepath
+        self.options = options
+        self.preview_materials = options.materials
+        self.scenario_geometry = options.geometry
+        self.scenario_objects = options.objects
+        self.scenario_content = options.content
+        self.scenario_hints = options.giant_hints
+        self.scenario_points = options.firing_positions or options.script_points
+        self.scenario_bsp_indices = ''
+        self.flip_normal_green = True
+        self.import_collision = False
+        self.import_physics = False
+        self.reference_only = True
+
+
 def menu_import(self, context):
-    self.layout.operator(NWO_OT_ImportHalo3Object.bl_idname, text="Halo 3 Object (Foundry Experimental)")
+    self.layout.operator(NWO_OT_ImportHalo3Object.bl_idname, text="Halo 3 Asset (Foundry Experimental)")
 
 
 def register():
