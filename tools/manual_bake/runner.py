@@ -324,7 +324,7 @@ def run(config):
         pins={str(p):sha(p) for p in (tool,kit/'project.xml',tags/'globals/lightmapper_globals.lightmapper_globals')}
         if c.get('Plan'):pins[str(Path(c['Plan']).resolve())]=sha(c['Plan'])
         sources=list(HERE.glob('*.py'))+[REPO/'blender/addons/io_scene_foundry'/p for p in (
-            'h3_import/port_environment/light_units.py','h3_import/port_environment/native_scene.py',
+            'h3_import/port_environment/light_units.py','h3_import/port_environment/surface_light_units.py','h3_import/port_environment/native_scene.py',
             'managed_blam/scenario_structure_lighting_info.py','managed_blam/__init__.py')]
         c['ImplementationHashes']={str(p):sha(p) for p in sources};pins.update(c['ImplementationHashes'])
         for source in sources:

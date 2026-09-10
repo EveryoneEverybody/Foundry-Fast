@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 from . import authoring
 from .light_units import reach_attenuation_units
+from .surface_light_units import surface_attenuation_record
 
 
 def close(actual, expected, label, tolerance=1e-4):
@@ -61,6 +62,7 @@ def lighting(plan, report):
             if float(s.get('emissive power',0))<=0:continue
             destination=next(r['destination'] for r in plan['materials'] if r['source_shader']==m['source_shader'])
             expected={k:float(s[k]) for k in ('emissive power','emissive focus','attenuation falloff','attenuation cutoff')}
+            expected.update(surface_attenuation_record(s)['REACH_AUTHORING_VALUES'])
             expected['emissive color']=authoring.vector(s['emissive color'])
             if m.get('emissive_authoring'):
                 spread=m['emissive_authoring']['target']['foundry_emissive_spread_radians']

@@ -5,8 +5,11 @@ Python 3.11+, background Blender compatible with Foundry's bundled wheels, and
 an installed HREK. It does not install or patch engine binaries.
 
 The generic light translator converts source/world attenuation distances to
-Reach authoring units exactly once (×100). Source plans, positions, intensity,
-color, cones, orientation and emissive surface-light ranges are not rescaled.
+Reach authoring units exactly once (Ã—100). Source plans, positions, intensity,
+color, cones and orientation remain unchanged. Surface emitters use a separate
+source-controlled conversion: explicit H3 ranges ×100; disabled H3 attenuation
+uses its finite 20/21 world-unit surface default, authored as 2000/2100 in Reach.
+Stored disabled distances remain in source provenance and are not active ranges.
 Normal native lighting validation and the read-only audit use the same units.
 
 ## Configuration
@@ -45,8 +48,8 @@ list, a PowerShell string array, or `all`. Indices are target **scenario** indic
 not source BSP numbers. A list executes separate complete jobs sequentially;
 `all` executes one combined job. Their photon budgets/transport need not match.
 
-Workers is an integer1–64 (operator guard, not an engine limit), default1.
-There is no Auto setting. It controls concurrent farm clients: indices0…N−1
+Workers is an integer1â€“64 (operator guard, not an engine limit), default1.
+There is no Auto setting. It controls concurrent farm clients: indices0â€¦Nâˆ’1
 each receive countN, followed by one merge with N after every client succeeds.
 It does not cap the internal threads of Tool/VMF. Choose based on available RAM
 as well as CPU; each process has its own allocations.
@@ -180,3 +183,19 @@ concurrency evidence automatically.
 The successful run also writes `tag-test.txt`. Set optional `InitialZoneSet` in
 local config for a scenario-specific console sequence. Launching/viewing the
 game is manual; the helper makes no runtime acceptance claim.
+
+
+## Surface-light preparation
+
+PrepareOnly also resolves positive source material rows through the existing BSP
+shader and imported-material references. It verifies power, color, focus, quality,
+flags and bounce before changing only falloff/cutoff, then reopens the native tag.
+Reports include old/new values, SOURCE_H3_SEMANTICS, REACH_AUTHORING_VALUES and
+EXPECTED_FAUX_EFFECTIVE_VALUES. Source plans remain immutable. Ordinary Reach
+material authoring and runtime shader self illumination are unchanged.
+
+Unsupported frustum/flag contracts and explicit non-increasing ranges fail closed.
+The expected effective cutoff includes the shared 0.001 minimum range separation.
+Use a fresh OutputNamespace for disposable lighting-input proof; this is not an
+isolated bake namespace. PrepareAndBake applies the correction only after the
+existing explicit guarded-in-place confirmation. No bake runs in PrepareOnly.

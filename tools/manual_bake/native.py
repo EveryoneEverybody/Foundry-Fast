@@ -14,6 +14,7 @@ def main(config):
     sys.path[:0] = [str(addon.parent), str(addon / 'h3_import')]
     from port_environment import worker, native_scene
     from port_environment.light_units import attenuation_record
+    from port_environment.surface_light_units import surface_native_updates, write_surface_attenuation, RANGE_FIELDS
     from port_environment.model import stable_hash
     run = Path(config['native_run']); run.mkdir(exist_ok=False)
     worker.dependencies(addon, run)
@@ -150,7 +151,12 @@ def main(config):
             before[dest] = old; targets.append(dest)
             view['bsps'].append(dict(b, destination=dest.rsplit('.',1)[0]+'.scenario_structure_bsp'))
             view['lighting_by_bsp'].append(lighting)
-            records.append(dict(bsp=i, path=dest, definitions=[attenuation_record(d) for d in lighting['definitions']]))
+            bsp_tag = load(bsps[i])
+            try: bsp_materials = value(bsp_tag.SelectField('materials'))
+            finally: bsp_tag.Dispose()
+            surfaces = surface_native_updates(b['materials'][:len(b['authoring']['materials'])],
+                {m['source_shader']:m['destination'] for m in plan['materials']}, bsp_materials, old['material info'])
+            records.append(dict(bsp=i, path=dest, definitions=[attenuation_record(d) for d in lighting['definitions']], surfaces=surfaces))
         if config['action'] == 'prepare':
             # The real fixed translator + native writer; never the geometry pipeline.
             original_init = Tag.__init__
@@ -162,6 +168,12 @@ def main(config):
                     raise ValueError('Writer attempted an unselected tag')
             Tag.__init__ = guarded_init
             native_scene.write_static_lights(view, result, attenuation_only=True)
+            for row in records:
+                tag = load(row['path'])
+                try:
+                    write_surface_attenuation(tag, row['surfaces'])
+                    tag.Save()
+                finally: tag.Dispose()
         for row in records:
             actual = read(row['path']) if config['action'] == 'prepare' else before[row['path']]
             probe = config.get('probe')
@@ -176,13 +188,22 @@ def main(config):
                 expected['matches_corrected_authoring'] = close(expected['native_authoring'], expected['REACH_AUTHORING_UNITS'])
                 if config['action'] == 'prepare' and not expected['matches_corrected_authoring']:
                     raise ValueError('Native readback attenuation mismatch')
+            for surface in row['surfaces']:
+                native = actual['material info'][surface['native_row']]
+                surface['native_authoring'] = {k:native[k] for k in RANGE_FIELDS}
+                surface['matches_corrected_authoring'] = close(surface['native_authoring'], surface['REACH_AUTHORING_VALUES'])
+                if config['action'] == 'prepare' and not surface['matches_corrected_authoring']:
+                    raise ValueError('Native surface attenuation readback mismatch')
             old = deepcopy(before[row['path']]); comparison = deepcopy(actual)
+            for tag in (old, comparison):
+                for surface in row['surfaces']:
+                    for key in RANGE_FIELDS: tag['material info'][surface['native_row']].pop(key)
             for tag in (old, comparison):
                 for d in tag['generic light definitions']:
                     d.pop('near attenuation bounds'); d.pop('far attenuation bounds')
-            if old != comparison: raise ValueError('Preparation changed fields outside generic attenuation')
+            if old != comparison: raise ValueError('Preparation changed fields outside selected light attenuation')
         result['preparation'] = records
-        result['needs_preparation'] = any(not d['matches_corrected_authoring'] for r in records for d in r['definitions'])
+        result['needs_preparation'] = any(not d['matches_corrected_authoring'] for r in records for d in [*r['definitions'], *r['surfaces']])
         result['faux_started'] = False
     if config['action'] == 'verify':
         lm = scenario.get('new lightmaps')

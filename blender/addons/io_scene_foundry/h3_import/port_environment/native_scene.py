@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from . import authoring, native_contracts, native_topology
 from .model import stable_hash
 from .light_units import reach_attenuation_units
+from .surface_light_units import surface_attenuation_record
 
 
 def face_property(mesh, kind, values, indices=None):
@@ -115,14 +116,15 @@ def render_properties(ob, record, parts, material_rows, source_materials):
         if row.get('emissive_authoring'):
             focus = row['emissive_authoring']['target']['foundry_emissive_spread_radians']
         color = authoring.vector(light['emissive color'])
+        surface_range = surface_attenuation_record(light)['REACH_AUTHORING_VALUES']
         face_property(ob.data,'emissive',dict(
             material_lighting_emissive_power=float(light['emissive power']),
             material_lighting_emissive_color=[utils.srgb_to_linear(v) for v in color],
             material_lighting_emissive_per_unit=bool(int(light['flags']) & 2),
             material_lighting_emissive_quality=float(light['emissive quality']),
             material_lighting_emissive_focus=focus,
-            material_lighting_attenuation_cutoff=float(light['attenuation cutoff'])/(100*WU_SCALAR),
-            material_lighting_attenuation_falloff=float(light['attenuation falloff'])/(100*WU_SCALAR)),selected)
+            material_lighting_attenuation_cutoff=surface_range['attenuation cutoff']/(100*WU_SCALAR),
+            material_lighting_attenuation_falloff=surface_range['attenuation falloff']/(100*WU_SCALAR)),selected)
 
 
 def collision_record(definition, bsp, material_rows):
