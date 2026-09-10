@@ -142,8 +142,9 @@ def native_color_readback(source, target, groups):
     """Check authored RGB multisets after Tool's vertex reordering/welding.
 
     This supplements the per-corner geometry correspondence checked by recover.
-    Reach Tool marks every sky mesh color-enabled, including uncolored input;
-    record its defaults without claiming those are recovered H3 authoring.
+    Tool may generate color streams for uncolored input. Color consumption is
+    corrected separately by apply_native_color_provenance; these generated
+    values are never classified as authored colors.
     """
     src = fixtures.block(source, 'per mesh temporary')
     dst = fixtures.block(target, 'per mesh temporary')
@@ -167,3 +168,52 @@ def native_color_readback(source, target, groups):
             row.update(status='NO_SOURCE_COLOR_ATTRIBUTE', native_tool_default_black=all(c == [0,0,0] for c in b))
         rows.append(row)
     return rows
+
+
+def apply_native_color_provenance(tag, groups):
+    """Apply source-authored color presence after Tool import, never RGB values.
+
+    Resolve groups through native region/permutation ownership before touching
+    flags. Unknown provenance or changed mesh topology must not be guessed.
+    The caller owns saving and reopening the generated tag.
+    """
+    if not groups:
+        return []
+    meshes = list(tag.SelectField('render geometry[0]/meshes').Elements)
+    owners = {}
+    for region in tag.SelectField('regions').Elements:
+        name = region.SelectField('name').GetStringData()
+        for permutation in region.SelectField('permutations').Elements:
+            key = (name, permutation.SelectField('name').GetStringData())
+            if key in owners:
+                raise ValueError('Ambiguous native color-provenance ownership')
+            start = int(permutation.SelectField('mesh index').Data)
+            count = int(permutation.SelectField('mesh count').Data)
+            owners[key] = list(range(start, start + count))
+    planned = {}
+    for group in groups:
+        if type(group.get('has_vertex_color')) is not bool:
+            raise ValueError('Missing source vertex-color provenance')
+        key = (group['region_name'], group['permutation_name'])
+        planned.setdefault(key, []).append(group)
+    if planned.keys() != owners.keys():
+        raise ValueError('Native region/permutation ownership differs from source')
+    assignments = []
+    for key, source in planned.items():
+        indices = owners[key]
+        if len(source) != len(indices):
+            raise ValueError('Native mesh count differs from source color groups')
+        for group, index in zip(source, indices):
+            if not 0 <= index < len(meshes):
+                raise ValueError('Invalid native color-provenance mesh index')
+            assignments.append((index, group['has_vertex_color']))
+    if sorted(i for i, _ in assignments) != list(range(len(meshes))):
+        raise ValueError('Native color-provenance meshes overlap or are unmapped')
+    changes = []
+    for index, authored in assignments:
+        flags = meshes[index].SelectField('mesh flags')
+        before = flags.TestBit('mesh has vertex color')
+        if before != authored:
+            flags.SetBit('mesh has vertex color', authored)
+        changes.append(dict(mesh=index, before=before, after=authored))
+    return changes

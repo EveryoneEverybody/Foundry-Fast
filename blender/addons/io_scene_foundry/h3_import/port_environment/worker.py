@@ -510,6 +510,19 @@ def configure_scenario(paths, plan):
 
 
 def configure_sky_model(plan):
+    from io_scene_foundry.managed_blam import Tag
+    from .sky_attributes import apply_native_color_provenance
+    groups = plan['sky']['mesh'].get('source_draw_groups', [])
+    if groups:
+        path = plan['sky']['destination'].rsplit('.', 1)[0]+'.render_model'
+        with Tag(path=path, tag_must_exist=True) as tag:
+            changes = apply_native_color_provenance(tag.tag, groups)
+            if any(row['before'] != row['after'] for row in changes):
+                tag.tag.Save()
+        with Tag(path=path, tag_must_exist=True) as tag:
+            readback = apply_native_color_provenance(tag.tag, groups)
+            if any(row['before'] != row['after'] for row in readback):
+                raise ValueError('Native source vertex-color flags did not persist')
     from io_scene_foundry.managed_blam.model import ModelTag
     with ModelTag(path=plan['sky']['destination'].rsplit('.',1)[0]+'.model', tag_must_exist=True) as tag:
         tag.tag.SelectField('ShortEnum:imposter policy').SetValue('never')

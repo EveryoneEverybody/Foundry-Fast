@@ -6,7 +6,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'blender/addons/io_scene_foundry/h3_import'))
-from port_environment.sky_attributes import recover,draw_meshes,_strip,native_color_readback
+from port_environment.sky_attributes import recover,draw_meshes,_strip,native_color_readback,apply_native_color_provenance
 
 
 def fixture():
@@ -96,6 +96,64 @@ class SkyAttributes(unittest.TestCase):
     def test_native_readback_rejects_lost_sky_mesh(self):
         mesh,source=fixture();groups=recover(mesh,source)['source_draw_groups']
         with self.assertRaisesRegex(ValueError,'mesh count'):native_color_readback(source,source,groups[:-1])
+
+
+
+
+class NativeField:
+    def __init__(self, value):
+        self.Data = value
+        self.Elements = value
+    def GetStringData(self): return self.Data
+    def TestBit(self, name): return bool(self.Data & 1)
+    def SetBit(self, name, enabled): self.Data = (self.Data & ~1) | int(enabled)
+
+
+class NativeRow:
+    def __init__(self, **fields): self.fields = {k: NativeField(v) for k,v in fields.items()}
+    def SelectField(self, name): return self.fields[name]
+
+
+def native_fixture(groups):
+    regions = [NativeRow(name=g['region_name'], permutations=[NativeRow(**{
+        'name': g['permutation_name'], 'mesh index': i, 'mesh count': 1})]) for i,g in enumerate(groups)]
+    return NativeRow(**{'regions': regions, 'render geometry[0]/meshes': [
+        NativeRow(**{'mesh flags': 3}) for _ in groups]})
+
+
+class NativeColorProvenance(unittest.TestCase):
+    def test_tool_generated_color_consumption_follows_source_presence(self):
+        mesh, source = fixture()
+        recovered = recover(mesh, source)
+        groups = recovered['source_draw_groups']
+        native = native_fixture(groups)
+        before = deepcopy(recovered)
+        self.assertEqual([r['after'] for r in apply_native_color_provenance(native, groups)], [True, False])
+        self.assertEqual([m.SelectField('mesh flags').Data for m in native.SelectField('render geometry[0]/meshes').Elements], [3, 2])
+        self.assertEqual(recovered, before)  # Accepted sky/cloud RGB is never edited.
+        self.assertTrue(all(r['before'] == r['after'] for r in apply_native_color_provenance(native, groups)))
+
+    def test_intentionally_authored_black_still_enables_consumption(self):
+        mesh, source = fixture()
+        for field in source.findall('.//field[@name="vertex color"]'): field.set('value', '0,0,0')
+        recovered = recover(mesh, source)
+        groups = recovered['source_draw_groups']
+        native = native_fixture(groups)
+        native.SelectField('render geometry[0]/meshes').Elements[0].SelectField('mesh flags').Data = 2
+        self.assertEqual([r['after'] for r in apply_native_color_provenance(native, groups)], [True, False])
+        self.assertEqual(recovered['vertices'][0]['color'], [0,0,0])
+
+    def test_invalid_ownership_fails_before_any_flag_write(self):
+        mesh, source = fixture(); groups = recover(mesh, source)['source_draw_groups']
+        native = native_fixture(groups)
+        native.SelectField('regions').Elements[1].SelectField('permutations').Elements[0].SelectField('mesh index').Data = 0
+        with self.assertRaisesRegex(ValueError, 'overlap'): apply_native_color_provenance(native, groups)
+        self.assertEqual([m.SelectField('mesh flags').Data for m in native.SelectField('render geometry[0]/meshes').Elements], [3,3])
+
+    def test_unknown_provenance_does_not_guess_from_generated_stream(self):
+        mesh, source = fixture(); groups = recover(mesh, source)['source_draw_groups']
+        native = native_fixture(groups); del groups[0]['has_vertex_color']
+        with self.assertRaisesRegex(ValueError, 'provenance'): apply_native_color_provenance(native, groups)
 
 
 if __name__=='__main__':unittest.main()
