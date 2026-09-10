@@ -2,6 +2,7 @@
 import math
 from pathlib import Path
 from . import authoring
+from .light_units import reach_attenuation_units
 
 
 def close(actual, expected, label, tolerance=1e-4):
@@ -26,7 +27,8 @@ def lighting(plan, report):
                 for field,key in [('type','type'),('color','color'),('intensity','intensity'),('aspect','aspect'),
                     ('near attenuation bounds','near_attenuation'),('far attenuation bounds','far_attenuation')]:
                     f=element.SelectField(field)
-                    close(f.Value if field=='type' else f.Data,d[key],path+' '+field)
+                    expected = [reach_attenuation_units(x) for x in d[key]] if key in ('near_attenuation','far_attenuation') else d[key]
+                    close(f.Value if field=='type' else f.Data,expected,path+' '+field)
                 close(element.SelectField('shape').Value,{'rectangle':0,'circle':1}[d['source_fields']['shape']],path+' shape')
                 if d['type']==1:
                     for field,key in [('hotspot size','hotspot_size'),('hotspot cutoff size','hotspot_cutoff'),

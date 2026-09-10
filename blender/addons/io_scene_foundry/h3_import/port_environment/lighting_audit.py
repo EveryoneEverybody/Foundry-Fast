@@ -7,6 +7,7 @@ import base64
 import math
 import struct
 from . import fixtures
+from .light_units import reach_attenuation_units
 
 
 def numbers(value):
@@ -50,6 +51,11 @@ def audit_static(source, authored, native):
              'shape': triple(s['shape'], a['source_fields']['shape'], n['shape'])}
         for field, key in [('color', 'color'), ('near attenuation bounds', 'near_attenuation'), ('far attenuation bounds', 'far_attenuation')]:
             v[field] = triple(numbers(s[field]), a[key], numbers(n[field]))
+            if key in ('near_attenuation', 'far_attenuation'):
+                v[field] = triple([reach_attenuation_units(x) for x in numbers(s[field])],
+                                  [reach_attenuation_units(x) for x in a[key]], numbers(n[field]))
+                v[field].update(SOURCE_WORLD_UNITS=numbers(s[field]), comparison_units='REACH_AUTHORING_UNITS',
+                                EXPECTED_FAUX_WORLD_UNITS=a[key])
         for field in ('intensity', 'aspect'):
             v[field] = triple(float(s[field]), a[field], float(n[field]))
         for field, source_field, key in [('hotspot size', 'hotspot size', 'hotspot_size'),

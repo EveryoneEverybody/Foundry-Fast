@@ -9,6 +9,7 @@ import bpy
 from ..managed_blam.model import ModelTag
 from ..managed_blam.scenario_structure_lighting_info import ScenarioStructureLightingInfoTag
 from ..constants import VALID_MESHES, WU_SCALAR
+from ..h3_import.port_environment.light_units import REACH_ATTENUATION_AUTHORING_SCALE
 from ..auto_bsp import AutoBSPAssigner
 from .. import utils
 import traceback
@@ -66,7 +67,7 @@ class BlamLightDefinition:
         if corinth:
             atten_scalar = 1
         else:
-            atten_scalar = 100
+            atten_scalar = REACH_ATTENUATION_AUTHORING_SCALE
         nwo = data.nwo
         self.data_name = data.name
         self.id = utils.id_from_string(self.data_name)

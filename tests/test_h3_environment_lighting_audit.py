@@ -22,6 +22,7 @@ def fixture():
         intensity=3, aspect=.5, near_attenuation=[0,1], far_attenuation=[2,4], hotspot_size=45.,
         hotspot_cutoff=90., hotspot_falloff=1.)], instances=[dict(definition_index=0, origin=[2,3,4], forward=[1,0,0], up=[0,0,1])])
     n = dict(s, flags='use far attenuation, light version 1', **{'hotspot size':'45', 'hotspot cutoff size':'90', 'hotspot falloff speed':'1'})
+    n.update({'near attenuation bounds':'0,100', 'far attenuation bounds':'200,400'})
     ni = dict(i, **{'bounce light control':'1', 'light volume distance':'0', 'light volume intensity scalar':'0',
         'fade out distance':'0', 'fade start distance':'0', 'shader reference index':'-1',
         'bungie light type':'default ligthmap light', 'screen space specular':'version 1 instances',

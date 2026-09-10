@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from . import authoring, native_contracts, native_topology
 from .model import stable_hash
+from .light_units import reach_attenuation_units
 
 
 def face_property(mesh, kind, values, indices=None):
@@ -350,7 +351,7 @@ def construct(scene, plan, config, mats, report, mesh_object):
     bpy.context.view_layer.update()
 
 
-def write_static_lights(plan, report):
+def write_static_lights(plan, report, *, attenuation_only=False):
     """Use Foundry's native lighting authoring writer, with explicit BSP ownership."""
     from io_scene_foundry.managed_blam.scenario_structure_lighting_info import ScenarioStructureLightingInfoTag
     report['static_light_authoring']=[]
@@ -360,8 +361,8 @@ def write_static_lights(plan, report):
             definitions.append(SimpleNamespace(**{k:v for k,v in d.items() if k not in {'source_fields','shape'}},
                 shape={'rectangle':0,'circle':1}[d['source_fields']['shape']],
                 data_name=f'{bsp["region"]}_light_{d["source_index"]}',
-                near_attenuation_start=d['near_attenuation'][0],near_attenuation_end=d['near_attenuation'][1],
-                far_attenuation_start=d['far_attenuation'][0],far_attenuation_end=d['far_attenuation'][1],
+                near_attenuation_start=reach_attenuation_units(d['near_attenuation'][0]),near_attenuation_end=reach_attenuation_units(d['near_attenuation'][1]),
+                far_attenuation_start=reach_attenuation_units(d['far_attenuation'][0]),far_attenuation_end=reach_attenuation_units(d['far_attenuation'][1]),
                 inverse_squared_falloff=False))
         instances=[SimpleNamespace(**i,data_name=definitions[i['definition_index']].data_name,
             game_type=0,screen_space_specular=False,bounce_ratio=1.0,volume_distance=0.0,volume_intensity=0.0,
@@ -369,6 +370,14 @@ def write_static_lights(plan, report):
         path=bsp['destination'].rsplit('.',1)[0]+'.scenario_structure_lighting_info'
         with ScenarioStructureLightingInfoTag(path=path,tag_must_exist=True) as tag:
             before_materials=tag.tag.SelectField('Block:material info').Elements.Count
+            if attenuation_only:
+                # Existing accepted tags may contain user-owned controls. The
+                # prepare workflow updates only the four converted distances.
+                tag.update_reach_attenuation(definitions)
+                tag.tag.Save()
+                report['static_light_authoring'].append(dict(path=path, definitions=len(definitions),
+                    mode='ATTENUATION_ONLY', source_bsp=bsp['source_tag']))
+                continue
             tag.build_tag(instances,definitions)
             # Foundry's ordinary writer enables far attenuation by default.
             # Restore the decoded authored flags by name, not numeric analogy.

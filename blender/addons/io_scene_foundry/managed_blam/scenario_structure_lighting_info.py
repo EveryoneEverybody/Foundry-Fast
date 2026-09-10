@@ -186,6 +186,15 @@ class ScenarioStructureLightingInfoTag(Tag):
             flags.SetBit("invere squared falloff", light.inverse_squared_falloff)
 
             element.SelectField("aspect").Data = light.aspect
+
+    def update_reach_attenuation(self, light_definitions):
+        """Prepare an accepted Reach input without rebuilding instances/materials."""
+        if self.corinth or self.block_generic_light_definitions.Elements.Count != len(light_definitions):
+            raise ValueError('Expected matching existing Reach generic definitions')
+        for element, light in zip(self.block_generic_light_definitions.Elements, light_definitions):
+            element.SelectField('near attenuation bounds').Data = [light.near_attenuation_start, light.near_attenuation_end]
+            element.SelectField('far attenuation bounds').Data = [light.far_attenuation_start, light.far_attenuation_end]
+        self.tag_has_changes = True
             
     def _write_reach_light_instances(self, light_instances, light_definitions):
         # self.block_generic_light_instances.RemoveAllElements()
