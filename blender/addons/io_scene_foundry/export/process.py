@@ -544,10 +544,10 @@ class ExportScene:
                 
             if self.corinth:
                 new_default_coll = PoopCollisionType.none.value
-                if has_phys:
+                if has_phys and proxy_collision.nwo.poop_collision_type == "default":
                     mesh_props["bungie_mesh_poop_collision_type"] = PoopCollisionType.bullet_collision.value
                 else:
-                    mesh_props["bungie_mesh_poop_collision_type"] = PoopCollisionType.default.value
+                    mesh_props["bungie_mesh_poop_collision_type"] = PoopCollisionType[proxy_collision.nwo.poop_collision_type].value
             
             coll_props.update(mesh_props)
             ob_halo_data[proxy_collision] = (coll_props, region, permutation, tuple())
@@ -1060,6 +1060,7 @@ class ExportScene:
         data_nwo: NWO_MeshPropertiesGroup = mesh.nwo
         copy = None
         skip = False
+        force_collision_only = False
         
         match self.asset_type:
             case AssetType.MODEL | AssetType.MULTI_MODEL:
@@ -1094,6 +1095,12 @@ class ExportScene:
                 match mesh_type:
                     case '_connected_geometry_mesh_type_default':
                         mesh_type = '_connected_geometry_mesh_type_poop'
+                    case '_connected_geometry_mesh_type_collision':
+                        if self.corinth:
+                            mesh_type = '_connected_geometry_mesh_type_poop_collision'
+                        else:
+                            mesh_type = '_connected_geometry_mesh_type_poop'
+                            force_collision_only = True
                     case '_connected_geometry_mesh_type_structure':
                         mesh_type = '_connected_geometry_mesh_type_default'
                         seam_material = mesh.materials.get("+seam")
@@ -1105,6 +1112,9 @@ class ExportScene:
                 match mesh_type:
                     case '_connected_geometry_mesh_type_poop':
                         self._setup_poop_props(ob, nwo, data_nwo, props, mesh_props)
+                    case '_connected_geometry_mesh_type_poop_collision':
+                        if self.corinth:
+                            self._setup_poop_props(ob, nwo, data_nwo, props, mesh_props)
                     case '_connected_geometry_mesh_type_seam':
                         if props.get("bungie_mesh_seam_associated_bsp") is None:
                             props["bungie_mesh_seam_associated_bsp"] = region
@@ -1195,6 +1205,9 @@ class ExportScene:
         else:
             mesh_props.update(tmp_mesh_props)
 
+        if force_collision_only:
+            mesh_props["bungie_face_mode"] = FaceMode.collision_only.value
+
         return copy, skip
     
     def _setup_water_physics_props(self, nwo: NWO_ObjectPropertiesGroup, props: dict):
@@ -1225,6 +1238,8 @@ class ExportScene:
     def _setup_poop_props(self, ob: bpy.types.Object, nwo: NWO_ObjectPropertiesGroup, data_nwo: NWO_MeshPropertiesGroup, props: dict, mesh_props: dict):
         props["bungie_mesh_poop_lighting"] = PoopLighting[nwo.poop_lighting].value
         props["bungie_mesh_poop_pathfinding"] = PoopInstancePathfindingPolicy[nwo.poop_pathfinding].value
+        if self.corinth:
+            props["bungie_mesh_poop_collision_type"] = PoopCollisionType[nwo.poop_collision_type].value
         if self.export_settings.force_imposter_policy_never:
             props["bungie_mesh_poop_imposter_policy"] = PoopInstanceImposterPolicy.never.value
             # props["bungie_mesh_poop_imposter_transition_distance"] = 999999
@@ -1502,8 +1517,6 @@ class ExportScene:
             
             match prop.type:
                         
-                case 'collision_type':
-                    mesh_props["bungie_mesh_poop_collision_type"] = PoopCollisionType[prop.collision_type].value
                 case 'face_mode':
                     face_mode = FaceMode[prop.face_mode]
                     
@@ -1538,7 +1551,7 @@ class ExportScene:
                     if self.asset_type.supports_global_materials and prop.global_material.strip():
                         mat = prop.global_material.strip().replace(' ', "_")
                         if mat:
-                            if self.corinth and mesh_type_value in {MeshType.poop.value or MeshType.poop_collision.value}:
+                            if self.corinth and mesh_type_value in {MeshType.poop.value, MeshType.poop_collision.value}:
                                 mesh_props["bungie_mesh_global_material"] = mat
                                 mesh_props["bungie_mesh_poop_collision_override_global_material"] = 1
                             else:

@@ -155,13 +155,21 @@ class ScenarioStructureBspTag(Tag):
             self.collection.children.link(structure_collection)
             return structure_collection
 
-        def add_havok_collision_objects(havok_collisions: list[HavokCollision], structure_collection: bpy.types.Collection):
+        def add_havok_collision_objects(havok_collisions: list[HavokCollision], structure_collection: bpy.types.Collection, face_indices_by_collision: dict[HavokCollision, list[int]] | None = None):
             if not havok_collisions:
                 return
 
-            utils.print_step(f"Creating Havok Collision ({len(havok_collisions)})")
+            collision_objects = []
             for havok_collision in havok_collisions:
-                ob = havok_collision.to_object()
+                face_indices = None if face_indices_by_collision is None else face_indices_by_collision.get(havok_collision, [])
+                if face_indices is not None and not face_indices:
+                    continue
+                ob = havok_collision.to_object(face_indices=face_indices)
+                collision_objects.append(ob)
+
+            if collision_objects:
+                utils.print_step(f"Creating Havok Collision ({len(collision_objects)})")
+            for ob in collision_objects:
                 objects.append(ob)
                 structure_collection.objects.link(ob)
 
@@ -229,18 +237,39 @@ class ScenarioStructureBspTag(Tag):
         # Get render geometry temp meshes block
         temp_meshes = self.tag.SelectField("Struct:render geometry[0]/Block:per mesh temporary")
         meshes = self.tag.SelectField("Struct:render geometry[0]/Block:meshes")
+
+        havok_collisions = []
+        havok_standalone_face_indices = None
+        if import_havok and not for_cinematic:
+            havok_collisions = self._read_havok_collisions(collision_materials)
+
         # Get all instance definitions
+        instance_definitions = []
+        instances = []
+        created_instance_indices = set()
+        ig_collection = None
+        permitted_collections = set()
         num_defs = self.block_instance_definitions.Elements.Count
         if num_defs > 0:
-            instance_definitions = []
+            instance_definitions = [
+                InstanceDefinition(element, meshes, bounds, render_materials, collision_materials, for_cinematic)
+                for element in self.block_instance_definitions.Elements
+            ]
+            instances = [Instance(element, instance_definitions) for element in self.block_instances.Elements]
+            if havok_collisions:
+                havok_standalone_face_indices = self._map_havok_instance_collision(
+                    havok_collisions,
+                    instances,
+                    render_model,
+                    temp_meshes,
+                )
+
             process = "  - Creating Instance Definitions"
             with utils.Spinner():
                 utils.update_job_count(process, "", 0, num_defs)
-                for element in self.block_instance_definitions.Elements:
-                    definition = InstanceDefinition(element, meshes, bounds, render_materials, collision_materials, for_cinematic)
+                for definition in instance_definitions:
                     objects.extend(definition.create(render_model, temp_meshes))
-                    instance_definitions.append(definition)
-                    utils.update_job_count(process, "", element.ElementIndex, num_defs)
+                    utils.update_job_count(process, "", definition.index, num_defs)
                 utils.update_job_count(process, "", num_defs, num_defs)
             
             # Create instanced geometries
@@ -252,15 +281,14 @@ class ScenarioStructureBspTag(Tag):
             # Keeping track of the collections we add in this bsp import
             # This avoids putting objects in collections that already existed prior to export
             # and therefore prevents incorrect bsp assignment
-            permitted_collections = set()
-            for element in self.block_instances.Elements:
-                io = Instance(element, instance_definitions)
+            for io in instances:
                 if io.definition.blender_render or io.definition.blender_collision:
                     io_collection = io.get_collection(ig_collection, permitted_collections, self.tag_path.ShortName)
                     permitted_collections.add(io_collection)
                     ob = io.create()
                     objects.append(ob)
                     io_collection.objects.link(ob)
+                    created_instance_indices.add(io.index)
         
         # if poops:
         #     with bpy.context.temp_override(selected_editable_objects=poops, object=poops[0]):
@@ -282,7 +310,6 @@ class ScenarioStructureBspTag(Tag):
         # Create structure
         structure_objects = []
         collision = None
-        havok_collisions = []
         merged_collision_geometry = False
         
         structure_collection = new_structure_collection()
@@ -292,7 +319,22 @@ class ScenarioStructureBspTag(Tag):
         if not for_cinematic:
             collision = get_collision()
             if import_havok:
-                havok_collisions = self._read_havok_collisions(collision_materials)
+                proxy_objects, havok_standalone_face_indices = self._create_havok_instance_proxies(
+                    havok_collisions,
+                    instances,
+                    havok_standalone_face_indices,
+                )
+                objects.extend(proxy_objects)
+                if ig_collection is not None:
+                    for io in instances:
+                        if io.index in created_instance_indices or not (io.definition.blender_render or io.definition.blender_collision):
+                            continue
+                        io_collection = io.get_collection(ig_collection, permitted_collections, self.tag_path.ShortName)
+                        permitted_collections.add(io_collection)
+                        ob = io.create()
+                        objects.append(ob)
+                        io_collection.objects.link(ob)
+                        created_instance_indices.add(io.index)
             legacy_surface_triangle_mapping = []
             if collision is not None:
                 legacy_surface_triangle_mapping = [SurfaceMapping(e.Fields[0].Data, e.Fields[1].Data, collision.surfaces[e.ElementIndex], self.tag.SelectField("Block:structure surface to triangle mapping")) for e in self.tag.SelectField("Block:large structure surfaces").Elements]
@@ -359,7 +401,7 @@ class ScenarioStructureBspTag(Tag):
                     bpy.data.meshes.remove(collision_mesh)
                 
         if havok_collisions:
-            add_havok_collision_objects(havok_collisions, structure_collection)
+            add_havok_collision_objects(havok_collisions, structure_collection, havok_standalone_face_indices)
 
         if always_get_structure_collision:
             if collision is None:
@@ -379,7 +421,7 @@ class ScenarioStructureBspTag(Tag):
             objects.append(ob)
             # utils.unlink(ob)
             structure_collection.objects.link(ob)
-            ob.nwo.proxy_instance = True
+            ob.nwo.proxy_instance = not self.corinth
             ob.data.nwo.mesh_type = '_connected_geometry_mesh_type_structure'
             
             # separate out the seams
@@ -762,6 +804,211 @@ class ScenarioStructureBspTag(Tag):
                 standalone_face_indices[havok_collision] = sorted(rejected_face_indices)
 
         return surface_triangle_mapping, standalone_face_indices
+
+    @staticmethod
+    def _map_havok_instance_collision(
+        havok_collisions: list[HavokCollision],
+        instances: list[Instance],
+        render_model,
+        temp_meshes,
+    ) -> dict[HavokCollision, list[int]]:
+        """Map definition-local Havok faces back to their original render triangles."""
+        mapped_face_indices = {collision: set() for collision in havok_collisions}
+        fallback_face_indices = {collision: list(range(len(collision.faces))) for collision in havok_collisions}
+        if not havok_collisions or not instances:
+            return fallback_face_indices
+
+        triangle_counts = {}
+        for instance in instances:
+            definition = instance.definition
+            if definition in triangle_counts:
+                continue
+
+            mesh = definition.mesh
+            if not mesh.valid:
+                triangle_counts[definition] = 0
+                continue
+
+            mesh.render_model = render_model
+            mesh.temp_meshes = temp_meshes
+            mesh.instances = []
+            mesh.real_mesh_index = None
+            try:
+                mesh._get_raw_mesh_data()
+            except (IndexError, ValueError):
+                triangle_counts[definition] = 0
+                continue
+            triangle_counts[definition] = len(mesh.tris)
+
+        instances_by_index = {instance.index: instance for instance in instances}
+        claimed_render_triangles = {}
+        mapped_definitions = set()
+        for collision in havok_collisions:
+            for source_instance_index, face_indices in collision.source_instance_face_indices().items():
+                instance = instances_by_index.get(source_instance_index)
+                if instance is None:
+                    continue
+
+                definition = instance.definition
+                triangle_count = triangle_counts.get(definition, 0)
+                if triangle_count < 1:
+                    continue
+                # Collision type is object-wide in Foundry. Leave conflicting
+                # faces for the standalone fallback instead of mixing a mesh.
+                if definition.havok_collision_type_name not in {None, collision.collision_type_name}:
+                    continue
+
+                definition_claims = claimed_render_triangles.setdefault(definition, {})
+                definition_mapped_faces = set()
+                mappings = collision.to_surface_triangle_mappings(
+                    [(0, 0, triangle_count)],
+                    definition_claims,
+                    face_indices=face_indices,
+                    mapped_face_indices=definition_mapped_faces,
+                )
+                if not definition_mapped_faces:
+                    continue
+
+                mapped_face_indices[collision].update(definition_mapped_faces)
+                if mappings:
+                    definition.surface_triangle_mapping.extend(mappings)
+                definition.havok_collision_type_name = collision.collision_type_name
+                definition.has_collision = True
+                definition.collision_is_proxy = False
+                mapped_definitions.add(definition)
+
+        mapped_count = sum(len(indices) for indices in mapped_face_indices.values())
+        if mapped_count:
+            utils.print_step(f"Mapped {mapped_count} Havok faces to {len(mapped_definitions)} original instance definitions")
+
+        for collision, mapped_indices in mapped_face_indices.items():
+            fallback_face_indices[collision] = [
+                face_index for face_index in range(len(collision.faces))
+                if face_index not in mapped_indices
+            ]
+        return fallback_face_indices
+
+    @staticmethod
+    def _create_havok_instance_proxies(
+        havok_collisions: list[HavokCollision],
+        instances: list[Instance],
+        face_indices_by_collision: dict[HavokCollision, list[int]] | None = None,
+    ) -> tuple[list[bpy.types.Object], dict[HavokCollision, list[int]]]:
+        """Recover definition-local collision from static-compound instance children."""
+        allowed_face_indices = {
+            collision: set(range(len(collision.faces))) if face_indices_by_collision is None else set(face_indices_by_collision.get(collision, []))
+            for collision in havok_collisions
+        }
+        claimed_face_indices = {collision: set() for collision in havok_collisions}
+        standalone_face_indices = {collision: sorted(indices) for collision, indices in allowed_face_indices.items()}
+        if not havok_collisions or not instances:
+            return [], standalone_face_indices
+
+        instances_by_index = {instance.index: instance for instance in instances}
+        parts_by_definition = {}
+        for collision in havok_collisions:
+            for source_instance_index, face_indices in collision.source_instance_face_indices().items():
+                face_indices = [face_index for face_index in face_indices if face_index in allowed_face_indices[collision]]
+                if not face_indices:
+                    continue
+                instance = instances_by_index.get(source_instance_index)
+                if instance is None or abs(instance.scale) < 1.0e-8:
+                    continue
+
+                definition = instance.definition
+                render_object = definition.blender_render
+                has_render_mesh = render_object is not None and render_object.type == 'MESH'
+                if has_render_mesh and render_object.data.nwo.proxy_collision is not None:
+                    claimed_face_indices[collision].update(face_indices)
+                    continue
+                if not has_render_mesh and definition.blender_collision is not None:
+                    claimed_face_indices[collision].update(face_indices)
+                    continue
+
+                collision_type_name = collision.collision_type_name
+                # Tool cannot safely partition shared proxy vertices by
+                # collision type, so recover at most one type per definition.
+                if definition.havok_collision_type_name not in {None, collision_type_name}:
+                    continue
+
+                part = parts_by_definition.get(definition)
+                if part is not None and part["collision_type_name"] != collision_type_name:
+                    continue
+                if part is not None and part["source_instance_index"] != source_instance_index:
+                    claimed_face_indices[collision].update(face_indices)
+                    continue
+
+                if part is None:
+                    part = {
+                        "source_instance_index": source_instance_index,
+                        "collision_type": collision.collision_type,
+                        "collision_type_name": collision_type_name,
+                        "vertices": [],
+                        "faces": [],
+                        "material_indices": [],
+                        "collision_materials": collision.collision_materials,
+                    }
+                    parts_by_definition[definition] = part
+                    definition.havok_collision_type_name = collision_type_name
+
+                used_vertex_indices = sorted({vertex_index for face_index in face_indices for vertex_index in collision.faces[face_index]})
+                vertex_remap = {vertex_index: remapped_index for remapped_index, vertex_index in enumerate(used_vertex_indices)}
+                first_vertex = len(part["vertices"])
+                if collision.has_source_local_vertices:
+                    part["vertices"].extend(collision.source_local_vertices[index] for index in used_vertex_indices)
+                else:
+                    world_from_definition = instance.matrix @ Matrix.Diagonal((instance.scale, instance.scale, instance.scale, 1.0))
+                    definition_from_world = world_from_definition.inverted_safe()
+                    part["vertices"].extend((definition_from_world @ Vector(collision.vertices[index])).to_tuple() for index in used_vertex_indices)
+                part["faces"].extend(
+                    tuple(first_vertex + vertex_remap[vertex_index] for vertex_index in collision.faces[face_index])
+                    for face_index in face_indices
+                )
+                part["material_indices"].extend(
+                    collision.material_indices[face_index] if face_index < len(collision.material_indices) else -1
+                    for face_index in face_indices
+                )
+                claimed_face_indices[collision].update(face_indices)
+
+        definition_collision_objects = []
+        proxy_count = 0
+        collision_only_count = 0
+        for definition, part in parts_by_definition.items():
+            if not part["faces"]:
+                continue
+
+            render_object = definition.blender_render
+            has_render_mesh = render_object is not None and render_object.type == 'MESH'
+            name = f"{render_object.name}_proxy_collision" if has_render_mesh else f"instance_definition:{definition.index}"
+            collision_object = HavokCollision(
+                name,
+                part["vertices"],
+                part["faces"],
+                part["material_indices"],
+                part["collision_materials"],
+                collision_type=part["collision_type"],
+            ).to_object()
+            definition.blender_collision = collision_object
+            definition.has_collision = True
+            if has_render_mesh:
+                collision_object.nwo.proxy_type = "collision"
+                render_object.data.nwo.proxy_collision = collision_object
+                definition.collision_is_proxy = True
+                proxy_count += 1
+            else:
+                definition.collision_is_proxy = False
+                collision_only_count += 1
+            definition_collision_objects.append(collision_object)
+
+        for collision, claimed_indices in claimed_face_indices.items():
+            standalone_face_indices[collision] = [
+                face_index for face_index in sorted(allowed_face_indices[collision])
+                if face_index not in claimed_indices
+            ]
+
+        if definition_collision_objects:
+            utils.print_step(f"Creating Havok Instance Collision ({proxy_count} proxies, {collision_only_count} collision-only definitions)")
+        return definition_collision_objects, standalone_face_indices
 
     def _read_havok_collisions(self, collision_materials: list[BSPCollisionMaterial]) -> list[HavokCollision]:
         raw_resources = self._select_field_safe(self.tag, "Struct:resource interface[0]/Block:raw_resources")

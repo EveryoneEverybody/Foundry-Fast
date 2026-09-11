@@ -282,7 +282,7 @@ class NWO_MT_FaceAttributeAddMenu(bpy.types.Menu):
         corinth = utils.is_corinth(context)
         asset_type = scene_nwo.asset_type
         
-        for name, display_name, mask in sorted(face_prop_type_items, key=lambda x: x[1]):
+        for name, display_name, mask, _ in sorted(face_prop_type_items, key=lambda x: x[1]):
             games, asset_types = mask.split(":")
             games = games.split(",")
             asset_types = asset_types.split(",")
@@ -1170,6 +1170,7 @@ class NWO_MT_MeshTypes(bpy.types.Menu):
             layout.operator('nwo.apply_type_mesh_single', text='Instanced Object', icon_value=get_icon_id('instance')).m_type = 'io'
         if utils.poll_ui(("scenario",)):
             layout.operator('nwo.apply_type_mesh_single', text='Instanced Geometry', icon_value=get_icon_id('instance')).m_type = 'instance'
+            layout.operator('nwo.apply_type_mesh_single', text='Collision', icon_value=get_icon_id('collider')).m_type = 'collision'
             layout.operator('nwo.apply_type_mesh_single', text='Structure', icon_value=get_icon_id('structure')).m_type = 'structure'
             layout.operator('nwo.apply_type_mesh_single', text='Seam', icon_value=get_icon_id('seam')).m_type = 'seam'
             layout.operator('nwo.apply_type_mesh_single', text='Portal', icon_value=get_icon_id('portal')).m_type = 'portal'
