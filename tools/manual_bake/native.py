@@ -155,7 +155,7 @@ def main(config):
             try: bsp_materials = value(bsp_tag.SelectField('materials'))
             finally: bsp_tag.Dispose()
             surfaces = surface_native_updates(b['materials'][:len(b['authoring']['materials'])],
-                {m['source_shader']:m['destination'] for m in plan['materials']}, bsp_materials, old['material info'])
+                {m['source_shader']:m['destination'] for m in plan['materials']}, bsp_materials, old['material info'], bsp_index=i)
             records.append(dict(bsp=i, path=dest, definitions=[attenuation_record(d) for d in lighting['definitions']], surfaces=surfaces))
         if config['action'] == 'prepare':
             # The real fixed translator + native writer; never the geometry pipeline.
@@ -231,8 +231,12 @@ if __name__ == '__main__':
     config = json.loads(Path(sys.argv[sys.argv.index('--')+1]).read_text())
     try:
         result = main(config); code = 0
-    except BaseException:
-        result = dict(status='FAIL', error=traceback.format_exc(), faux_started=False); code = 1
+    except BaseException as exc:
+        if hasattr(exc, 'issues'):
+            result = dict(status='FAIL', error=str(exc), issues=exc.issues, faux_started=False)
+        else:
+            result = dict(status='FAIL', error=traceback.format_exc(), faux_started=False)
+        code = 1
     Path(config['native_result']).write_text(json.dumps(result,indent=2),encoding='utf-8')
     print(result['status'],flush=True)
     # Blender cleanup can crash after successful ManagedBlam shutdown. Evidence

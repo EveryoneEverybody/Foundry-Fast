@@ -3,7 +3,7 @@ from pathlib import Path
 from copy import deepcopy
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'blender/addons/io_scene_foundry/h3_import'))
-from port_environment.surface_light_units import surface_attenuation_record,surface_native_updates,write_surface_attenuation
+from port_environment.surface_light_units import surface_attenuation_record,surface_native_updates,write_surface_attenuation,surface_preflight,SurfaceTranslationError
 from port_environment.light_units import attenuation_record
 class SurfaceUnits(unittest.TestCase):
  def source(self,flags='1'):
@@ -22,6 +22,31 @@ class SurfaceUnits(unittest.TestCase):
   for key,value in [('flags','4'),('frustum blend','1'),('attenuation cutoff','0')]:
    s=self.source();s[key]=value
    with self.assertRaises(ValueError):surface_attenuation_record(s)
+ def test_preflight_collects_every_rejected_material(self):
+  a=self.source();a['frustum blend']='0.5'
+  b=self.source('8')
+  materials=[dict(slot=i,source_lighting_index=i+10,source_shader=f'shader_{i}.shader',lighting=s) for i,s in enumerate([a,b])]
+  before=deepcopy(materials)
+  issues=surface_preflight(materials,bsp_index=7)
+  self.assertEqual(len(issues),2)
+  self.assertEqual([r['source_material_index'] for r in issues],[10,11])
+  self.assertEqual(issues[0]['bsp_index'],7)
+  self.assertEqual(issues[0]['decoded_flags'],['use attenuation'])
+  self.assertEqual(issues[1]['unknown_flag_bits'],8)
+  self.assertEqual(materials,before)
+ def test_native_failure_has_all_candidate_material_indices(self):
+  m,b,rows=self.fixture();m['lighting']['frustum blend']='0.5'
+  with self.assertRaises(SurfaceTranslationError) as caught:
+   surface_native_updates([m],{'source.shader':'target.shader'},b,rows,bsp_index=2)
+  self.assertEqual(caught.exception.issues[0]['candidate_bsp_material_indices'],[0])
+  self.assertEqual(caught.exception.issues[0]['source_shader'],'source.shader')
+ def test_per_unit_flags_preserve_accepted_distance_rules(self):
+  for flags,distances in [('2',[2000,2100]),('3',[100,400])]:
+   self.assertEqual(list(surface_attenuation_record(self.source(flags))['REACH_AUTHORING_VALUES'].values()),distances)
+ def test_nonfinite_frustum_is_rejected(self):
+  for blend in ['nan','inf','-inf']:
+   source=self.source();source['frustum blend']=blend
+   with self.assertRaises(SurfaceTranslationError):surface_attenuation_record(source)
  def fixture(self):
   s=self.source();material=dict(slot=3,source_shader='source.shader',lighting=s)
   native={k:float(s[k]) for k in ('emissive power','emissive quality','emissive focus','attenuation falloff','attenuation cutoff')};native.update({'emissive color':[.4,.5,.6],'flags':0,'bounce ratio':1})

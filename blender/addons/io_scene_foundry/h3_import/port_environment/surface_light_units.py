@@ -9,10 +9,33 @@ H3_DISABLED_SURFACE_RANGE = (20.0, 21.0)
 RANGE_FIELDS = ('attenuation falloff', 'attenuation cutoff')
 
 
-def surface_attenuation_record(source):
+def surface_context(source, **identity):
+    """Portable source identity; unknown flag bits retain their numeric value."""
+    flags = int(source['flags'])
+    return dict(identity, raw_flags=flags,
+                decoded_flags=[name for bit, name in ((1, 'use attenuation'),
+                    (2, 'power per unit area'), (4, 'use shader gel')) if flags & bit],
+                unknown_flag_bits=flags & ~7,
+                frustum_blend=source.get('frustum blend', 0),
+                attenuation_mode='enabled' if flags & 1 else 'disabled',
+                source_fields=dict(source))
+
+
+class SurfaceTranslationError(ValueError):
+    """All rejected source rows, available to callers without parsing text."""
+    def __init__(self, issues):
+        import json
+        self.issues = issues
+        super().__init__('Unsupported H3 surface lighting: ' +
+                         json.dumps(issues, sort_keys=True))
+
+
+def surface_attenuation_record(source, *, context=None):
     flags = int(source['flags'])
     if flags & ~3 or float(source.get('frustum blend', 0)):
-        raise ValueError('Unsupported H3 surface emission flags or frustum blend')
+        raise SurfaceTranslationError([dict(surface_context(source, **(context or {})),
+            reason='Unsupported H3 surface emission flags or frustum blend; '
+                   'no proven Reach authoring transformation')])
     stored = [float(source[k]) for k in RANGE_FIELDS]
     enabled = bool(flags & 1)
     effective = stored if enabled else H3_DISABLED_SURFACE_RANGE
@@ -28,8 +51,36 @@ def surface_attenuation_record(source):
     }
 
 
-def surface_native_updates(materials, destinations, bsp_materials, native_rows):
+def surface_preflight(materials, destinations=None, bsp_materials=(), *, bsp_index=None):
+    """Inspect every active source row before any native mutation, not only the first."""
+    issues = []
+    for material in materials:
+        source = material.get('lighting', {})
+        if float(source.get('emissive power', 0)) <= 0:
+            continue
+        shader = material.get('source_shader')
+        destination = (destinations or {}).get(shader)
+        indices = [i for i, row in enumerate(bsp_materials)
+                   if destination and row['render method'].replace('\\', '/') == destination.replace('\\', '/')]
+        identity = dict(bsp_index=bsp_index, source_material_slot=material.get('slot'),
+                        source_material_index=material.get('source_lighting_index'),
+                        source_shader=shader, destination_material=destination,
+                        source_bsp_material_index=material.get('slot'),
+                        candidate_bsp_material_indices=indices)
+        try:
+            surface_attenuation_record(source, context=identity)
+        except SurfaceTranslationError as exc:
+            issues.extend(exc.issues)
+        except (ValueError, KeyError, OverflowError) as exc:
+            issues.append(dict(surface_context(source, **identity), reason=str(exc)))
+    return issues
+
+
+def surface_native_updates(materials, destinations, bsp_materials, native_rows, *, bsp_index=None):
     """Resolve source provenance to existing native rows; reject stale/ambiguous data."""
+    issues = surface_preflight(materials, destinations, bsp_materials, bsp_index=bsp_index)
+    if issues:
+        raise SurfaceTranslationError(issues)
     updates = {}
     def same(a, b):
         if isinstance(a, (tuple, list)): return len(a) == len(b) and all(same(x,y) for x,y in zip(a,b))
