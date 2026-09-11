@@ -2,6 +2,12 @@
 
 **Foundry** is a Blender extension that facilitates a complete asset import & export pipeline for Halo Reach, Halo 4, and Halo 2 Anniversary Multiplayer.
 
+## Foundry-Fast 1.9.39 upstream sync
+
+- Synchronized applicable source behavior with upstream Foundry through `6f08c85b3acb73aade7155bad547b3936743e3b2` (upstream build 1.9.17).
+- Incorporates current collision/Havok/scenario-collision fixes, animation/frame-event/pose-overlay fixes, and import/export completion timestamp reporting.
+- Retains Foundry-Fast parallel bitmap processing, scenario/reference caching and fast paths, and Halo 3 support already present on the release branch.
+
 ## Requirements
 - Blender 5.2 or above
 - One or more of the following Halo Editing Kits: [HREK](https://store.steampowered.com/app/1695793/Halo_Reach_Mod_Tools__MCC/),
