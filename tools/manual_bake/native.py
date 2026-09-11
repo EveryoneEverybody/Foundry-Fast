@@ -9,12 +9,20 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 
+class LightingPreparationError(ValueError):
+    def __init__(self, issues):
+        self.issues = issues
+        super().__init__('Unsupported H3 lighting preparation: ' + json.dumps(issues, sort_keys=True))
+
+
 def main(config):
     addon = Path(config['addon']).resolve()
     sys.path[:0] = [str(addon.parent), str(addon / 'h3_import')]
     from port_environment import worker, native_scene
     from port_environment.light_units import attenuation_record
-    from port_environment.surface_light_units import surface_native_updates, write_surface_attenuation, RANGE_FIELDS
+    from port_environment.surface_light_units import surface_native_updates, write_surface_attenuation, RANGE_FIELDS, SurfaceTranslationError
+    from port_environment.lightmap_density import native_density_issues
+    from port_environment.lighting_coverage import source_coverage_gaps, scenario_recipe_gaps
     from port_environment.model import stable_hash
     run = Path(config['native_run']); run.mkdir(exist_ok=False)
     worker.dependencies(addon, run)
@@ -116,8 +124,11 @@ def main(config):
         if len(plan['bsps']) != len(bsps) or len(plan['lighting_by_bsp']) != len(bsps):
             raise ValueError('Plan/native BSP count mismatch')
         view = dict(plan, bsps=[], lighting_by_bsp=[]); targets = []; before = {}; records = []
+        issues = scenario_recipe_gaps(plan.get('scenario_lights', {}))
         for i in selected:
             b = plan['bsps'][i]
+            scenario_rows = plan.get('scenario', {}).get('source_semantics', {}).get('bsps', [])
+            issues.extend(source_coverage_gaps(b, scenario_rows[i] if i < len(scenario_rows) else {}, bsp_index=i))
             if b['destination'].replace('\\', '/') != bsps[i]: raise ValueError('Plan/native BSP identity mismatch')
             lighting = plan['lighting_by_bsp'][i]
             source_tag = bsps[i].rsplit('.',1)[0]+'.scenario_structure_lighting_info'
@@ -154,9 +165,18 @@ def main(config):
             bsp_tag = load(bsps[i])
             try: bsp_materials = value(bsp_tag.SelectField('materials'))
             finally: bsp_tag.Dispose()
-            surfaces = surface_native_updates(b['materials'][:len(b['authoring']['materials'])],
-                {m['source_shader']:m['destination'] for m in plan['materials']}, bsp_materials, old['material info'], bsp_index=i)
+            source_rows = b['materials'][:len(b['authoring']['materials'])]
+            destinations = {m['source_shader']:m['destination'] for m in plan['materials']}
+            try:
+                surfaces = surface_native_updates(source_rows, destinations, bsp_materials, old['material info'], bsp_index=i)
+            except SurfaceTranslationError as exc:
+                issues.extend(exc.issues)
+                surfaces = []
+            issues.extend(native_density_issues(b['authoring']['materials'], source_rows, destinations,
+                bsp_materials, scenario['structure bsps'][i]['lightmap setting'], bsp_index=i))
             records.append(dict(bsp=i, path=dest, definitions=[attenuation_record(d) for d in lighting['definitions']], surfaces=surfaces))
+        if issues:
+            raise LightingPreparationError(issues)
         if config['action'] == 'prepare':
             # The real fixed translator + native writer; never the geometry pipeline.
             original_init = Tag.__init__

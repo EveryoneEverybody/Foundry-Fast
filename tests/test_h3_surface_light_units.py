@@ -47,6 +47,20 @@ class SurfaceUnits(unittest.TestCase):
   for blend in ['nan','inf','-inf']:
    source=self.source();source['frustum blend']=blend
    with self.assertRaises(SurfaceTranslationError):surface_attenuation_record(source)
+ def test_both_active_frustum_attenuation_modes_remain_explicitly_blocked(self):
+  for flag,power in [('1','0.8'),('0','1.2')]:
+   source=self.source(flag);source.update({'frustum blend':'0.5','emissive power':power,
+       'frustum falloff angle':'25','frustum cutoff angle':'45','attenuation cutoff':'2'})
+   before=deepcopy(source)
+   with self.assertRaises(SurfaceTranslationError) as caught:surface_attenuation_record(source)
+   self.assertIn('centroid-based attenuation',caught.exception.issues[0]['reason'])
+   self.assertNotIn('Unsupported H3 surface emission flags',caught.exception.issues[0]['reason'])
+   self.assertEqual(source,before)
+ def test_invalid_blend_is_distinguished_from_unmapped_frustum(self):
+  for blend in ['-0.5','1.5','nan']:
+   source=self.source();source['frustum blend']=blend
+   with self.assertRaises(SurfaceTranslationError) as caught:surface_attenuation_record(source)
+   self.assertIn('finite and between zero and one',caught.exception.issues[0]['reason'])
  def fixture(self):
   s=self.source();material=dict(slot=3,source_shader='source.shader',lighting=s)
   native={k:float(s[k]) for k in ('emissive power','emissive quality','emissive focus','attenuation falloff','attenuation cutoff')};native.update({'emissive color':[.4,.5,.6],'flags':0,'bounce ratio':1})

@@ -9,6 +9,7 @@ from . import authoring, native_contracts, native_topology
 from .model import stable_hash
 from .light_units import reach_attenuation_units
 from .surface_light_units import surface_attenuation_record
+from .lightmap_density import density_palette, write_density_palette, ignore_target_default
 
 
 def face_property(mesh, kind, values, indices=None):
@@ -87,18 +88,19 @@ def render_properties(ob, record, parts, material_rows, source_materials):
             face_property(ob.data,'no_lightmap',dict(no_lightmap=True),selected)
     from io_scene_foundry import utils
     from io_scene_foundry.constants import WU_SCALAR
+    density = density_palette(source_materials)
     for slot,selected in faces_by_slot.items():
         row = material_rows[slot]
         if slot < len(source_materials):
+            ignore = ignore_target_default(row['source_shader'])
+            face_property(ob.data, 'lightmap_resolution_scale',
+                dict(lightmap_resolution_scale=str(density['material_indices'][slot])), selected)
+            face_property(ob.data, 'lightmap_ignore_default_resolution_scale',
+                dict(lightmap_ignore_default_resolution_scale=ignore), selected)
             for prop in source_materials[slot]['properties']:
                 name=prop['type']['name']
                 if name=='lightmap resolution':
-                    source_value=authoring.number(prop['real-value'])
-                    # Reach's normal importer clamps this authoring scale to
-                    # its seven supported density levels. Keep fractional H3
-                    # requests in provenance; this changes bake density only.
-                    value=str(max(1,min(7,round(source_value))))
-                    face_property(ob.data,'lightmap_resolution_scale',dict(lightmap_resolution_scale=value),selected)
+                    continue  # Exact one-based palette index was authored above.
                 elif name=='lightmap transparency override':
                     face_property(ob.data,'lightmap_transparency_override',
                         dict(lightmap_transparency_override=bool(prop['int-value'])),selected)
@@ -350,6 +352,7 @@ def construct(scene, plan, config, mats, report, mesh_object):
     text=bpy.data.texts.new('H3 accepted environment provenance')
     text.write(json.dumps(dict(source=plan['source'],selection=plan['selection'],plan_sha256=plan['plan_sha256'],
         global_seams=plan['seam_source_context'],lighting=plan['lighting_by_bsp']),indent=1))
+    scene['h3_density_contract'] = stable_hash([density_palette(b['authoring']['materials']) for b in plan['bsps']])
     bpy.context.view_layer.update()
 
 
@@ -397,6 +400,11 @@ def write_static_lights(plan, report, *, attenuation_only=False):
 
 
 def configure_scenario(paths, plan):
+    import bpy
+    palettes = [density_palette(b['authoring']['materials']) for b in plan['bsps']]
+    if bpy.context.scene.get('h3_density_contract') != stable_hash(palettes):
+        raise ValueError('Source scene predates exact density authoring; rebuild the source scene '
+                         'before writing paired BSP density settings')
     from io_scene_foundry.managed_blam.scenario import ScenarioTag
     with ScenarioTag(path=plan['target']['scenario']) as tag:
         def references(block, field, expected):
@@ -412,7 +420,8 @@ def configure_scenario(paths, plan):
             for sky in plan['skies']:
                 tag.add_new_sky(sky['destination'])
         references(tag.block_skies,'sky',[s['destination'] for s in plan['skies']])
-        for element,bsp in zip(tag.block_bsps.Elements,plan['bsps']):
+        for element,bsp,palette in zip(tag.block_bsps.Elements,plan['bsps'],palettes,strict=True):
+            write_density_palette(element, palette)
             element.SelectField('default sky').Value=bsp['default_sky']
             element.SelectField('size class').SetValue('1Meg_512x512')
             element.SelectField('custom gravity scale').Data=1.0

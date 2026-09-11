@@ -32,10 +32,19 @@ class SurfaceTranslationError(ValueError):
 
 def surface_attenuation_record(source, *, context=None):
     flags = int(source['flags'])
-    if flags & ~3 or float(source.get('frustum blend', 0)):
+    blend = float(source.get('frustum blend', 0))
+    reasons = []
+    if flags & ~3:
+        reasons.append('Unsupported H3 surface emission flags; no proven Reach authoring transformation')
+    if not math.isfinite(blend) or not 0 <= blend <= 1:
+        reasons.append('Frustum blend must be finite and between zero and one')
+    elif blend:
+        reasons.append('Active H3 surface frustum requires a geometry-linked secondary emitter, '
+                       'centroid-based attenuation and emitting-face visibility; '
+                       'no exact Reach representation is proven')
+    if reasons:
         raise SurfaceTranslationError([dict(surface_context(source, **(context or {})),
-            reason='Unsupported H3 surface emission flags or frustum blend; '
-                   'no proven Reach authoring transformation')])
+            reason='; '.join(reasons))])
     stored = [float(source[k]) for k in RANGE_FIELDS]
     enabled = bool(flags & 1)
     effective = stored if enabled else H3_DISABLED_SURFACE_RANGE
