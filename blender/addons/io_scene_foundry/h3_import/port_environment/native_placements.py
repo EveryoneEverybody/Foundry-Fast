@@ -134,6 +134,12 @@ def placement_records(row):
     if row['stored_pose_count']:
         flags['set_flags']=[n for n in flags['set_flags'] if native_object_tags.normalized(n)!='store orientations']
     if not flags['set_flags']:flags['value']='0'
+    if 'target_parent_name_index' in row:
+        first(section(records,'parent id'),'parent object')['value']=','+str(row['target_parent_name_index'])
+    if 'target_device_groups' in row:
+        for name,index in row['target_device_groups'].items():
+            record=first(section(records,'device data'),name) if row['family'] in {'machines','controls'} else None
+            if record is not None:record['value']=','+str(index)
     return records
 
 
@@ -161,9 +167,9 @@ def structure_origin_contract(tag,translation):
         source_provenance='Original object ID, origin BSP and placement flags retained in source_records')
 
 
-def object_element(element,row):
+def object_element(element,row,*,preserve_target_metadata=False):
     s=element.SelectField;records=placement_records(row)
-    s('type').Value=row['target_palette_index'];s('name').Value=row['source_object_name_index']
+    s('type').Value=row['target_palette_index'];s('name').Value=row.get('target_object_name_index',row['source_object_name_index'])
     data=s('object data').Elements[0]
     flags=first(records,'placement flags')
     # No packed H3 runtime orientations enter native tags. The visible default
@@ -173,7 +179,7 @@ def object_element(element,row):
     data.SelectField('rotation').Data=row['rotation_degrees']
     data.SelectField('scale').Data=row['scale']
     copy(records,data,('bsp policy','manual bsp flags','transform flags','light airprobe name','can attach to bsp flags'))
-    data.SelectField('editor folder').Value=-1
+    if not preserve_target_metadata:data.SelectField('editor folder').Value=-1
     oid=data.SelectField('object id').Elements[0]
     copy(section(records,'object id'),oid,('unique id','origin bsp index','type','source'))
     copy(section(records,'parent id'),data.SelectField('parent id').Elements[0],('parent object','parent marker','connection marker'))
@@ -191,7 +197,7 @@ def object_element(element,row):
         copy(section(records,name),s(name).Elements[0],('flags','pathfinding policy','health station charges'))
     elif family=='scenery':
         copy(section(records,'scenery data'),s('scenery data').Elements[0],('Pathfinding policy','Lightmapping policy'))
-        s('scenery data').Elements[0].SelectField('ai spawning squad').Value=-1
+        if not preserve_target_metadata:s('scenery data').Elements[0].SelectField('ai spawning squad').Value=-1
     return dict(source_index=row['source_index'],target_index=row['target_index'],status='AUTHORED')
 
 

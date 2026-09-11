@@ -184,7 +184,7 @@ def native_rows(tag):
     return result
 
 
-def compare_native(source, payload, native):
+def compare_native(source, payload, native, *, receipt_shape_names=None):
     """Compare leaf ownership by source-labelled shape and full body identity."""
     expected_shapes = bind(source, payload)
     owners, bodies = source_graph(native)
@@ -208,7 +208,14 @@ def compare_native(source, payload, native):
     source_materials = elements(source, 'materials')
     for shape in expected_shapes:
         kind, index = shape['source_shape_type'], shape['source_shape_index']
-        key = (kind, 'h3_' + kind + '_' + str(index))
+        name = 'h3_' + kind + '_' + str(index)
+        if receipt_shape_names is not None:
+            if (kind,index) not in receipt_shape_names:
+                raise ValueError('Receipt lacks source physics leaf identity')
+            name = receipt_shape_names[(kind,index)]
+        key = (kind, name)
+        if key in expected:
+            raise ValueError('Receipt physics leaf names are ambiguous')
         expected[key] = dict(identity=shape['source_body_identity'],
             material=value(source_materials[shape['material']]['fields'], 'name'))
     if actual.keys() != expected.keys():
@@ -223,5 +230,29 @@ def compare_native(source, payload, native):
                                        for k, v in sorted(actual.items())], runtime_status='NOT_TESTED')
 
 
-def validate_native(tag, source, payload):
-    return compare_native(source, payload, native_rows(tag))
+def validate_native(tag, source, payload, *, receipt_shape_names=None):
+    return compare_native(source, payload, native_rows(tag), receipt_shape_names=receipt_shape_names)
+
+
+def legacy_receipt_names(source, payload, receipt):
+    """Recover old exporter labels only from an exact compiled source receipt.
+
+    This is readback compatibility, not a writer fallback. The caller must
+    separately verify the receipt's source/output hashes before trusting it.
+    Full source body/list/primitive/region/permutation checks still apply.
+    """
+    shapes = bind(source, payload)
+    recorded = receipt.get('physics_authoring', [])
+    if receipt.get('status') != 'NATIVE_COMPILED' or len(recorded) != len(shapes):
+        raise ValueError('Legacy compiled physics receipt is incomplete')
+    result = {}
+    for shape, evidence in zip(shapes, recorded):
+        original = {k:v for k,v in shape.items() if k not in {
+            'source_shape_type','source_shape_index','source_body_index','source_body_identity',
+            'source_reference_path','association_rule'}}
+        if evidence.get('source_shape') != original:
+            raise ValueError('Legacy receipt source shape differs')
+        result[(shape['source_shape_type'],shape['source_shape_index'])] = 'physics_reference:'+shape['name'].lower()
+    if len(set((kind,name) for (kind,_),name in result.items())) != len(result):
+        raise ValueError('Legacy exporter label collision requires explicit provenance')
+    return result

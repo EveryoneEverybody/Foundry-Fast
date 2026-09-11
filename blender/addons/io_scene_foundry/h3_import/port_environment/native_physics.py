@@ -72,7 +72,7 @@ def author(row,payload):
     return report
 
 
-def validate(tag,row,payload):
+def validate(tag,row,payload,*,receipt_shape_names=None):
     source=source_bodies(row['object_ir']['physics_authoring']);native=native_bodies(tag)
     if source.keys()!=native.keys():raise ValueError('Native/source physics identities differ on readback')
     rows=[]
@@ -97,4 +97,4 @@ def validate(tag,row,payload):
         rows.append(result)
     from .physics_association import validate_native
     return dict(bodies=rows,status='AUTHORING_FIELDS_READBACK_VERIFIED',runtime_effective_mass='NOT_TESTED',
-        shape_body_association=validate_native(tag,row['object_ir']['physics_authoring'],payload))
+        shape_body_association=validate_native(tag,row['object_ir']['physics_authoring'],payload,receipt_shape_names=receipt_shape_names))

@@ -50,6 +50,23 @@ def native_fixture(source):
 
 
 class PhysicsAssociation(unittest.TestCase):
+    def test_legacy_receipt_changes_labels_only_and_keeps_body_ownership_strict(self):
+        source,payload=fixture()
+        native=native_fixture(source)
+        receipt=dict(status='NATIVE_COMPILED',physics_authoring=[dict(source_shape=s) for s in payload['physics']['shapes']])
+        names=association.legacy_receipt_names(source,payload,receipt)
+        for i,shape in enumerate(association.elements(native,'boxes')):
+            association.struct(shape['fields'],'base')[0]['value']=names[('box',i)]
+        association.compare_native(source,payload,native,receipt_shape_names=names)
+        with self.assertRaisesRegex(ValueError,'leaf identities'):
+            association.compare_native(source,payload,native)
+        association.elements(native,'rigid bodies')[0]['fields'][-1]=ref('box',1)
+        with self.assertRaises(ValueError):
+            association.compare_native(source,payload,native,receipt_shape_names=names)
+        receipt['physics_authoring'][0]['source_shape']=dict(payload['physics']['shapes'][0],node=7)
+        with self.assertRaisesRegex(ValueError,'source shape differs'):
+            association.legacy_receipt_names(source,payload,receipt)
+
     def test_same_node_bodies_are_distinguished_by_indexed_ownership(self):
         source, payload = fixture()
         before = deepcopy((source, payload))

@@ -127,7 +127,7 @@ def author(row,payload):
     return report
 
 
-def validate(row,payload,animation_authoring=None):
+def validate(row,payload,animation_authoring=None,*,receipt_shape_names=None):
     from io_scene_foundry.managed_blam import Tag
     from io_scene_foundry.managed_blam.model import ModelTag
     from io_scene_foundry.managed_blam.render_model import RenderModelTag
@@ -167,7 +167,7 @@ def validate(row,payload,animation_authoring=None):
                     item=dict(path=path,status='MANAGEDBLAM_OPENED')
                     if kind=='physics_model':
                         from . import native_physics
-                        item['authoring_readback']=native_physics.validate(dependency.tag,row,payload)
+                        item['authoring_readback']=native_physics.validate(dependency.tag,row,payload,receipt_shape_names=receipt_shape_names)
                         bodies=dependency.tag.SelectField('Block:rigid bodies').Elements
                         if not bodies.Count:raise ValueError('Native physics contains no rigid bodies')
                         item['rigid_bodies']=bodies.Count

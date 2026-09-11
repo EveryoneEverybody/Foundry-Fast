@@ -25,12 +25,21 @@ def main():
     parser.add_argument('--defer-zone-switches',action='store_true',help='Keep source switches in IR when the native kit cannot persist the table; retain static volumes')
     parser.add_argument('--reuse-compiled-from',help='Completed same-plan receipt whose entire output snapshot still matches')
     parser.add_argument('--retry-source',action='append',help='Retry only these source identities; retain every other prior result')
+    parser.add_argument('--populate-existing',action='store_true',help='Reconcile selected object families without replacing other scenario tables')
+    parser.add_argument('--population-root-receipts')
+    parser.add_argument('--population-provenance')
+    parser.add_argument('--population-protected-manifest')
+    parser.add_argument('--population-family',action='append',choices=('scenery','crates','machines','controls'))
+    parser.add_argument('--population-dry-run',action='store_true')
     args=parser.parse_args()
     plan=json.loads(Path(args.plan).read_text())
     if stable_hash({k:v for k,v in plan.items() if k!='plan_sha256'})!=plan['plan_sha256']:
         raise ValueError('Object plan integrity differs')
     print('Verifying source integrity',flush=True)
     verify_files(plan['source_files'])
+    if args.populate_existing:
+        from port_environment.population_cli import run
+        return run(args,plan)
     paths=OutputPaths(args.h3_root,args.reach_root,plan['target']['namespace'],allow_nested=True)
     owner=Ownership(paths,args.work_dir)
     key=paths.fingerprint()+'-'+stable_hash(paths.namespace)[:16]
